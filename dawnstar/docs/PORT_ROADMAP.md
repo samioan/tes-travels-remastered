@@ -134,13 +134,38 @@ milestone rather than just read-through.
       player-selectable) now resolves to sensible pairings like Knight/
       Redguard and Nightblade/Wood Elf instead of nonsense.
 
+- [x] **M5 -- bit-exact `java.util.Random`** (this session). `JavaRandom`
+      (`port/src/util/java_random.h`, header-only): the 48-bit LCG
+      (`next(32)`) plus `LingoRandomInt`/`RandomIntBelow`, matching
+      `ESGame.lingoRandomInt`/`ESGame.nextInt(int)` (every real caller in
+      `../src/` -- `Item.java`, `DungeonGenerator.java`, `Monster.java`,
+      `ESGame.java` -- only ever uses the no-arg `nextInt()` plus its own
+      `Math.abs(x % bound)` wrapping, never `Random`'s more involved
+      `nextInt(bound)`, so that's the only surface ported). Foundational
+      rather than optional: `DungeonGenerator.java` seeds one of these
+      **deterministically per level** (`new Random(level.number * 8000)`),
+      so a level's room layout/monster spawns/loot are a pure function of
+      the level number in the original game -- an approximate-quality
+      PRNG would generate a *different*, wrong dungeon for every level.
+
+      Verified the strongest way available: captured real
+      `java.util.Random(seed).nextInt()` sequences from an actual JVM (5
+      seeds, including `16000` = level 2's real generator seed) and
+      checked `JavaRandom` reproduces them **bit-for-bit** --
+      `java_random_smoke.exe` matched on the first try. Also ported
+      `Math.abs(int)`'s `Integer.MIN_VALUE` quirk explicitly (`JavaAbs`)
+      rather than calling `std::abs`, which is undefined behavior for
+      `INT_MIN` in C++ where Java's version is well-defined (returns it
+      unchanged) -- preserves a real, if obscure, original-game edge case
+      instead of silently changing behavior there.
+
 ## Milestones next
 
-- [ ] **M5 and beyond (not yet planned in detail):** `imgfiles.lmp`,
-      `DungeonGenerator`'s procedural level generator itself (already fully
-      understood -- `../src/DungeonGenerator.java` -- but a real system to
-      port, including matching `java.util.Random`'s bit-for-bit sequence
-      for room/loot placement), the rest of `Player`'s runtime instance
+- [ ] **M6 and beyond (not yet planned in detail):** `imgfiles.lmp`,
+      `DungeonGenerator`'s procedural level generator itself (now
+      unblocked by M5's `JavaRandom` -- already fully understood,
+      `../src/DungeonGenerator.java`, but a real room-carving/loot-
+      placement system to port), the rest of `Player`'s runtime instance
       state (stats/inventory/equipment/combat) and the save format,
       `npcstrings.dat`/`helptext.dat`/`Shop` dialogue, the first-person
       corridor renderer (`GameCanvas`'s `CORRIDOR_WALL_TABLE`), and finally
