@@ -144,17 +144,37 @@ direction's fixed tile position ((17,5)=N, (30,17)=E, (17,30)=S,
 ## `charin.dat` -- CONFIRMED format
 
 ```
-<u16 n1><UTF x n1>              -- Player.ak[]  stat labels
-<u16 n2><UTF x n2>              -- Player.u[]   attribute names (8)
-<u16 races><UTF x races>        -- Player.i[]   race/template names
-<u16 n4><UTF x n4>              -- Player.p[]   gender labels (2)
-<u16 skills=14><UTF x 14>       -- Player.ax[]  skill names -- loader
-                                    throws if this isn't exactly 14
-<u16 x 14>                      -- Player.P[]   per-skill scalar
-<u16 x races x (13+2*14)>       -- Player.l[][] per-race stat template
-                                    row (attributes, skills, starting-spell
-                                    thresholds)
+<u16 n1><UTF x n1>              -- Player.statLabels[]
+<u16 n2><UTF x n2>              -- Player.attributeNames[] (8)
+<u16 classes><UTF x classes>    -- Player.classNames[]  character CLASS/
+                                    archetype names (7: Barbarian,
+                                    Battlemage, Knight, Nightblade, Rogue,
+                                    Sorcerer, Spellsword)
+<u16 races><UTF x races>        -- Player.raceNames[]   actual TES race
+                                    names (6: Redguard, Nord, Breton,
+                                    High Elf, Wood Elf, Dark Elf)
+<u16 skills=14><UTF x 14>       -- Player.skillNames[] -- loader throws
+                                    if this isn't exactly 14
+<u16 x 14>                      -- Player.skillAttributeIndex[]  per-skill
+                                    governing attribute
+<u16 x classes x (13+2*14)>     -- Player.classTemplates[][]  per-class
+                                    stat template row (attributes, skills,
+                                    starting-spell thresholds, and column 1:
+                                    the race that comes with this class --
+                                    race is not separately player-selectable)
 ```
+
+**Naming history:** these two name arrays were swapped in the codebase
+until this session -- what's correctly `classNames`/`classIndex` here was
+originally (mis)named `raceNames`/`raceIndex`, and what's correctly
+`raceNames`/`raceIndex` was originally `genderNames`/`genderIndex`. Caught
+while building the PC port's `CharacterData` loader
+(`../port/src/assets/character_data.h`): `ESGame.java`'s own
+character-creation screen titles the 7-entry list "Select a Class:", and a
+"gender" list with 6 entries (and no "Male"/"Female" string anywhere in
+the corpus) was never a plausible gender selector to begin with. Fixed
+throughout `Player.java`/`ESGame.java` -- see `Player.java`'s own `NOTE`
+comment near `classCount` for the full story.
 
 ## `.png` files
 

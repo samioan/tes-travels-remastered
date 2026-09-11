@@ -99,17 +99,52 @@ milestone rather than just read-through.
       accessor explicitly does `& 0xFF`, i.e. the *intended* reading really
       is unsigned there, unlike `geomin.dat`'s neighbor ids.
 
+- [x] **M4 -- character data (class/race/skill templates)** (this
+      session). `CharacterData` (`charin.dat`, `../src/Player.java`'s
+      `loadCharacterData()` -- stat labels, attribute names, class names,
+      race names, skill names, per-skill governing attribute, and the big
+      per-class stat template table). Verified by
+      `character_data_smoke.exe` against the real archive: 7 classes
+      (Barbarian/Battlemage/.../Spellsword), 6 races (Redguard/Nord/
+      Breton/High Elf/Wood Elf/Dark Elf), 14 skills, all with sane labels.
+
+      **Real bug found and fixed in `../src/Player.java` itself** (not
+      just the port), the most significant correction of this milestone:
+      the "class" and "race" arrays were swapped by the original Phase-1
+      rename pass, before `charin.dat` had ever actually been loaded
+      against real data. What was named `raceNames`/`raceIndex` turned
+      out to be the character CLASS list (`ESGame.java`'s own
+      character-creation screen titles this exact list "Select a Class:"
+      -- see `this.newGameUI.setupPromptList("New Game", "Select a
+      Class:", Player.classNames)`), and what was named `genderNames`/
+      `genderIndex` turned out to be the actual RACE list -- a 6-entry
+      "gender" array with no "Male"/"Female" string anywhere in the
+      corpus should have been the tell. Renamed throughout `Player.java`
+      (`raceIndex`->`classIndex`, `raceNames`->`classNames`,
+      `raceTemplates`->`classTemplates`, `raceCount`->`classCount`,
+      `applyRaceTemplate`->`applyClassTemplate`,
+      `raceMagickaFactor`->`classMagickaFactor`,
+      `raceUnknownPair`->`classUnknownPair`, and the old `genderIndex`/
+      `genderNames`->`raceIndex`/`raceNames`) and `ESGame.java`'s two call
+      sites, re-verified with a full standalone `dawnstar/src/` compile
+      (zero errors, same 6 pre-existing warnings as every prior run).
+      `docs/ASSET_FORMATS.md` and `docs/CLASS_MAP.md` updated to match.
+      As a nice independent confirmation: `classTemplates[class][1]`
+      (the race each class comes with -- race isn't separately
+      player-selectable) now resolves to sensible pairings like Knight/
+      Redguard and Nightblade/Wood Elf instead of nonsense.
+
 ## Milestones next
 
-- [ ] **M4 and beyond (not yet planned in detail):** `imgfiles.lmp`,
+- [ ] **M5 and beyond (not yet planned in detail):** `imgfiles.lmp`,
       `DungeonGenerator`'s procedural level generator itself (already fully
       understood -- `../src/DungeonGenerator.java` -- but a real system to
       port, including matching `java.util.Random`'s bit-for-bit sequence
-      for room/loot placement), `charin.dat`/`Player` stats and save
-      format, `npcstrings.dat`/`helptext.dat`/`Shop` dialogue, the
-      first-person corridor renderer (`GameCanvas`'s
-      `CORRIDOR_WALL_TABLE`), and finally `ESGame`'s own screen-wiring loop
-      tying it all together. Each gets its own milestone once the shape of
-      "how much fits in one slice" is clearer -- following
-      `shadowkey-decomp`'s pattern of not over-planning milestones far in
-      advance of actually reaching them.
+      for room/loot placement), the rest of `Player`'s runtime instance
+      state (stats/inventory/equipment/combat) and the save format,
+      `npcstrings.dat`/`helptext.dat`/`Shop` dialogue, the first-person
+      corridor renderer (`GameCanvas`'s `CORRIDOR_WALL_TABLE`), and finally
+      `ESGame`'s own screen-wiring loop tying it all together. Each gets
+      its own milestone once the shape of "how much fits in one slice" is
+      clearer -- following `shadowkey-decomp`'s pattern of not
+      over-planning milestones far in advance of actually reaching them.

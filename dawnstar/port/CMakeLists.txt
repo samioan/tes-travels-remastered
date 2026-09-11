@@ -9,8 +9,9 @@ if(MSVC)
   add_compile_options(/W4 /utf-8)
 endif()
 
-# M2/M3: asset foundations -- see docs/PORT_ROADMAP.md and src/assets/.
+# M2/M3/M4: asset foundations -- see docs/PORT_ROADMAP.md and src/assets/.
 add_library(dawnstar_assets STATIC
+  src/assets/character_data.cpp
   src/assets/dat_archive.cpp
   src/assets/dungeon_geometry.cpp
   src/assets/item_database.cpp
@@ -39,3 +40,7 @@ target_link_libraries(asset_smoke PRIVATE dawnstar_assets)
 # M3 milestone smoke test -- see src/tests/m3_monster_dungeon_smoke.cpp.
 add_executable(monster_dungeon_smoke src/tests/m3_monster_dungeon_smoke.cpp)
 target_link_libraries(monster_dungeon_smoke PRIVATE dawnstar_assets)
+
+# M4 milestone smoke test -- see src/tests/m4_character_data_smoke.cpp.
+add_executable(character_data_smoke src/tests/m4_character_data_smoke.cpp)
+target_link_libraries(character_data_smoke PRIVATE dawnstar_assets)

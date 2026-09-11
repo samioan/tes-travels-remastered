@@ -505,7 +505,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
       String[] var3 = new String[]{"North wall defense", "East wall defense", "Arguing with governor", "Imperial aid", "Ice tribes", "Gates before attack"};
       this.NPCQuestionWhatUI.setupPromptList("", "Ask about what?", var3);
       this.newGameUI = new Screen(this, 5, 3);
-      String[] var4 = Player.raceNames;
+      String[] var4 = Player.classNames;
       this.newGameUI.setupPromptList("New Game", "Select a Class:", var4);
       this.splashUI.percent = 35;
       this.characterMainUI = new Screen(this, 6, 4);
@@ -761,7 +761,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                this.character = null;
                System.gc();
                this.character = new Player(this);
-               this.character.applyRaceTemplate(var9);
+               this.character.applyClassTemplate(var9);
                this.characterMainUI.setTextColumn(1, var42);
                this.setCurrentDisplay(this.characterMainUI);
             }

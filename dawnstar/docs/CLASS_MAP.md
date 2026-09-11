@@ -354,13 +354,22 @@ central class (2668 lines) -- see "why `e`/`j` weren't renamed by
 mechanical means" below for why it needed the same hand-trace treatment
 as `GameCanvas` rather than a mechanical rename. Confirmed structure:
 
-- `charin.dat` loader (`loadCharacterData`/static block): race/template
-  names `raceNames[]`, gender labels `genderNames[]` (2 entries),
-  attribute names `attributeNames[]` (8), skill names `skillNames[]`
-  (14, must match exactly or the loader throws), stat labels
-  `statLabels[]` (used by the character-sheet string builder), and the
-  big per-race stat template table `raceTemplates[races][41]` (base
-  attributes, base skills, starting spell-knowledge thresholds).
+- `charin.dat` loader (`loadCharacterData`/static block): class/template
+  names `classNames[]` (7: Barbarian/Battlemage/Knight/Nightblade/Rogue/
+  Sorcerer/Spellsword), race names `raceNames[]` (6: Redguard/Nord/
+  Breton/High Elf/Wood Elf/Dark Elf -- **not** separately player-
+  selectable, see below), attribute names `attributeNames[]` (8), skill
+  names `skillNames[]` (14, must match exactly or the loader throws),
+  stat labels `statLabels[]` (used by the character-sheet string
+  builder), and the big per-class stat template table
+  `classTemplates[classes][41]` (base attributes, base skills, starting
+  spell-knowledge thresholds, and column 1: the race that comes with
+  this class). `classNames`/`raceNames` were swapped in the codebase
+  until the port session that finally loaded real `charin.dat` data
+  against a working parser -- confirmed by `ESGame.java`'s own
+  character-creation screen, which titles the 7-entry list "Select a
+  Class:" (a 6-entry "gender" list, with no "Male"/"Female" string
+  anywhere in the corpus, was never a plausible gender selector).
 - Core stats: `coreStats[10]` = level, level-exp, curHP, maxHP,
   curMagicka, maxMagicka, curFatigue(?), maxFatigue(?), and two more
   slots whose use is unconfirmed (`coreStats[8]`/`[9]`, zeroed on rest,
@@ -445,8 +454,8 @@ as `GameCanvas` rather than a mechanical rename. Confirmed structure:
   `R`) is read by `GameCanvas` but never set `true` anywhere in the
   entire codebase, so that branch is unreachable; `serverUserId` (was
   `N`) is written by `ESGame`'s own dead Pluto-Server-URL mechanism but
-  never read back here; and `unusedV`/`raceCountRedundant`/`unconfirmedZ`/
-  `raceUnknownPair`/`unconfirmedB` round out the fields that are
+  never read back here; and `unusedV`/`classCountRedundant`/`unconfirmedZ`/
+  `classUnknownPair`/`unconfirmedB` round out the fields that are
   declared and (de)serialized but have no confirmed meaningful read
   site in what's been traced.
 
@@ -499,8 +508,8 @@ directly, but summarized here:
 
 - `Monster.i` (boolean), `Monster.c[]` indices beyond 5-8, `Monster.k`
   (8-byte value, likely a timestamp).
-- `Player.coreStats[8]`/`[9]` (was `E[8]`/`E[9]`), `raceMagickaFactor`'s
-  sibling `raceUnknownPair` (was `y[0]`/`y[1]`), and `unconfirmedZ` (was
+- `Player.coreStats[8]`/`[9]` (was `E[8]`/`E[9]`), `classMagickaFactor`'s
+  sibling `classUnknownPair` (was `y[0]`/`y[1]`), and `unconfirmedZ` (was
   `Z`) -- read/written (including in the save format) but never observed
   being used meaningfully in what's been traced.
 - `Player.corridorView` (was `ap[9][5]`) -- previously flagged here as

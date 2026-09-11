@@ -48,22 +48,36 @@ public class Player {
    private static final Integer WALL_BLOCKED_SLOT = new Integer(1);
    private static final Integer OCCLUDED_SLOT = new Integer(-1);
    static boolean charDataLoaded = false;
-   static short raceCount;
-   // Also set from `raceNames.length`, same value as raceCount -- no
+   // NOTE: this whole race/class pair was swapped by the original rename
+   // pass, before charin.dat had ever actually been loaded against real
+   // data. `classNames` (below) is the real character CLASS list
+   // (Barbarian/Battlemage/Knight/Nightblade/Rogue/Sorcerer/Spellsword,
+   // 7 entries) -- confirmed by ESGame's own character-creation screen,
+   // which titles this exact list "Select a Class:"
+   // (`this.newGameUI.setupPromptList("New Game", "Select a Class:",
+   // Player.classNames)` in ESGame.java). `raceNames` is the real RACE
+   // list (Redguard/Nord/Breton/High Elf/Wood Elf/Dark Elf, 6 entries) --
+   // there is no separate gender selection anywhere in this game (no
+   // "Male"/"Female" string exists in the corpus), which is what should
+   // have flagged the original "genderNames" guess as wrong on its own.
+   // Caught building the PC port's CharacterData loader (see
+   // port/src/assets/character_data.h) once real names were on screen.
+   static short classCount;
+   // Also set from `classNames.length`, same value as classCount -- no
    // distinguishing read site found; likely just redundant.
-   static short raceCountRedundant;
+   static short classCountRedundant;
+   static String[] classNames;
    static String[] raceNames;
-   static String[] genderNames;
    static String[] skillNames;
-   // [raceIndex][41] per-race template: base attributes, base skills,
-   // starting spell-knowledge thresholds -- see applyRaceTemplate.
-   static short[][] raceTemplates;
+   // [classIndex][41] per-class template: base attributes, base skills,
+   // starting spell-knowledge thresholds -- see applyClassTemplate.
+   static short[][] classTemplates;
    static String[] statLabels;
    static String[] attributeNames;
    // Per-skill index -> governing attribute's `attributes[]` slot,
    // read straight from charin.dat.
    static short[] skillAttributeIndex;
-   // Per-race starting item id pairs, indexed by raceIndex -- see
+   // Per-class starting item id pairs, indexed by classIndex -- see
    // grantStartingItems.
    static int[][] STARTING_ITEMS = new int[][]{{1, 27}, {7, 27}, {7, 22}, {17, 27}, {12, 22}, {17, 27}, {12, 22}};
    private static final String[] AILMENT_NAMES = new String[]{
@@ -77,8 +91,8 @@ public class Player {
    // never read back anywhere in this class.
    public static String serverUserId = null;
    String name;
+   short classIndex;
    short raceIndex;
-   short genderIndex;
    // level, levelExp, curHP, maxHP, curMagicka, maxMagicka, curFatigue,
    // maxFatigue, and two more slots (coreStats[8]/[9]) whose use is
    // unconfirmed -- zeroed on rest, never otherwise touched in what's
@@ -92,13 +106,13 @@ public class Player {
    // 8 attributes as base+bonus pairs (attributes[2*i]=base,
    // attributes[2*i+1]=bonus).
    short[] attributes;
-   // Per-race magicka formula factor: maxMagicka = raceMagickaFactor *
+   // Per-class magicka formula factor: maxMagicka = classMagickaFactor *
    // attributes[2]/4 (see recalcMaxStats).
-   short raceMagickaFactor;
-   // Two more per-race template values (raceTemplates[raceIndex][11]/
+   short classMagickaFactor;
+   // Two more per-class template values (classTemplates[classIndex][11]/
    // [12]) -- read/written (including in the save format) but never
    // observed being used meaningfully in what's been traced.
-   short[] raceUnknownPair;
+   short[] classUnknownPair;
    // Skills as rank/bonus/exp-toward-next-rank triples.
    short[][] skills;
    byte inventoryCount;
@@ -231,7 +245,7 @@ public class Player {
       this.name = null;
       this.coreStats = new short[10];
       this.attributes = new short[16];
-      this.raceUnknownPair = new short[2];
+      this.classUnknownPair = new short[2];
       this.skills = new short[14][3];
       this.inventoryCount = 0;
       this.inventoryItemIds = new byte[24];
@@ -253,24 +267,26 @@ public class Player {
       stats[8] = 0;
    }
 
-   // Character-creation initializer: applies raceIndex's template
-   // (attributes, magicka/fatigue factors, starting skills), resets
-   // level/exp/gold, rolls the hidden traitor index, and computes the
-   // starting known-spell mask.
-   void applyRaceTemplate(int race) {
-      this.raceIndex = (short)race;
-      this.genderIndex = raceTemplates[this.raceIndex][1];
+   // Character-creation initializer: applies classIndex's template
+   // (attributes, magicka/fatigue factors, starting skills -- and the
+   // race that comes with this class, classTemplates[..][1]; race is not
+   // separately player-selectable in this game), resets level/exp/gold,
+   // rolls the hidden traitor index, and computes the starting
+   // known-spell mask.
+   void applyClassTemplate(int characterClass) {
+      this.classIndex = (short)characterClass;
+      this.raceIndex = classTemplates[this.classIndex][1];
       byte attrCount = 8;
 
       for (int i = 0; i < attrCount; i++) {
          int slot = 2 * i;
-         this.attributes[slot] = raceTemplates[this.raceIndex][2 + i];
+         this.attributes[slot] = classTemplates[this.classIndex][2 + i];
          this.attributes[slot + 1] = 0;
       }
 
-      this.raceMagickaFactor = raceTemplates[this.raceIndex][10];
-      this.raceUnknownPair[0] = raceTemplates[this.raceIndex][11];
-      this.raceUnknownPair[1] = raceTemplates[this.raceIndex][12];
+      this.classMagickaFactor = classTemplates[this.classIndex][10];
+      this.classUnknownPair[0] = classTemplates[this.classIndex][11];
+      this.classUnknownPair[1] = classTemplates[this.classIndex][12];
       this.coreStats[0] = 1;
       this.coreStats[1] = 0;
       this.recalcMaxStats();
@@ -286,8 +302,8 @@ public class Player {
       int col = 13;
 
       for (int i = 0; i < 14; i++) {
-         this.skills[i][0] = raceTemplates[this.raceIndex][col++];
-         this.skills[i][1] = raceTemplates[this.raceIndex][col++];
+         this.skills[i][0] = classTemplates[this.classIndex][col++];
+         this.skills[i][1] = classTemplates[this.classIndex][col++];
          this.skills[i][2] = 0;
       }
 
@@ -306,11 +322,11 @@ public class Player {
    // maxHP/maxMagicka/maxFatigue from the current attributes.
    void recalcMaxStats() {
       this.coreStats[3] = (short)((this.attributes[0] + this.attributes[10]) / 2);
-      this.coreStats[5] = (short)(this.raceMagickaFactor * this.attributes[2] / 4);
+      this.coreStats[5] = (short)(this.classMagickaFactor * this.attributes[2] / 4);
       this.coreStats[7] = (short)(this.attributes[0] + this.attributes[4] + this.attributes[6] + this.attributes[10]);
    }
 
-   // Starting known-spell bitmask from the race template's per-skill
+   // Starting known-spell bitmask from the class template's per-skill
    // thresholds: for 5 specific skill slots (mapped to bit positions
    // 0/5/10/15/20, i.e. spell ids 1/6/11/16/21), a nonzero template
    // value grants that tier's first spell. Also sets selectedSpellId to
@@ -322,8 +338,8 @@ public class Player {
       boolean first = true;
 
       for (int i = 0; i < 14; i++) {
-         short threshold = raceTemplates[this.raceIndex][col++];
-         short unused = raceTemplates[this.raceIndex][col++];
+         short threshold = classTemplates[this.classIndex][col++];
+         short unused = classTemplates[this.classIndex][col++];
          switch (i) {
             case 1:
                bit = 0;
@@ -443,15 +459,15 @@ public class Player {
       }
    }
 
-   // Shorter creation-time summary string (race/gender/level/HP/Magicka/
+   // Shorter creation-time summary string (race/class/level/HP/Magicka/
    // Fatigue/attributes), distinct from the fuller buildCharacterSheet.
    String buildCreationSummary() {
       StringBuffer out = new StringBuffer(300);
       String sp = " ";
       String colon = ": ";
-      out.append(genderNames[this.genderIndex]);
-      out.append(sp);
       out.append(raceNames[this.raceIndex]);
+      out.append(sp);
+      out.append(classNames[this.classIndex]);
       out.append('\n');
       out.append(statLabels[0]);
       out.append(colon);
@@ -507,10 +523,10 @@ public class Player {
       int available = in.available();
       statLabels = readStringArray(in);
       attributeNames = readStringArray(in);
+      classNames = readStringArray(in);
+      classCount = (short)classNames.length;
       raceNames = readStringArray(in);
-      raceCount = (short)raceNames.length;
-      genderNames = readStringArray(in);
-      raceCountRedundant = (short)raceNames.length;
+      classCountRedundant = (short)classNames.length;
       skillNames = readStringArray(in);
       short skillCount = (short)skillNames.length;
       if (skillCount != 14) {
@@ -524,11 +540,11 @@ public class Player {
       }
 
       int cols = 13 + 2 * skillCount;
-      raceTemplates = new short[raceCount][cols];
+      classTemplates = new short[classCount][cols];
 
-      for (int r = 0; r < raceCount; r++) {
+      for (int r = 0; r < classCount; r++) {
          for (int c = 0; c < cols; c++) {
-            raceTemplates[r][c] = in.readShort();
+            classTemplates[r][c] = in.readShort();
          }
       }
 
@@ -553,13 +569,13 @@ public class Player {
       DataInputStream in = new DataInputStream(bytesIn);
       p = new Player(null);
       p.name = in.readUTF();
-      p.raceIndex = in.readShort();
+      p.classIndex = in.readShort();
       if (!full) {
-         p.applyRaceTemplate(p.raceIndex);
+         p.applyClassTemplate(p.classIndex);
          p.resetState(false);
       }
 
-      p.genderIndex = in.readShort();
+      p.raceIndex = in.readShort();
 
       for (int i = 0; i < 10; i++) {
          p.coreStats[i] = in.readShort();
@@ -575,9 +591,9 @@ public class Player {
          p.attributes[i] = in.readShort();
       }
 
-      p.raceMagickaFactor = in.readShort();
-      p.raceUnknownPair[0] = in.readShort();
-      p.raceUnknownPair[1] = in.readShort();
+      p.classMagickaFactor = in.readShort();
+      p.classUnknownPair[0] = in.readShort();
+      p.classUnknownPair[1] = in.readShort();
 
       for (int i = 0; i < 14; i++) {
          for (int c = 0; c < 3; c++) {
@@ -672,8 +688,8 @@ public class Player {
       ByteArrayOutputStream bytesOut = new ByteArrayOutputStream(size);
       DataOutputStream out = new DataOutputStream(bytesOut);
       out.writeUTF(this.name);
+      out.writeShort(this.classIndex);
       out.writeShort(this.raceIndex);
-      out.writeShort(this.genderIndex);
       if (full) {
          for (int i = 0; i < 10; i++) {
             out.writeShort(this.coreStats[i]);
@@ -700,9 +716,9 @@ public class Player {
          out.writeShort(this.attributes[i]);
       }
 
-      out.writeShort(this.raceMagickaFactor);
-      out.writeShort(this.raceUnknownPair[0]);
-      out.writeShort(this.raceUnknownPair[1]);
+      out.writeShort(this.classMagickaFactor);
+      out.writeShort(this.classUnknownPair[0]);
+      out.writeShort(this.classUnknownPair[1]);
 
       for (int i = 0; i < 14; i++) {
          for (int c = 0; c < 3; c++) {
@@ -2587,10 +2603,10 @@ public class Player {
       return result;
    }
 
-   // Grants raceIndex's starting item pair and auto-equips each one.
+   // Grants classIndex's starting item pair and auto-equips each one.
    private void grantStartingItems() {
       short spawnId = Item.nextSpawnId();
-      int[] items = STARTING_ITEMS[this.raceIndex];
+      int[] items = STARTING_ITEMS[this.classIndex];
 
       for (int i = 0; i < items.length; i++) {
          this.addInventoryItem(items[i], spawnId, 0);
@@ -2713,16 +2729,18 @@ public class Player {
       this.currentDungeon().sampleCorridorView(this.tileX, this.tileY, this.facing, this.corridorView);
    }
 
-   // Full character-sheet string: name/race/level/HP/Magicka/Fatigue,
+   // Full character-sheet string: name/class/level/HP/Magicka/Fatigue,
    // active ailments, gift points found, and attributes. Used by
-   // ESGame's "Stats" popup.
+   // ESGame's "Stats" popup. Unlike buildCreationSummary, this doesn't
+   // show race at all -- just class (confirmed: the only name array
+   // this reads from is classNames).
    String buildCharacterSheet() {
       StringBuffer out = new StringBuffer(900);
       String sp = " ";
       String colon = ": ";
       out.append(this.name);
       out.append('\n');
-      out.append(raceNames[this.raceIndex]);
+      out.append(classNames[this.classIndex]);
       out.append('\n');
       out.append("Level ");
       out.append(this.coreStats[0]);
