@@ -1,37 +1,29 @@
-// Placeholder entry point -- opens a blank window to prove the build
-// toolchain works. Replace with the real port once dawnstar/decompiled/
-// has been read through and renamed (see ../../docs/ROADMAP.md).
+// M1: real tick loop + backbuffer + present. See ../docs/PORT_ROADMAP.md.
+// Still no game logic -- just proves the loop/presentation architecture,
+// same scope as shadowkey-decomp's own M0/M1.
 #include <windows.h>
 
-static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-  if (msg == WM_DESTROY) {
-    PostQuitMessage(0);
+#include "engine/game_clock.h"
+#include "graphics/backbuffer.h"
+#include "platform/win32/window.h"
+
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    dawnstar::Window window(dawnstar::Backbuffer::kWidth * 2, dawnstar::Backbuffer::kHeight * 2,
+                             L"Dawnstar Port");
+    dawnstar::Backbuffer backbuffer;
+    dawnstar::GameClock clock;
+
+    // Placeholder fill so the window visibly shows a live, presented
+    // backbuffer rather than whatever GDI leaves behind by default -- real
+    // rendering starts once GameCanvas's corridor renderer is ported.
+    backbuffer.Fill(dawnstar::PackRGB565(20, 20, 30));
+
+    window.RunMessageLoop([&] {
+        if (clock.ConsumeTick()) {
+            // Game tick goes here once there's game state to tick.
+        }
+        window.Present(backbuffer);
+    });
+
     return 0;
-  }
-  return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
-  const wchar_t* kClassName = L"DawnstarPortWindow";
-
-  WNDCLASSW wc = {};
-  wc.lpfnWndProc = WindowProc;
-  wc.hInstance = hInstance;
-  wc.lpszClassName = kClassName;
-  RegisterClassW(&wc);
-
-  HWND hwnd = CreateWindowExW(
-      0, kClassName, L"Dawnstar Port", WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, CW_USEDEFAULT, 320, 240,
-      nullptr, nullptr, hInstance, nullptr);
-  if (!hwnd) return 0;
-
-  ShowWindow(hwnd, nCmdShow);
-
-  MSG msg = {};
-  while (GetMessageW(&msg, nullptr, 0, 0)) {
-    TranslateMessage(&msg);
-    DispatchMessageW(&msg);
-  }
-  return 0;
 }
