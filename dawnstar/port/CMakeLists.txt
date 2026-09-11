@@ -9,11 +9,12 @@ if(MSVC)
   add_compile_options(/W4 /utf-8)
 endif()
 
-# M2/M3/M4: asset foundations -- see docs/PORT_ROADMAP.md and src/assets/.
+# M2/M3/M4/M7: asset foundations -- see docs/PORT_ROADMAP.md and src/assets/.
 add_library(dawnstar_assets STATIC
   src/assets/character_data.cpp
   src/assets/dat_archive.cpp
   src/assets/dungeon_geometry.cpp
+  src/assets/img_archive.cpp
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
   src/assets/spell_database.cpp
@@ -61,3 +62,7 @@ target_include_directories(java_random_smoke PRIVATE src)
 # M6 milestone smoke test -- see src/tests/m6_dungeon_generator_smoke.cpp.
 add_executable(dungeon_generator_smoke src/tests/m6_dungeon_generator_smoke.cpp)
 target_link_libraries(dungeon_generator_smoke PRIVATE dawnstar_world)
+
+# M7 milestone smoke test -- see src/tests/m7_img_archive_smoke.cpp.
+add_executable(img_archive_smoke src/tests/m7_img_archive_smoke.cpp)
+target_link_libraries(img_archive_smoke PRIVATE dawnstar_assets)

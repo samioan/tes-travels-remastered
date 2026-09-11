@@ -207,14 +207,36 @@ milestone rather than just read-through.
       generation correctness -- it only matters once a real save format
       needs it, later).
 
+- [x] **M7 -- real image archive (`imgfiles.lmp`)** (this session).
+      `ImgArchive` (`port/src/assets/img_archive.h`/`.cpp`), ported from
+      `ESGame.createImageFromFile()`: the header-then-data layout (every
+      entry's `'-'name'-'<u32 offset><u16 size>` header packed
+      contiguously up front, ending exactly at the first entry's own
+      recorded offset, followed by every entry's raw bytes in the same
+      order), decoded once at construction into a name -> raw-PNG-bytes
+      map (no PNG decoding here, same as nowhere else in this port yet).
+
+      Verified two ways, stronger than M2-M4's "sane-looking values"
+      standard: every byte blob's first 8 bytes are a real PNG magic
+      number, *and* -- since real image bytes can actually be looked at,
+      unlike a data table -- a few (`panel.png`, `icons.png`,
+      `wallsr.png`) were written out and viewed directly: real,
+      recognizable game art (a UI panel texture, an icon strip with a
+      spell/rock/question-mark/sleep-Z/fire icon row, and stone
+      wall/gate corridor textures), not just plausible-looking bytes.
+      `img_archive_smoke.exe` checks 7 known names
+      (`this.createImage("...")` call sites in `../src/ESGame.java`)
+      round-trip to valid, correctly-sized PNGs: 43 images total.
+
 ## Milestones next
 
-- [ ] **M7 and beyond (not yet planned in detail):** `imgfiles.lmp`, the
-      rest of `Player`'s runtime instance state (stats/inventory/
-      equipment/combat) and the save format, `npcstrings.dat`/
-      `helptext.dat`/`Shop` dialogue, the first-person corridor renderer
-      (`GameCanvas`'s `CORRIDOR_WALL_TABLE`), and finally `ESGame`'s own
-      screen-wiring loop tying it all together. Each gets its own
-      milestone once the shape of "how much fits in one slice" is clearer
-      -- following `shadowkey-decomp`'s pattern of not over-planning
-      milestones far in advance of actually reaching them.
+- [ ] **M8 and beyond (not yet planned in detail):** the rest of
+      `Player`'s runtime instance state (stats/inventory/equipment/
+      combat) and the save format, `npcstrings.dat`/`helptext.dat`/`Shop`
+      dialogue, the first-person corridor renderer (`GameCanvas`'s
+      `CORRIDOR_WALL_TABLE`, now unblocked by M7's real wall/floor/gate
+      textures), and finally `ESGame`'s own screen-wiring loop tying it
+      all together. Each gets its own milestone once the shape of "how
+      much fits in one slice" is clearer -- following
+      `shadowkey-decomp`'s pattern of not over-planning milestones far in
+      advance of actually reaching them.
