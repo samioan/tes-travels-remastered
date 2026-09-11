@@ -131,7 +131,11 @@ public class Dungeon {
    // convention as Player facing / Monster.isStairwayTile.
    byte[] neighbors;
    int[] unused1 = new int[2];
-   boolean unused2 = false;
+   // Set true by Player.commitMove on every real (non-turn) move that
+   // lands on this level -- confirmed write site (matches this class's
+   // own doc language calling it a "just visited" marker), but still no
+   // confirmed read site anywhere.
+   boolean visited = false;
 
    public Dungeon() {
    }

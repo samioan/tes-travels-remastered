@@ -10,16 +10,12 @@
 // `full` boolean: true = complete in-progress save, false = lightweight
 // "character summary" with no position/inventory).
 //
-// NOTE: `ESGame`, `d` (Monster) and `i` (Dungeon) below are NOT the
-// already-renamed ESGame/Monster/Dungeon classes for every call site --
-// ESGame genuinely isn't renamed yet, and while Monster/Dungeon *are*
-// renamed elsewhere, values that flow through *this* class's own save
-// format or its Dungeon/Monster-returning methods keep using the old
-// single-letter types where this file was already relying on them
-// structurally (e.g. `currentDungeon()` returns `i`, matching
-// `ESGame.dungeons[]`'s own still-unrenamed element type). `Shop`,
-// `Item`, `Spell`, and `Util` calls use their real, already-renamed
-// names throughout, since those only cross primitives.
+// `ESGame`, `Monster`, `Dungeon`, `Shop`, `Item`, `Spell`, and `Util`
+// are all the real, already-renamed classes -- this file was updated
+// alongside ESGame's own rename pass so `currentDungeon()` now returns
+// the real `Dungeon` (it used to return the old `i`, forwarding
+// `ESGame.dungeons[]`'s then-unrenamed element type; both sides are
+// renamed now).
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -194,9 +190,13 @@ public class Player {
    // story/dialogue flags given the shared array and packed-bit save
    // format.
    boolean[] eventFlags = new boolean[96];
-   // Packed into the save format alongside traitorIndex; no confirmed
-   // read site beyond the packing/unpacking itself.
-   byte unconfirmedB = 0;
+   // Packed into the save format alongside traitorIndex. Confirmed via
+   // ESGame's NPCQuestionWhomUI handler: counts (capped at 3) how many
+   // times the player has asked the actual traitor's shop (shopId-5 ==
+   // traitorIndex) about a topic; once it reaches 2 (or 3 with a 20%
+   // roll) the answer switches to the "I suspect you..." traitor-reveal
+   // flavor text and marks that (topic, target) pair as confirmed.
+   byte traitorSuspicionCount = 0;
    // Hidden "traitor" index (0-3), rolled at character creation --
    // Shop's rumor system gradually reveals which of 4 candidates it is.
    byte traitorIndex = 0;
@@ -636,7 +636,7 @@ public class Player {
          packed = in.readByte();
          p.roamingSpecialMonsterPresent = (packed & 32) == 32;
          p.specialEncounterResolved = (packed & 16) == 16;
-         p.unconfirmedB = (byte)(packed % 4);
+         p.traitorSuspicionCount = (byte)(packed % 4);
          p.traitorIndex = (byte)((packed >> 2) % 4);
          System.out.println("traitor is " + p.traitorIndex);
          int flagIdx = 0;
@@ -759,7 +759,7 @@ public class Player {
          out.writeBoolean(this.increaseArmorBuff);
          out.writeBoolean(this.safeCampingBuff);
          int packed = 0;
-         packed = (byte)(this.traitorIndex << 2 + this.unconfirmedB);
+         packed = (byte)(this.traitorIndex << 2 + this.traitorSuspicionCount);
          if (this.specialEncounterResolved) {
             packed = (byte)(packed + 16);
          }
@@ -823,45 +823,45 @@ public class Player {
                this.pendingTileY = this.tileY;
             }
 
-            i level = ESGame.dungeons[this.currentLevel - 1];
+            Dungeon level = ESGame.dungeons[this.currentLevel - 1];
             if (this.pendingTileX < 0) {
                this.levelChanged = true;
-               this.pendingLevel = level.a[3];
-               i target = ESGame.dungeons[this.pendingLevel - 1];
+               this.pendingLevel = level.neighbors[3];
+               Dungeon target = ESGame.dungeons[this.pendingLevel - 1];
                if (this.pendingLevel != 1 && this.currentLevel != 1) {
-                  this.pendingTileX = (byte)(target.h - 1);
+                  this.pendingTileX = (byte)(target.width - 1);
                } else {
-                  this.pendingTileX = (byte)(target.h - 1);
-                  this.pendingTileY = (byte)(this.pendingTileY + (target.l - level.l) / 2);
+                  this.pendingTileX = (byte)(target.width - 1);
+                  this.pendingTileY = (byte)(this.pendingTileY + (target.height - level.height) / 2);
                }
-            } else if (this.pendingTileX >= level.h) {
+            } else if (this.pendingTileX >= level.width) {
                this.levelChanged = true;
-               this.pendingLevel = level.a[1];
-               i target = ESGame.dungeons[this.pendingLevel - 1];
+               this.pendingLevel = level.neighbors[1];
+               Dungeon target = ESGame.dungeons[this.pendingLevel - 1];
                if (this.pendingLevel != 1 && this.currentLevel != 1) {
                   this.pendingTileX = 0;
                } else {
                   this.pendingTileX = 0;
-                  this.pendingTileY = (byte)(this.pendingTileY + (target.l - level.l) / 2);
+                  this.pendingTileY = (byte)(this.pendingTileY + (target.height - level.height) / 2);
                }
             } else if (this.pendingTileY < 0) {
                this.levelChanged = true;
-               this.pendingLevel = level.a[0];
-               i target = ESGame.dungeons[this.pendingLevel - 1];
+               this.pendingLevel = level.neighbors[0];
+               Dungeon target = ESGame.dungeons[this.pendingLevel - 1];
                if (this.pendingLevel != 1 && this.currentLevel != 1) {
-                  this.pendingTileY = (byte)(target.l - 1);
+                  this.pendingTileY = (byte)(target.height - 1);
                } else {
-                  this.pendingTileX = (byte)(this.pendingTileX + (target.h - level.h) / 2);
-                  this.pendingTileY = (byte)(target.l - 1);
+                  this.pendingTileX = (byte)(this.pendingTileX + (target.width - level.width) / 2);
+                  this.pendingTileY = (byte)(target.height - 1);
                }
-            } else if (this.pendingTileY >= level.l) {
+            } else if (this.pendingTileY >= level.height) {
                this.levelChanged = true;
-               this.pendingLevel = ESGame.dungeons[this.currentLevel - 1].a[2];
-               i target = ESGame.dungeons[this.pendingLevel - 1];
+               this.pendingLevel = ESGame.dungeons[this.currentLevel - 1].neighbors[2];
+               Dungeon target = ESGame.dungeons[this.pendingLevel - 1];
                if (this.pendingLevel != 1 && this.currentLevel != 1) {
                   this.pendingTileY = 0;
                } else {
-                  this.pendingTileX = (byte)(this.pendingTileX + (target.h - level.h) / 2);
+                  this.pendingTileX = (byte)(this.pendingTileX + (target.width - level.width) / 2);
                   this.pendingTileY = 0;
                }
             } else {
@@ -920,7 +920,7 @@ public class Player {
    // step, falling back to a plain turn if the step fails, unless
    // suppressStrafeAdjust is set). Returns whether the move happened.
    boolean move(int direction, boolean strafe) {
-      i level = this.currentDungeon();
+      Dungeon level = this.currentDungeon();
       if (this.coreStats[6] <= 0) {
          return false;
       }
@@ -971,12 +971,12 @@ public class Player {
          return false;
       }
 
-      i target = ESGame.dungeons[this.pendingLevel - 1];
-      if (!target.b) {
+      Dungeon target = ESGame.dungeons[this.pendingLevel - 1];
+      if (!target.populated) {
          return false;
       }
 
-      byte tile = target.d[this.pendingTileX][this.pendingTileY];
+      byte tile = target.tiles[this.pendingTileX][this.pendingTileY];
       if (!this.isWalkable(tile)) {
          return false;
       }
@@ -987,7 +987,7 @@ public class Player {
       this.tileX = this.pendingTileX;
       this.tileY = this.pendingTileY;
       this.facing = this.pendingFacing;
-      target.f = true;
+      target.visited = true;
       if (direction == 1 || direction == 2) {
          if (Shop.showDeathGreeting) {
             Shop.showDeathGreeting = false;
@@ -1000,14 +1000,14 @@ public class Player {
       boolean hasDroppedItems = (tile & 4) != 0;
       if (hasDroppedItems && (direction == 1 || direction == 2)) {
          boolean allLooted = true;
-         Vector items = target.d(this.tileX, this.tileY);
+         Vector items = target.droppedItemsAt(this.tileX, this.tileY);
          Enumeration it = items.elements();
 
          while (it.hasMoreElements()) {
             byte[] rec = (byte[])it.nextElement();
             boolean looted = this.tryAddDroppedItem(rec);
             if (looted) {
-               target.c(rec);
+               target.removeDroppedItem(rec);
                if ((rec[6] & 2) == 0) {
                   int itemIdx = rec[2] - 1;
                   if (Item.category[itemIdx] == 11) {
@@ -1020,7 +1020,7 @@ public class Player {
          }
 
          if (allLooted) {
-            target.c(this.tileX, this.tileY);
+            target.clearDroppedItemFlag(this.tileX, this.tileY);
          }
       }
 
@@ -1356,7 +1356,7 @@ public class Player {
    // its position relative to the player's facing. Returns whether it
    // was placed (false if that slot was already occupied).
    boolean placeVisibleObject(int kind, Object obj) {
-      i level = this.currentDungeon();
+      Dungeon level = this.currentDungeon();
       Object rec = null;
       byte objX = 0;
       byte objY = 0;
@@ -1779,7 +1779,7 @@ public class Player {
          int packed = (rec[5] << 8) + rec[6];
          byte charge = rec[7];
          this.addInventoryItem(itemId, packed, charge);
-         ESGame.dungeons[this.currentLevel - 1].a(rec);
+         ESGame.dungeons[this.currentLevel - 1].removeChest(rec);
          int itemIdx = itemId - 1;
          if (Item.category[itemIdx] == 11) {
             this.giftPointsFound = (short)(this.giftPointsFound + Item.subtype[itemIdx]);
@@ -1788,8 +1788,8 @@ public class Player {
          return 1;
       } else {
          byte[] floorRec = new byte[]{rec[0], rec[1], rec[4], rec[5], rec[6], rec[7], 1};
-         this.currentDungeon().b(floorRec);
-         ESGame.dungeons[this.currentLevel - 1].a(rec);
+         this.currentDungeon().addDroppedItem(floorRec);
+         ESGame.dungeons[this.currentLevel - 1].removeChest(rec);
          return 0;
       }
    }
@@ -2239,7 +2239,7 @@ public class Player {
          rec[3] = (byte)(packed >> 8 & 0xFF);
          rec[4] = (byte)(packed & 0xFF);
          rec[6] = 3;
-         this.currentDungeon().b(rec);
+         this.currentDungeon().addDroppedItem(rec);
          this.removeInventorySlot(slot);
       } else {
          this.removeInventorySlot(slot);
@@ -2249,6 +2249,31 @@ public class Player {
    boolean isEquipped(int slot) {
       byte itemId = this.inventoryItemIds[slot];
       return !Item.isEquippable(Math.abs(itemId)) ? false : itemId < 0;
+   }
+
+   // Gates ESGame's "Equip"/"Unequip" inventory-item menu option: true
+   // for weapon (1-4), armor (5-10), and "special weapon" (15)
+   // categories. Kept as its own category switch (rather than reusing
+   // Item.isEquippable's equipSlot-based check) to stay faithful to the
+   // original.
+   boolean canEquipOrUnequip(int slot) {
+      int itemId = Math.abs(this.inventoryItemIds[slot]);
+      switch (Item.column(1, itemId)) {
+         case 1:
+         case 2:
+         case 3:
+         case 4:
+         case 5:
+         case 6:
+         case 7:
+         case 8:
+         case 9:
+         case 10:
+         case 15:
+            return true;
+         default:
+            return false;
+      }
    }
 
    // Equips the item in `slot`; if that equip slot is already occupied,
@@ -2396,6 +2421,24 @@ public class Player {
       return text;
    }
 
+   // Gates ESGame's "Learn" inventory-item menu option: true for a
+   // not-already-known spell scroll (category 12) whose required skill
+   // the player has at least 1 point in.
+   boolean canLearnSpell(int slot) {
+      int itemId = Math.abs(this.inventoryItemIds[slot]);
+      if (Item.column(1, itemId) != 12) {
+         return false;
+      }
+
+      int spellId = this.inventoryItemData[slot] & 0xFF;
+      byte requiredSkill = Spell.all[spellId - 1].skillRequired;
+      if ((this.knownSpellsMask & 1 << spellId - 1) != 0) {
+         return false;
+      } else {
+         return this.skills[requiredSkill][0] > 0;
+      }
+   }
+
    // Learns the spell encoded on a scroll-type item (category 12) in
    // `slot`, then consumes the scroll.
    boolean learnSpellFromScroll(int slot) {
@@ -2408,12 +2451,18 @@ public class Player {
       return true;
    }
 
+   // Gates ESGame's "Use" inventory-item menu option: true only for
+   // the 87-99 "gift"/special-consumable category (13).
+   boolean canUseItem(int slot) {
+      int itemId = Math.abs(this.inventoryItemIds[slot]);
+      return Item.column(1, itemId) == 13;
+   }
+
    // 1-arg overload called from ESGame's inventory screen (no monster
    // target in that context): delegates to the 2-arg overload with
    // GameCanvas's current combat target. Note this reaches across to
-   // GameCanvas's own static `targetMonster` field (originally `e.i`),
-   // typed `d` there for the same reason -- see GameCanvas.java's class
-   // header note.
+   // GameCanvas's own static `targetMonster` field, already the real
+   // Monster type there.
    void useItem(int slot) {
       this.useItem(slot, GameCanvas.targetMonster);
    }
@@ -2655,13 +2704,13 @@ public class Player {
       return (this.ailmentMask & 1) == 1 ? 3 : 1;
    }
 
-   i currentDungeon() {
+   Dungeon currentDungeon() {
       return ESGame.dungeons[this.currentLevel - 1];
    }
 
    // Repopulates corridorView from the current position/facing.
    void refreshCorridorView() {
-      this.currentDungeon().a(this.tileX, this.tileY, this.facing, this.corridorView);
+      this.currentDungeon().sampleCorridorView(this.tileX, this.tileY, this.facing, this.corridorView);
    }
 
    // Full character-sheet string: name/race/level/HP/Magicka/Fatigue,

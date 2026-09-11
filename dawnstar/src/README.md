@@ -19,36 +19,29 @@ what each class does and how confident each renaming is.
 | `Shop.java` | `k.java` | NPC dialogue, shops, quest tracking |
 | `GameCanvas.java` | `e.java` | Renderer + input handler + main tick loop |
 | `Player.java` | `j.java` | Player stats, inventory, combat, spellcasting |
+| `ESGame.java` | `ESGame.java` | MIDlet entry point: UI screen wiring, save/load, image loading |
 
-All 12 decompiled classes except `ESGame` are now renamed here (`k`
-was Shop, not a 13th class -- see `CLASS_MAP.md`'s class-by-class
-writeup). `Player` was the last one and by far the largest (2668
-lines) -- see `CLASS_MAP.md`'s "why `j`/`ESGame` weren't renamed by
-mechanical means" for why it needed the same full hand-trace treatment
-as `GameCanvas` rather than a mechanical rename.
+All 13 decompiled classes are now renamed here (`k` was Shop, not a
+13th class on top of these -- see `CLASS_MAP.md`'s class-by-class
+writeup). `Player` was the last large hand-trace (2668 lines) -- see
+`CLASS_MAP.md`'s "why `j`/`ESGame` weren't renamed by mechanical means"
+for why it needed the same full treatment as `GameCanvas` rather than
+a mechanical rename. `ESGame` itself needed no such treatment -- its
+own member names were already readable in the decompiled output -- but
+its pass turned out bigger than a pure retype: a handful of its own
+methods called `Player` predicates (`canEquipOrUnequip`/`canUseItem`/
+`canLearnSpell`) that had never been written yet, since nothing
+`Player.java` itself or any already-renamed class called them before
+ESGame did.
 
-`ESGame` is **not** renamed here -- its own member names are already
-readable in the decompiled output (no mechanical-rename blocker like
-`e`/`j` had), it just hasn't had its own pass yet (tracked as future
-work). Every other renamed file that needs something from `ESGame`
-references it by its **original** member names (the class itself is
-already called `ESGame`, only some of *its* fields/methods are still
-single-letter) rather than inventing renamed-but-nonexistent APIs.
-`GameCanvas.java` and `Player.java` both fully integrate with each
-other and with `Monster`/`Shop`/`Dungeon`/`Item`/`Spell`/`Util` using
-their real renamed names now -- `Monster.java`, `Shop.java`, and
-`Dungeon.java` were updated alongside Player's own rename pass the same
-way `Screen.java`/`LoadingScreen.java` were updated alongside
-GameCanvas's. The one remaining old-type leak: `Player.currentDungeon()`
-still returns the *old* unrenamed `i` (Dungeon) class, because it just
-forwards `ESGame.dungeons[]`'s element type, which won't become
-`Dungeon[]` until `ESGame` gets its own rename pass -- see
-`Player.java`'s and `GameCanvas.java`'s class header comments for
-exactly where that leak surfaces (one specific call site in
-`GameCanvas.dispatchTickActions` that reaches `Dungeon.tickNearbyMonsters`
-through that old type, which is why `Dungeon.java`'s own
-`tickNearbyMonsters` -- already updated to accept the real `Player`
-type -- is presently unreachable dead code until then).
+Every class now integrates directly using real names: `Player.java`'s
+`currentDungeon()` returns the real `Dungeon` (it used to return the
+old `i`, forwarding `ESGame.dungeons[]`'s then-unrenamed element type),
+which in turn made `Dungeon.tickNearbyMonsters` and the handful of
+other `Dungeon`/`Player` cross-calls reachable through `GameCanvas` and
+`Player` themselves -- both updated alongside this pass. `src/` is now
+a single coherent, compilable tree: `decompiled/*.java` is no longer
+needed on the classpath to build it.
 
 ## Compile-checked, not just read-through
 
@@ -60,7 +53,7 @@ manual step, not a `tools/` script:
 
 ```
 mkdir -p /tmp/dawnstar_compile_check/ngame/midlet
-cp dawnstar/src/*.java dawnstar/decompiled/*.java /tmp/dawnstar_compile_check/
+cp dawnstar/src/*.java /tmp/dawnstar_compile_check/
 cp dawnstar/decompiled/ngame/midlet/RegisteredMIDlet.java /tmp/dawnstar_compile_check/ngame/midlet/
 cd /tmp/dawnstar_compile_check && mkdir out
 
@@ -76,11 +69,12 @@ curl -L -o tools/midp-stubs/nokiaui.jar    https://repo1.maven.org/maven2/org/mi
 javac -cp "tools/midp-stubs/*" -d out *.java ngame/midlet/*.java
 ```
 
-Both the renamed files here AND the untouched `decompiled/*.java` need
-to be present together: `e.java`/`j.java`/`ESGame.java` still reference
-`a`-`k` by their original names, so those originals must stay on the
-classpath even though renamed replacements for all of them also exist
-alongside (different class names, no collision).
+Now that all 13 classes are renamed, `dawnstar/src/*.java` alone is
+enough -- `dawnstar/decompiled/*.java` (except `RegisteredMIDlet.java`,
+the shared base class that was never obfuscated) no longer needs to be
+on the classpath at all. Earlier runs below, made while classes were
+still missing their rename pass, needed the untouched originals
+alongside for whatever hadn't been done yet; kept for history.
 
 **Result (last run while writing `Dungeon.java`/`Monster.java`):** the
 untouched `a`/`c`/`e`/`h`/`i`/`j`/`ESGame.java` fail to compile as-is --
@@ -136,8 +130,28 @@ files (`a`/`c`/`e`/`h`/`i`/`j`/`ESGame.java`) as every run above --
 `Player.java` itself, and the `GameCanvas.java`/`Monster.java`/
 `Shop.java`/`Dungeon.java` updates needed to integrate with it (Player's
 own methods now use the real `Monster`/`Item`/`Spell`/`Shop`/`Util`
-types and names throughout), all compile with **zero errors**. This is
+types and names throughout), all compile with **zero errors**. This was
 the last of the 12 non-`ESGame` classes renamed -- `dawnstar/src/`'s
-only remaining integration debt is the single documented `i`-typed leak
-from `Player.currentDungeon()` (see above), which is expected to
-resolve once `ESGame.java` gets its own rename pass.
+only remaining integration debt was the single documented `i`-typed
+leak from `Player.currentDungeon()` (see above), expected to resolve
+once `ESGame.java` got its own rename pass.
+
+**Re-run after adding `ESGame.java` (the last class):** `dawnstar/src/`
+now compiles **standalone**, with zero errors, against just the MIDP
+stub jars -- `dawnstar/decompiled/*.java` is no longer needed on the
+classpath at all (confirmed by dropping it from the command above and
+re-running). Getting there needed more than retyping ESGame's own
+fields: `Player.currentDungeon()` now genuinely returns `Dungeon`
+instead of the old `i` (since `ESGame.dungeons` is finally `Dungeon[]`),
+which surfaced a chain of old-type leaks that had been hiding behind
+that one return type -- half a dozen `i`-typed locals and old
+`i`-lettered method calls in `Player.java` and `GameCanvas.java`
+(`Dungeon.tickNearbyMonsters`, `sampleSquareView`,
+`trySpawnMonsterNear`, `addDroppedItem`, `removeChest`, `displayName`)
+all needed updating to the real `Dungeon` API in the same pass. Also
+added three `Player` predicate methods (`canEquipOrUnequip`/
+`canUseItem`/`canLearnSpell`) that only `ESGame`'s inventory-item menu
+ever called, so nothing had written them yet; and renamed two
+previously-unconfirmed fields once ESGame's call sites confirmed their
+purpose: `Player.traitorSuspicionCount` (was `unconfirmedB`) and
+`Screen.contextIndex`/`Screen.backTarget` (were `unused1`/`unused2`).

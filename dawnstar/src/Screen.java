@@ -34,16 +34,23 @@ public class Screen {
    // confirmed -- possibly a debug/support reference code, not consumed
    // by any rendering or input logic traced so far.
    int secondaryParam;
-   // Set to 0 in the constructor, never reassigned in what's been
-   // traced -- unconfirmed purpose.
-   int unused1;
+   // Set to 0 in the constructor. Confirmed via ESGame: a per-instance
+   // context value the caller stashes and reads back from its own
+   // CommandListener callback (e.g. which NPC/shop, or which inventory
+   // item, this particular Screen instance is about) -- never read or
+   // written by Screen itself.
+   int contextIndex;
    ESGame game;
    // Raw text containing a literal "<TAG>" placeholder, stashed by
    // setupPromptList for later re-substitution (e.g. dynamic NPC
    // dialogue topics). Null otherwise.
    String rawTaggedText;
    GameCanvas canvas;
-   Object unused2;
+   // Screen (or other Displayable) to return to on cancel/back -- set
+   // and read entirely by ESGame's own navigation code, never touched
+   // by Screen itself. Distinct from `returnDisplay` below, which
+   // LoadingScreen itself reads/writes internally.
+   Object backTarget;
    // Displayable to return to -- set externally (e.g. ESGame wires
    // LoadingScreen.returnDisplay = errorForm).
    Object returnDisplay;
@@ -71,8 +78,8 @@ public class Screen {
       this.canvas = this.game.gameCanvas;
       this.mode = mode;
       this.secondaryParam = secondaryParam;
-      this.unused1 = 0;
-      this.unused2 = null;
+      this.contextIndex = 0;
+      this.backTarget = null;
       this.returnDisplay = null;
       this.rawTaggedText = null;
       this.commands = new Vector(2);

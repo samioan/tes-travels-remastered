@@ -26,13 +26,12 @@ real control flow and types cleanly -- this is plain JVM bytecode, not a
 native/ARM target, so there's no disassembler-loader step like
 shadowkey-decomp needed.
 
-**Phase 1 is done for 12 of the 13 decompiled classes -- every one
-except `ESGame` itself.** Read through class-by-class, worked out each
-one's role from field usage and call sites, and produced hand-written,
-faithfully-renamed source for all 12 in [`../src/`](../src/) (see its
-`README.md` for the exact mapping and a compile-check methodology/
-result). Full writeup of every class -- including `ESGame`, the one not
-mechanically renamed -- is in [`CLASS_MAP.md`](CLASS_MAP.md).
+**Phase 1 is done -- all 13 decompiled classes are renamed.** Read
+through class-by-class, worked out each one's role from field usage
+and call sites, and produced hand-written, faithfully-renamed source
+for all 13 in [`../src/`](../src/) (see its `README.md` for the exact
+mapping and a compile-check methodology/result). Full writeup of every
+class is in [`CLASS_MAP.md`](CLASS_MAP.md).
 
 - **Renamed and compile-checked**: `Item`, `Spell`, `DungeonGenerator`,
   `Monster`, `Util`, `Screen`, `LoadingScreen`, `Dungeon`, `Shop`,
@@ -56,15 +55,17 @@ mechanically renamed -- is in [`CLASS_MAP.md`](CLASS_MAP.md).
   minimap both sample from; and the "overstayed in one place" ambush
   spawner turned out to be unreachable dead code (its trigger field is
   never set to anything but its inert default anywhere in the codebase).
-- **Not mechanically renamed**: `ESGame` alone -- its own member names
-  are already readable in the decompiled output (no rename needed
-  there), it just hasn't had its own pass yet. `Player.currentDungeon()`
-  is the one remaining old-type leak in the renamed tree: it still
-  returns the *old* unrenamed Dungeon type because it just forwards
-  `ESGame.dungeons[]`'s own element type, which stays `i[]` until
-  `ESGame` is renamed -- see `../src/README.md` and `Player.java`'s/
-  `GameCanvas.java`'s class header comments for exactly where that
-  surfaces.
+- **`ESGame`**: its own member names were already readable in the
+  decompiled output (no mechanical-rename blocker like `e`/`j` had),
+  but its pass turned out bigger than a pure field-type retype --
+  `Player.currentDungeon()` now genuinely returns `Dungeon` (matching
+  `ESGame.dungeons[]`'s finally-real `Dungeon[]` type), which surfaced
+  a chain of old-type leaks in `Player.java`/`GameCanvas.java` that had
+  been hiding behind that one return type, and ESGame's own inventory
+  menu needed three `Player` predicate methods
+  (`canEquipOrUnequip`/`canUseItem`/`canLearnSpell`) nothing had
+  written yet. See `../src/README.md`'s compile-check section for the
+  full list.
 - A handful of fields/tables across several classes are flagged in
   `CLASS_MAP.md`'s "Open questions" as genuinely unconfirmed (no call
   site found) rather than guessed.
@@ -76,17 +77,11 @@ despite the similar-looking name), `npcstrings.dat`, `helptext.dat`,
 `charin.dat` all have confirmed binary layouts now, derived from the
 loader code rather than guessed from hexdumps.
 
-**Next for phase 1**: a light rename pass on `ESGame.java` itself. Its
-own names are already readable, but a handful of field *types* (`static
-i[] dungeons`, `e gameCanvas`, and every UI screen field currently typed
-`g`) need updating to point at the renamed classes. That's the only
-thing left before `src/` becomes a single coherent, compilable tree
-instead of needing `decompiled/`'s originals alongside it for `ESGame`'s
-own dependencies -- see `../src/README.md`'s compile-check section for
-exactly what breaks today without that. With all 12 other classes now
-renamed and integrated, this is a much smaller pass than the ones before
-it: `ESGame` needs its field/local *types* updated, not the same
-from-scratch hand-trace `GameCanvas`/`Player` needed.
+**Phase 1 is fully done**: `dawnstar/src/` now compiles standalone
+(zero errors against just the MIDP/CLDC/Nokia-UI stub jars) -- see
+`../src/README.md`'s compile-check section for the final run and
+exactly what ESGame's pass touched beyond its own file. Nothing from
+`dawnstar/decompiled/` is needed on the classpath to build it anymore.
 
 **Phase 3 (not started): PC port.** Scaffold is in `port/` (CMake +
 Ninja + MSVC, matching the sibling `shadowkey-decomp` project's

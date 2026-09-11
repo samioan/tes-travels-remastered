@@ -3,17 +3,19 @@
 Full read-through of every class in `decompiled/`, done from the code alone
 (no external docs exist for this engine). Confidence is high for every
 class now, including `e`/`GameCanvas` and `j`/`Player` (both got the same
-full hand-trace as the small classes despite their size), except `ESGame`
--- its overall architecture and most fields are confirmed, but a handful
-are still genuinely unclear and marked as such rather than guessed.
+full hand-trace as the small classes despite their size) and `ESGame` --
+its overall architecture and most fields were already confirmed by the
+time it got its own pass, though a handful of fields/tables are still
+genuinely unclear and marked as such rather than guessed (see "Open
+questions" below).
 
-Renamed, hand-written source for every non-`ESGame` class lives in
-`../src/`. `j` (renamed `Player.java`) was the last one, and by far the
-biggest (2668 lines) -- it has now had the same hand-trace-then-
-compile-check treatment as `GameCanvas` and the small classes before it
-(see "Why `e`/`j` weren't renamed by mechanical means" at the bottom for
-why a plain mechanical rename wasn't safe for either). `ESGame` alone is
-still NOT renamed -- this document remains its authoritative map.
+Renamed, hand-written source for all 13 classes lives in `../src/`. `j`
+(renamed `Player.java`) was the last large hand-trace (2668 lines);
+`ESGame` needed no such treatment -- its own member names were already
+readable in the decompiled output -- but its own pass (see below) ended
+up touching `Player.java`/`GameCanvas.java` too, once
+`Player.currentDungeon()` could finally return the real `Dungeon`
+instead of the old `i`.
 
 ## The shared "ngame" engine
 
@@ -25,12 +27,21 @@ used unobfuscated-in-name by `stormhold/decompiled/ngame/midlet/a.java`).
 retail build), and generic exit/error-alert plumbing. Nothing here is
 Dawnstar-specific.
 
-## `ESGame` (the MIDlet / main controller)
+## `ESGame` (the MIDlet / main controller) -- renamed in `../src/ESGame.java`
 
 Unlike `a`-`k`, `ESGame`'s own members were **not** heavily obfuscated --
 public/package fields and methods mostly kept real names
-(`getResource`, `gameCanvas`, `chests`, `dungeons`, `debugCode`, ...).
-Reading it directly confirmed almost everything inferred from `a`-`k`.
+(`getResource`, `gameCanvas`, `chests`, `dungeons`, `debugCode`, ...), so
+its rename pass only needed to retype fields/locals from the old
+single-letter classes to their real renamed names (`Screen`,
+`LoadingScreen`, `GameCanvas`, `Player`, `Dungeon`) and update every call
+site -- not a from-scratch hand-trace of its own members. Reading it
+directly confirmed almost everything inferred from `a`-`k`, and its call
+sites resolved a few of `CLASS_MAP.md`'s previously-unconfirmed fields
+(see "Open questions" below): `Player.traitorSuspicionCount` (was
+`unconfirmedB`) and `Shop.UNCONFIRMED_A`/`UNCONFIRMED_B` (used in the
+NPC-question rumor-answer lookup, `k.a`/`k.i` in the original) all got
+confirmed read/write sites.
 
 - Owns every `Screen`(`g`)/`LoadingScreen`(`h`) instance as a named field:
   `mainMenuUI`, `newGameUI`, `characterMainUI`, `InventoryUI`,
@@ -47,20 +58,21 @@ Reading it directly confirmed almost everything inferred from `a`-`k`.
   of `imgfiles.lmp` (different from `datfiles.lmp`!), see
   `ASSET_FORMATS.md`.
 - Vestigial/dead code: a `Pluto-Server-URL` / `Mserver-User-Id` JAD-property
-  mechanism (`SERVER_DATAFILE_BASE_URL`, `j.N`) that's read at startup but
-  never used for anything in this build beyond a debug `println` -- looks
-  like leftover scaffolding from a server-backed variant of the "ngame"
-  engine. Safe to drop entirely in the port.
+  mechanism (`SERVER_DATAFILE_BASE_URL`, `Player.serverUserId`) that's read
+  at startup but never used for anything in this build beyond a debug
+  `println` -- looks like leftover scaffolding from a server-backed variant
+  of the "ngame" engine. Safe to drop entirely in the port.
 - `run()` is a state machine over `helperThreadState` (1=unused legacy
   download path, 2=`runAppload` app boot/asset load, 4=`createNewGame`,
   5=save, 6=load) -- this is the background-thread half of loading
   screens; the foreground half is `LoadingScreen`.
 - Startup order (`runAppload` -> `allocateESGame` -> `allocateAllUIs` ->
   `allocAllDungeons`): load `charin.dat`/help text/`itemsin.dat`/
-  `spellsin.dat`/`monstersin.dat` (`j.s()`, `Item.load()`, `Spell.load()`,
-  `Monster.load()`), then every UI screen's static text, then
-  `imgfiles.lmp` images, then `new DungeonGenerator(dungeons, splashUI)`
-  which procedurally builds all 37 levels from `geomin.dat`.
+  `spellsin.dat`/`monstersin.dat` (`Player.ensureCharDataLoaded()`,
+  `Item.load()`, `Spell.load()`, `Monster.load()`), then every UI screen's
+  static text, then `imgfiles.lmp` images, then
+  `new DungeonGenerator(dungeons, splashUI)` which procedurally builds all
+  37 levels from `geomin.dat`.
 
 ## `a` -> `Item` (item database + loot tables)
 
@@ -425,8 +437,10 @@ as `GameCanvas` rather than a mechanical rename. Confirmed structure:
   pair, switched by a boolean (`full`=complete in-progress save:
   everything including inventory/position/status; not `full`
   =lightweight "character summary" with no position/inventory -- likely
-  a high-score/leaderboard record, needs confirming against where the
-  not-`full` path is actually called from `ESGame`).
+  a high-score/leaderboard record). Checked `ESGame` once it was
+  renamed: it only ever calls `toBytes(true)`/`fromBytes(_, true)` (its
+  one save slot), so the not-`full` path has no caller anywhere in this
+  build -- confirmed dead code, not just unconfirmed.
 - A vestigial/dead-code trio worth noting: `endOfGameTriggered` (was
   `R`) is read by `GameCanvas` but never set `true` anywhere in the
   entire codebase, so that branch is unreachable; `serverUserId` (was
@@ -510,21 +524,43 @@ directly, but summarized here:
   than its `-1` field initializer, so `GameCanvas.tickPerSecond`'s whole
   "overstayed in one place" ambush-spawner branch is unreachable in this
   build.
-- `Player.unconfirmedB` (was `B`) -- packed into the save format
-  alongside `traitorIndex`, no confirmed read site beyond the
-  packing/unpacking itself.
+- `Player.traitorSuspicionCount` (was `unconfirmedB`, was `B`).
+  **Resolved** while renaming `ESGame`: counts (capped at 3) how many
+  times the player has asked the actual traitor's shop
+  (`shopId-5==traitorIndex`) about a topic in the "Ask about whom"
+  flow; once it reaches 2 (or 3 with a 20% roll) the answer switches
+  to the traitor-reveal flavor text. Still packed into the save format
+  alongside `traitorIndex` as before.
 - `Shop.UNCONFIRMED_A`/`UNCONFIRMED_B` (originally `k.a[24]`/`k.i[24]`) --
   24 entries each (matches `Player`'s 24 inventory slots), values in
-  13-60, no confirmed read site. Plausibly inventory-screen layout
-  coordinates given the count, but not verified.
+  13-60. **Read site confirmed** while renaming `ESGame`: both are
+  indexed by `topic*4+target+disambiguator` in the "Ask about whom"
+  answer lookup and in the Clue Log screen, selecting between two
+  phrasings of a rumor line (which one seems to depend on whether the
+  asked-about NPC has separately confirmed that fragment) --
+  `dialogue[9][5 + UNCONFIRMED_A/B[index]]`. The exact meaning of the
+  disambiguator bit itself is still not confidently pinned down, so
+  the table names are kept as-is rather than guessed further.
 - `Shop.shopActionCode`/`isValidShopAction` (originally `k.b(int,int)`/
-  `k.c(int,int)`) -- a clearly-matched pair, but no confirmed caller
-  anywhere traced (the quest-turn-in roll in `dialogue()` that looked
-  like it should call these actually calls
-  `Player.rollShopOutcome(shopId,action)` instead -- see the `Shop`
-  section above).
-- `Screen.secondaryParam`/`unused1` (originally `g.s`/`g.i`) -- read
-  and stored, no confirmed use beyond storage.
+  `k.c(int,int)`). **Callers confirmed** while renaming `ESGame`:
+  `shopActionCode(shopId,choiceIndex)` maps a "Train What?" menu
+  selection to an action code (`ESGame`'s `commandAction1`, mode 20),
+  and `isValidShopAction(shopId,skillIndex)` filters which of the 14
+  skills are trainable at a given shop (`ESGame.newTrainWhat`) -- a
+  slight misnomer (it's really "is this skill trainable here", not a
+  dialogue action check) but kept as named since both are established,
+  compile-checked names now. The quest-turn-in roll in `dialogue()` is
+  unrelated -- that's `Player.rollShopOutcome(shopId,action)` (see the
+  `Shop` section above).
+- `Screen.contextIndex`/`backTarget` (originally `g.i`/`g.v`, were
+  `unused1`/`unused2`). **Resolved** while renaming `ESGame`:
+  `contextIndex` is a per-instance context value the owning code
+  stashes and reads back in its own `CommandListener` callback (which
+  NPC/shop/item a given `Screen` instance is about); `backTarget` is
+  the Screen (or other `Displayable`) to return to on cancel. Both are
+  set and read entirely by `ESGame`'s own navigation code -- `Screen`
+  itself never touches either, which is why they read as "unused" from
+  inside `Screen.java` alone.
 
 ## Why `e`/`j` weren't renamed by mechanical means
 
@@ -547,9 +583,9 @@ Both got exactly that treatment: `GameCanvas` (`e.java`, 1893 lines) is
 now `../src/GameCanvas.java`, and `Player` (`j.java`, 2668 lines -- by
 far the largest and most central class; note the file sizes here were
 previously swapped in this document/the roadmap) is now
-`../src/Player.java`. `ESGame` is the only class left unrenamed. Any
-file that needs something from `ESGame` (or from the *old*, still-
-unrenamed `i`/Dungeon type that `Player.currentDungeon()` returns, since
-that's just forwarding `ESGame.dungeons[]`'s own element type) references
-it by its original members rather than inventing renamed-but-nonexistent
-APIs -- see each such file's own header comment for specifics.
+`../src/Player.java`. `ESGame` didn't have this collision problem (its
+own names were already readable), so its own pass was a field/call-site
+retype rather than a from-scratch hand-trace -- see
+`../src/README.md`'s compile-check section for what that pass actually
+touched. All 13 classes are renamed now; every file uses every other
+file's real names throughout.

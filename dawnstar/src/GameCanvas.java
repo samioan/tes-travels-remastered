@@ -7,22 +7,13 @@
 // -- movement, combat, spellcasting, camping, death/respawn, and the
 // scripted "overstayed in one place" ambush spawner (see tickPerSecond).
 //
-// NOTE: `ESGame` and `i` (Dungeon) below are NOT the already-renamed
-// ESGame/Dungeon classes for every call site. ESGame genuinely isn't
-// renamed yet. `Dungeon` *is* renamed, but the one Dungeon reference
-// this file holds (via Player.currentDungeon()) keeps the old type `i`
-// because Player's own currentDungeon() still declares that return type
-// -- see Player.java's own header note on why. `Player`, `Monster`,
-// `Item`, `Spell`, `Shop`, and `Util` are all now the real,
-// already-renamed classes: this file was updated alongside Player's own
-// rename pass to integrate directly with it, the same way it and
-// Screen.java were updated alongside GameCanvas's own rename.
-//
-// Like Dungeon.java before it, this file will NOT compile drop-in
-// against the untouched decompiled/ESGame.java: ESGame's own field is
-// still declared `e gameCanvas;`, and its `.Y =`/`.v`/`.an` etc. writes
-// target the OLD `e` class, not this one. That's expected integration
-// debt for ESGame's own future rename pass -- see ../src/README.md.
+// `ESGame`, `Player`, `Monster`, `Dungeon`, `Item`, `Spell`, `Shop`,
+// and `Util` are all now the real, already-renamed classes: this file
+// was updated alongside Player's own rename pass to integrate directly
+// with it (the same way it and Screen.java were updated alongside
+// GameCanvas's own rename), and again alongside ESGame's rename pass,
+// which is what let `Player.currentDungeon()` finally return the real
+// `Dungeon` instead of the old `i`.
 import com.nokia.mid.ui.FullCanvas;
 import java.util.Enumeration;
 import java.util.Hashtable;
@@ -386,14 +377,14 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // mirrored side, by scanning CORRIDOR_WALL_TABLE's candidate offsets
    // for the first occluding (wall, bit0) or transition (edge, bit6) tile.
    private void paintCorridorWalls(Graphics g) {
-      i dungeon = this.player.currentDungeon();
+      Dungeon dungeon = this.player.currentDungeon();
       if (!this.player.hasAilment(3)) {
          if (this.player.hasAilment(4)) {
             g.setColor(10485760);
             g.fillRect(0, 0, this.screenWidth, floorTexture.getHeight());
          } else {
             for (int col = 0; col < 5; col++) {
-               if (dungeon.e != 1) {
+               if (dungeon.number != 1) {
                   g.drawImage(floorIceTexture, col * 36, 0, 20);
                } else {
                   g.drawImage(floorTexture, col * 36, 0, 20);
@@ -415,7 +406,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
             int dy = CORRIDOR_WALL_TABLE[step][row][3];
             if (Util.testBit((byte)1, this.player.tileAt(dx, dy))) {
                int frame = this.resolveWallFrame(cmd, column, -1);
-               this.drawWallSegment(g, frame, x, dungeon.e);
+               this.drawWallSegment(g, frame, x, dungeon.number);
                break;
             }
 
@@ -437,7 +428,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
             int dy = CORRIDOR_WALL_TABLE[9 - step][row][3];
             if (Util.testBit((byte)1, this.player.tileAt(dx, dy))) {
                int frame = this.resolveWallFrame(cmd, column, 1);
-               this.drawWallSegment(g, frame, x, dungeon.e);
+               this.drawWallSegment(g, frame, x, dungeon.number);
                break;
             }
 
@@ -773,10 +764,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
             x = 14;
             break;
          case 5:
-            x = isChest ? 68 : 73;
+            x = (short)(isChest ? 68 : 73);
             break;
          case 6:
-            x = isChest ? 125 : 142;
+            x = (short)(isChest ? 125 : 142);
       }
 
       if (isChest) {
@@ -1141,10 +1132,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
       byte y = this.player.tileY;
       byte facing = this.player.facing;
       if (!minimapZoomedOut) {
-         this.player.currentDungeon().a(x, y, facing, 7, visibleTileGrid);
+         this.player.currentDungeon().sampleSquareView(x, y, facing, 7, visibleTileGrid);
          this.paintMinimapGrid(this.minimapImage.getGraphics(), 1, 1, 7, 3);
       } else {
-         this.player.currentDungeon().a(x, y, facing, 17, visibleTileGrid);
+         this.player.currentDungeon().sampleSquareView(x, y, facing, 17, visibleTileGrid);
          this.paintMinimapGrid(this.minimapImage.getGraphics(), 2, 2, 17, 5);
       }
    }
@@ -1297,10 +1288,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
                         this.suppressMoveInput = true;
                         this.player.rest(false);
                         if (this.campState == 3) {
-                           if (!this.player.currentDungeon().a(this.player.tileX, this.player.tileY, 41)) {
+                           if (!this.player.currentDungeon().trySpawnMonsterNear(this.player.tileX, this.player.tileY, 41)) {
                            }
                         } else {
-                           this.player.currentDungeon().a(this.player.tileX, this.player.tileY, -1);
+                           this.player.currentDungeon().trySpawnMonsterNear(this.player.tileX, this.player.tileY, -1);
                         }
 
                         this.campState = 0;
@@ -1353,7 +1344,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
                      showLevelNameMessage = true;
                      runTick = true;
                      if (showLevelNameMessage) {
-                        if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().a()), 1)) {
+                        if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().displayName()), 1)) {
                            messageShownAt = System.currentTimeMillis();
                            messageVisible = true;
                         }
@@ -1364,16 +1355,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
                }
 
                if (runTick) {
-                  // Known integration gap (see class header note): this
-                  // reaches Dungeon.tickNearbyMonsters through the OLD
-                  // unrenamed `i` class (Player.currentDungeon()'s
-                  // return type, forced by ESGame.dungeons[] still
-                  // being `i[]`), whose own `a(long, ???)` still expects
-                  // the OLD `j` Player type -- not this file's `player`
-                  // field, which is now genuinely typed `Player`. Won't
-                  // compile until ESGame (and the old i.java path it
-                  // exposes) gets its own rename pass.
-                  byte flags = this.player.currentDungeon().a(now, this.player);
+                  byte flags = this.player.currentDungeon().tickNearbyMonsters(now, this.player);
                   if ((flags & 1) != 0) {
                      this.minimapDirty = true;
                   }
@@ -1590,7 +1572,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
             if (this.player.levelChanged) {
                showLevelNameMessage = true;
                if (showLevelNameMessage) {
-                  if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().a()), 1)) {
+                  if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().displayName()), 1)) {
                      messageShownAt = System.currentTimeMillis();
                      messageVisible = true;
                   }
@@ -1753,9 +1735,9 @@ public class GameCanvas extends FullCanvas implements Runnable {
    void openNpcDialogue(int shopId) {
       String line = Shop.dialogue(this.player, shopId, 1, 0);
       if (line != null) {
-         this.game.GenericInfoUI.a(8);
-         this.game.GenericInfoUI.a(Shop.NAMES[shopId], line);
-         this.game.GenericInfoUI.i = shopId;
+         this.game.GenericInfoUI.setSecondaryParam(8);
+         this.game.GenericInfoUI.setupMessage(Shop.NAMES[shopId], line);
+         this.game.GenericInfoUI.contextIndex = shopId;
          this.game.setAidPointsForNPC(shopId);
          this.game.setCurrentDisplay(this.game.GenericInfoUI);
          canvasActive = false;
@@ -1799,7 +1781,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
          canvasActive = true;
          this.resumeThread();
          if (showLevelNameMessage) {
-            if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().a()), 1)) {
+            if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().displayName()), 1)) {
                messageShownAt = System.currentTimeMillis();
                messageVisible = true;
             }
@@ -2005,7 +1987,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
          if (spawnType > 0) {
             int spawnX = 1 + Util.randomInt(17);
 
-            for (int spawnY = 1 + Util.randomInt(17); !this.player.currentDungeon().a(spawnX, spawnY, spawnType); spawnY = 1 + Util.randomInt(17)) {
+            for (int spawnY = 1 + Util.randomInt(17); !this.player.currentDungeon().trySpawnMonsterNear(spawnX, spawnY, spawnType); spawnY = 1 + Util.randomInt(17)) {
                spawnX = 1 + Util.randomInt(17);
             }
 
