@@ -63,6 +63,19 @@ struct GeneratedLevel {
     std::vector<GeneratedMonsterSpawn> monsters;
     std::vector<GeneratedChestSpawn> chests;
 
+    // Dungeon.java's neighbors[0..3] (north/east/south/west level ids,
+    // <= 0 = no neighbor -- see assets/dungeon_geometry.h) plus
+    // stairsUpDir/stairsDownDir, carried straight through from this
+    // level's DungeonGeomRow. Not used by generation itself (M6), but
+    // Dungeon.tileAt()'s cross-level lookup needs them -- stored here so
+    // a later milestone's DungeonView doesn't have to re-derive them.
+    int neighborNorth = 0;
+    int neighborEast = 0;
+    int neighborSouth = 0;
+    int neighborWest = 0;
+    int stairsUpDir = 0;
+    int stairsDownDir = 0;
+
     // Set only on levels 3/12/21/30 -- DungeonGenerator.java writes these
     // directly into Shop.SHOP_X[5..8]/SHOP_Y[5..8] as a side effect
     // (this port has no Shop class yet, so they come back as plain

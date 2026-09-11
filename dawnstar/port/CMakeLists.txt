@@ -32,6 +32,14 @@ add_library(dawnstar_world STATIC
 target_include_directories(dawnstar_world PUBLIC src)
 target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 
+# M9: corridor wall-segment selection logic -- see docs/PORT_ROADMAP.md
+# and src/render/, src/world/dungeon_view.h.
+add_library(dawnstar_render STATIC
+  src/render/corridor_render_plan.cpp
+)
+target_include_directories(dawnstar_render PUBLIC src)
+target_link_libraries(dawnstar_render PUBLIC dawnstar_world)
+
 # M1: real tick loop + backbuffer + present -- see docs/PORT_ROADMAP.md and
 # src/engine/, src/graphics/, src/platform/win32/.
 add_executable(dawnstar_port WIN32
@@ -73,3 +81,7 @@ target_link_libraries(img_archive_smoke PRIVATE dawnstar_assets)
 # M8 milestone smoke test -- see src/tests/m8_dialogue_smoke.cpp.
 add_executable(dialogue_smoke src/tests/m8_dialogue_smoke.cpp)
 target_link_libraries(dialogue_smoke PRIVATE dawnstar_assets)
+
+# M9 milestone smoke test -- see src/tests/m9_corridor_plan_smoke.cpp.
+add_executable(corridor_plan_smoke src/tests/m9_corridor_plan_smoke.cpp)
+target_link_libraries(corridor_plan_smoke PRIVATE dawnstar_render)

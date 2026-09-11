@@ -321,7 +321,12 @@ GeneratedLevel DungeonGenerator::BuildHubLevel(const DungeonGeomRow& geomRow) {
         level.tiles[kHubShopX[i]][kHubShopY[i]] |= 32;
     }
 
-    (void)geomRow;  // stairsUpDir/stairsDownDir aren't part of GeneratedLevel's tile output yet.
+    level.neighborNorth = geomRow.north;
+    level.neighborEast = geomRow.east;
+    level.neighborSouth = geomRow.south;
+    level.neighborWest = geomRow.west;
+    level.stairsUpDir = geomRow.stairsUpDir;
+    level.stairsDownDir = geomRow.stairsDownDir;
     return level;
 }
 
@@ -432,6 +437,13 @@ GeneratedLevel DungeonGenerator::PopulateLevel(int levelNumber, const DungeonGeo
 
     std::vector<int> top5(roomIndex.begin(), roomIndex.begin() + 5);
     PlaceChests(top5, roomList, level.tier, rng, items, level);
+
+    level.neighborNorth = geomRow.north;
+    level.neighborEast = geomRow.east;
+    level.neighborSouth = geomRow.south;
+    level.neighborWest = geomRow.west;
+    level.stairsUpDir = geomRow.stairsUpDir;
+    level.stairsDownDir = geomRow.stairsDownDir;
 
     return level;
 }

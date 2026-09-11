@@ -257,14 +257,54 @@ milestone rather than just read-through.
       rather than a `DatArchive&` because of this, unlike every other
       loader in `port/src/assets/`.
 
+- [x] **M9 -- corridor wall-segment selection logic** (this session).
+      `DungeonView` (`port/src/world/dungeon_view.h`, `Dungeon.java`'s
+      runtime `tileAt()`/`sampleCorridorView()` -- as opposed to
+      `DungeonGenerator`, which only builds a level's *initial* state) and
+      `CorridorRenderPlan` (`port/src/render/corridor_render_plan.h`/
+      `.cpp`, `GameCanvas.java`'s `CORRIDOR_WALL_TABLE`-driven
+      `paintCorridorWalls()`/`drawWallSegment()`/`resolveWallFrame()`) --
+      the wall-segment *selection* logic: for a given player position/
+      facing/level, which of the 3 wall textures (plain/ice/gate) to draw
+      at which screen column and pixel offset, including the
+      forward/mirrored-scan dedup toggle that was one of `CLASS_MAP.md`'s
+      longstanding "exact geometry not fully traced" notes.
+
+      **Deliberately stops short of drawing actual pixels** -- this port
+      has no PNG decoder yet (M7's `ImgArchive` only extracts raw,
+      still-PNG-encoded byte blobs), so `CorridorRenderPlan::Plan()`
+      returns the same "draw this texture at this x,y" decisions
+      `GameCanvas.drawWallSegment()` would have made, as data, for a
+      later milestone's real pixel renderer to consume directly. Floor/
+      ceiling and object/monster/chest sprites are out of scope too
+      (both need `Player`, not ported yet).
+
+      Same verification story as M6 (no bit-exact JVM ground truth
+      possible -- this sits downstream of `Item.load()`/`Monster.load()`
+      too): self-consistency (at most one segment per corridor step) plus
+      hand-checked geometric plausibility, this time against two
+      positions in a real M6-generated level -- a small room's door tile
+      (facings look similar to each other, as expected: small 2-5-tile
+      rooms don't have much room to differentiate) and, more tellingly,
+      that level's own stairway-corridor tile (a straight, 1-wide,
+      multi-tile-deep passage in exactly one compass direction per
+      `DungeonGeometry`): facing down the long corridor produces a
+      visibly different draw pattern than facing back into the open
+      interior or across the 1-wide passage into an immediate wall --
+      confirming the renderer is actually direction-sensitive, not
+      coincidentally producing the same output regardless of facing.
+      `corridor_plan_smoke.exe`.
+
 ## Milestones next
 
-- [ ] **M9 and beyond (not yet planned in detail):** the rest of
-      `Player`'s runtime instance state (stats/inventory/equipment/
-      combat) and the save format, the first-person corridor renderer
-      (`GameCanvas`'s `CORRIDOR_WALL_TABLE`, unblocked by M7's real
-      wall/floor/gate textures), and finally `ESGame`'s own screen-wiring
-      loop tying it all together. Each gets its own milestone once the
-      shape of "how much fits in one slice" is clearer -- following
-      `shadowkey-decomp`'s pattern of not over-planning milestones far in
-      advance of actually reaching them.
+- [ ] **M10 and beyond (not yet planned in detail):** a real PNG decoder
+      (likely vendoring a small, well-known library the way
+      `shadowkey-decomp` vendored `puff`/`stb_vorbis`, rather than writing
+      one from scratch) to finally turn M7's raw PNG bytes and M9's
+      draw-call plan into an actual rendered frame on the M1 `Backbuffer`;
+      the rest of `Player`'s runtime instance state (stats/inventory/
+      equipment/combat) and the save format; and finally `ESGame`'s own
+      screen-wiring loop tying it all together. Each gets its own
+      milestone once the shape of "how much fits in one slice" is clearer
+      -- following `shadowkey-decomp`'s pattern of not over-planning
+      milestones far in advance of actually reaching them.
