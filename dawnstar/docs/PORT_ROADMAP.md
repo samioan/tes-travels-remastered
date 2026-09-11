@@ -159,17 +159,62 @@ milestone rather than just read-through.
       unchanged) -- preserves a real, if obscure, original-game edge case
       instead of silently changing behavior there.
 
+- [x] **M6 -- procedural dungeon generation** (this session).
+      `DungeonGenerator` (`port/src/world/dungeon_generator.h`/`.cpp`):
+      the full room-carving/corridor-connection/monster-placement/
+      chest-placement pipeline from `../src/DungeonGenerator.java`, plus
+      `Dungeon.java`'s `MONSTER_TABLE`/`DIFFICULTY_TIER_LOOKUP`/`initTier`
+      and two `Item.java` loot-roll methods added onto `ItemDatabase`
+      (`RollLoot`/`RandomGiftItemOfSubtype`, M2's data-only struct's first
+      added logic methods, mirroring how M4 added `Player` predicate
+      methods once something needed them).
+
+      **No bit-exact JVM ground truth was possible for this one** --
+      unlike M2/M3/M4 (verified against real *data*) and M5 (verified
+      against a real JVM's own `java.util.Random` output), attempting to
+      actually *run* anything that touches `ESGame` (even just
+      `Item.load()`, which calls `ESGame.getResource()`) against the MIDP
+      stub jars throws `java.lang.Error: API Stub has been used` --
+      confirmed by trying it this session. `ESGame extends
+      RegisteredMIDlet`, whose static initializer constructs three real
+      `javax.microedition.lcdui.Command` objects
+      (`../decompiled/ngame/midlet/RegisteredMIDlet.java`), and these
+      stub jars are compile-only: they exist so `javac` can resolve MIDP
+      symbols, and are designed to throw the instant any of that surface
+      is actually *executed*, not just linked against. So this was
+      verified the way Phase 1's own hand-trace rename work was before
+      any of this port existed: careful line-by-line transcription plus
+      strong internal self-consistency checks (`dungeon_generator_smoke.exe`,
+      against the hub level plus 2/3/12/15/21/30/37 -- all 4 special-shop
+      levels and a spread of ordinary ones): exactly 15 rooms/monster
+      spawns, exactly 5 chests (exactly 1 marked "guaranteed gift"), every
+      monster/chest position walkable/in-bounds with the right tile bit
+      set, every chest's rolled item id valid (including catching an early
+      *test* bug -- not a generator bug -- around `Item.rollLoot`'s 2-byte
+      "extended id" packing, where the real id to validate is always the
+      low byte, not the packed low+high value), special-room marking only
+      on levels 3/12/21/30, no undocumented tile bits, and tier values
+      matching `DIFFICULTY_TIER_LOOKUP` by hand for every tested level.
+
+      Two things deliberately simplified rather than guessed at, both
+      called out in `dungeon_generator.h`/`.cpp`'s comments: the 4 special
+      "shopkeeper room" levels report their position as plain output
+      fields instead of writing into `Shop.SHOP_X`/`SHOP_Y[5..8]` (no
+      `Shop` class ported yet), and chest `spawnId` is a per-level-local
+      counter (1-5) rather than the original's single counter shared
+      cumulatively across all 37 levels generated in one pass (that
+      counter is pure bookkeeping with no RNG involved, so it can't affect
+      generation correctness -- it only matters once a real save format
+      needs it, later).
+
 ## Milestones next
 
-- [ ] **M6 and beyond (not yet planned in detail):** `imgfiles.lmp`,
-      `DungeonGenerator`'s procedural level generator itself (now
-      unblocked by M5's `JavaRandom` -- already fully understood,
-      `../src/DungeonGenerator.java`, but a real room-carving/loot-
-      placement system to port), the rest of `Player`'s runtime instance
-      state (stats/inventory/equipment/combat) and the save format,
-      `npcstrings.dat`/`helptext.dat`/`Shop` dialogue, the first-person
-      corridor renderer (`GameCanvas`'s `CORRIDOR_WALL_TABLE`), and finally
-      `ESGame`'s own screen-wiring loop tying it all together. Each gets
-      its own milestone once the shape of "how much fits in one slice" is
-      clearer -- following `shadowkey-decomp`'s pattern of not
-      over-planning milestones far in advance of actually reaching them.
+- [ ] **M7 and beyond (not yet planned in detail):** `imgfiles.lmp`, the
+      rest of `Player`'s runtime instance state (stats/inventory/
+      equipment/combat) and the save format, `npcstrings.dat`/
+      `helptext.dat`/`Shop` dialogue, the first-person corridor renderer
+      (`GameCanvas`'s `CORRIDOR_WALL_TABLE`), and finally `ESGame`'s own
+      screen-wiring loop tying it all together. Each gets its own
+      milestone once the shape of "how much fits in one slice" is clearer
+      -- following `shadowkey-decomp`'s pattern of not over-planning
+      milestones far in advance of actually reaching them.

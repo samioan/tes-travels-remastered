@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "assets/dat_archive.h"
+#include "util/java_random.h"
 
 namespace dawnstar {
 
@@ -29,6 +30,21 @@ struct ItemDatabase {
     std::vector<std::vector<int8_t>> lootTable;
 
     int ItemCount() const { return static_cast<int>(name.size()); }
+
+    // Item.java's randomGiftItemOfSubtype()/rollLoot() -- the two loot-
+    // roll methods DungeonGenerator's placeChests() calls. Kept as
+    // methods on the data they roll against, same as the Java source.
+    //
+    // Picks a random item id from category 11 ("gift") whose subtype
+    // matches `subtypeWanted`.
+    int RandomGiftItemOfSubtype(JavaRandom& rng, int subtypeWanted) const;
+
+    // Rolls a loot-table item id for a monster/chest drop at dungeon
+    // `depth`, weighted toward rarer rows for higher `bonusRolls` (best
+    // of `bonusRolls` percentile samples). Returns a plain item id, or a
+    // 2-byte extended id packed as (highByte<<8)|lowByte when the low
+    // byte is 86 (a reserved "extended id follows" marker).
+    int RollLoot(JavaRandom& rng, int depth, int bonusRolls) const;
 
     static ItemDatabase Load(DatArchive& archive);
 };

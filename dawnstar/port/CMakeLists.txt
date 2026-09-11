@@ -20,6 +20,14 @@ add_library(dawnstar_assets STATIC
 )
 target_include_directories(dawnstar_assets PUBLIC src)
 
+# M6: procedural dungeon generation -- see docs/PORT_ROADMAP.md and
+# src/world/.
+add_library(dawnstar_world STATIC
+  src/world/dungeon_generator.cpp
+)
+target_include_directories(dawnstar_world PUBLIC src)
+target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
+
 # M1: real tick loop + backbuffer + present -- see docs/PORT_ROADMAP.md and
 # src/engine/, src/graphics/, src/platform/win32/.
 add_executable(dawnstar_port WIN32
@@ -49,3 +57,7 @@ target_link_libraries(character_data_smoke PRIVATE dawnstar_assets)
 # src/util/java_random.h (header-only, so no library needed).
 add_executable(java_random_smoke src/tests/m5_java_random_smoke.cpp)
 target_include_directories(java_random_smoke PRIVATE src)
+
+# M6 milestone smoke test -- see src/tests/m6_dungeon_generator_smoke.cpp.
+add_executable(dungeon_generator_smoke src/tests/m6_dungeon_generator_smoke.cpp)
+target_link_libraries(dungeon_generator_smoke PRIVATE dawnstar_world)
