@@ -24,12 +24,26 @@ next `-<name>-`" without using the u32 field at all -- the u32 is what
 `getResource` actually uses to `skip()` there directly rather than
 scanning byte-by-byte.
 
-Bundles the same per-file data tables Stormhold ships as loose files:
-`charin.dat`, `droppeditemsin.dat`, `geomin.dat`, `itemsin.dat`,
+Bundles most of the same per-file data tables Stormhold ships as loose
+files: `charin.dat`, `droppeditemsin.dat`, `geomin.dat`, `itemsin.dat`,
 `monstersin.dat`, `monsterfilenamesin.dat`, `spellsin.dat`,
-`dungnamesin.dat`(?), `npcstrings.dat`, `helptext.dat` -- each read
-through `ESGame.getResource("<name>")` and then parsed with the schema
-below, exactly as if it were its own standalone file.
+`dungnamesin.dat`(?), `helptext.dat` -- each read through
+`ESGame.getResource("<name>")` and then parsed with the schema below,
+exactly as if it were its own standalone file.
+
+**`npcstrings.dat` is the one exception -- NOT bundled here.** Confirmed
+by reading `Shop.java` directly: `Shop.loadDialogue()`/`Shop.load()` opens
+it via `Util.openResource("/npcstrings.dat")`
+(`ESGame.getDataInputStream()`, a direct top-level jar resource stream),
+never `ESGame.getResource()`. Independently confirmed by `extracted/`
+itself: `npcstrings.dat` sits there as its own top-level file, same as
+`datfiles.lmp`/`imgfiles.lmp`, not nested inside either (and
+`ESGame.game_datafile_names` lists it alongside `/datfiles.lmp`/
+`/imgfiles.lmp` as a top-level datafile, not as one of the bundled
+per-file tables). An earlier pass over this doc had listed it as bundled
+here by pattern-matching it against the other `*in.dat` files without
+actually checking its own loader's call site -- fixed this session while
+porting it (`../port/src/assets/shop_dialogue.h`).
 
 ## `imgfiles.lmp` -- CONFIRMED format, DIFFERENT from `datfiles.lmp`
 

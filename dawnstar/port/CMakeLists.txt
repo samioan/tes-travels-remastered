@@ -9,14 +9,17 @@ if(MSVC)
   add_compile_options(/W4 /utf-8)
 endif()
 
-# M2/M3/M4/M7: asset foundations -- see docs/PORT_ROADMAP.md and src/assets/.
+# M2/M3/M4/M7/M8: asset foundations -- see docs/PORT_ROADMAP.md and
+# src/assets/.
 add_library(dawnstar_assets STATIC
   src/assets/character_data.cpp
   src/assets/dat_archive.cpp
   src/assets/dungeon_geometry.cpp
+  src/assets/help_text.cpp
   src/assets/img_archive.cpp
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
+  src/assets/shop_dialogue.cpp
   src/assets/spell_database.cpp
 )
 target_include_directories(dawnstar_assets PUBLIC src)
@@ -66,3 +69,7 @@ target_link_libraries(dungeon_generator_smoke PRIVATE dawnstar_world)
 # M7 milestone smoke test -- see src/tests/m7_img_archive_smoke.cpp.
 add_executable(img_archive_smoke src/tests/m7_img_archive_smoke.cpp)
 target_link_libraries(img_archive_smoke PRIVATE dawnstar_assets)
+
+# M8 milestone smoke test -- see src/tests/m8_dialogue_smoke.cpp.
+add_executable(dialogue_smoke src/tests/m8_dialogue_smoke.cpp)
+target_link_libraries(dialogue_smoke PRIVATE dawnstar_assets)

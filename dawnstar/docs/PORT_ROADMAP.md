@@ -228,15 +228,43 @@ milestone rather than just read-through.
       (`this.createImage("...")` call sites in `../src/ESGame.java`)
       round-trip to valid, correctly-sized PNGs: 43 images total.
 
+- [x] **M8 -- NPC dialogue + help text** (this session). `ShopDialogue`
+      (`port/src/assets/shop_dialogue.h`/`.cpp`, `npcstrings.dat` --
+      `Shop.java`'s `loadDialogue()`/`load()`/`loadGroup()`: 10 fixed-size
+      groups, sizes `{3,3,3,3,14,16,16,16,16,77}` checked against the
+      file's own per-group count) and `HelpText`
+      (`port/src/assets/help_text.h`/`.cpp`, `helptext.dat` --
+      `ESGame.loadHelpStrings()`: a flat pool of 35 fragments the code
+      groups into 12 help topics via two hardcoded index lists, ported
+      verbatim). Verified against the real files via `dialogue_smoke.exe`:
+      all 10 dialogue groups at their exact expected sizes with sane,
+      in-character NPC lines (a weapon peddler's "Welcome! Please peruse
+      our manufactured mayhem makers.", a named shopkeeper's "You are from
+      Dawnstar? That place is dead to me."), and all 12 help topics with
+      correct, sensible titles (Goal/Combat/Experience/Items/Gift
+      Items/Maps/Monsters/Movement/Spells/Trainers/Camp/Website) and
+      non-trivial concatenated bodies.
+
+      **Real doc bug found and fixed**: `docs/ASSET_FORMATS.md` had
+      claimed `npcstrings.dat` was bundled inside `datfiles.lmp` like
+      every other `*in.dat` table. Reading `Shop.java` directly for this
+      milestone showed `Shop.load()` actually opens it via
+      `Util.openResource("/npcstrings.dat")` (a direct top-level jar
+      resource stream), never `ESGame.getResource()` -- and
+      `../extracted/npcstrings.dat` independently confirms it, sitting
+      there as its own top-level file rather than nested inside
+      `datfiles.lmp`. `ShopDialogue::Load()` takes a plain file path
+      rather than a `DatArchive&` because of this, unlike every other
+      loader in `port/src/assets/`.
+
 ## Milestones next
 
-- [ ] **M8 and beyond (not yet planned in detail):** the rest of
+- [ ] **M9 and beyond (not yet planned in detail):** the rest of
       `Player`'s runtime instance state (stats/inventory/equipment/
-      combat) and the save format, `npcstrings.dat`/`helptext.dat`/`Shop`
-      dialogue, the first-person corridor renderer (`GameCanvas`'s
-      `CORRIDOR_WALL_TABLE`, now unblocked by M7's real wall/floor/gate
-      textures), and finally `ESGame`'s own screen-wiring loop tying it
-      all together. Each gets its own milestone once the shape of "how
-      much fits in one slice" is clearer -- following
+      combat) and the save format, the first-person corridor renderer
+      (`GameCanvas`'s `CORRIDOR_WALL_TABLE`, unblocked by M7's real
+      wall/floor/gate textures), and finally `ESGame`'s own screen-wiring
+      loop tying it all together. Each gets its own milestone once the
+      shape of "how much fits in one slice" is clearer -- following
       `shadowkey-decomp`'s pattern of not over-planning milestones far in
       advance of actually reaching them.
