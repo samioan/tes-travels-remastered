@@ -17,15 +17,25 @@ what each class does and how confident each renaming is.
 | `LoadingScreen.java` | `h.java` | Splash + progress-bar screens |
 | `Dungeon.java` | `i.java` | One dungeon level's live state |
 | `Shop.java` | `k.java` | NPC dialogue, shops, quest tracking |
+| `GameCanvas.java` | `e.java` | Renderer + input handler + main tick loop |
 
-`ESGame`, `GameCanvas` (`e.java`) and `Player` (`j.java`) are **not**
-renamed here -- see `CLASS_MAP.md`'s "why e/j aren't renamed yet" for the
-reason (Vineflower's output for those two has field names that literally
-collide with the single-letter class names, making a mechanical rename
-unsafe without the same full hand-trace the 9 classes above got). Files
-in this directory that need something from those three reference them by
-their **original** names (`e`, `j`, `ESGame` and its members) rather than
-inventing renamed-but-nonexistent APIs.
+`ESGame` and `Player` (`j.java`) are **not** renamed here -- see
+`CLASS_MAP.md`'s "why e/j aren't renamed yet" for the reason
+(Vineflower's output for `e`/`j` has field names that literally collide
+with the single-letter class names, making a mechanical rename unsafe
+without the same full hand-trace the other classes got). `GameCanvas`
+*is* now renamed (same hand-trace-then-compile-check treatment as the
+other 9), but it still depends on `Player`'s own unrenamed API: any
+value that flows through Player's methods (the current `Dungeon`, the
+targeted `Monster`, etc.) keeps Player's original single-letter type/
+member names rather than the real renamed classes -- see the class
+header comment in `GameCanvas.java` for exactly which fields that
+applies to. Files in this directory that need something from `ESGame`/
+`Player` reference them by their **original** names (`j`, `ESGame` and
+its members) rather than inventing renamed-but-nonexistent APIs.
+`Screen.java`/`LoadingScreen.java` *do* reference the real `GameCanvas`
+type now (their `canvas` field), since that integration was updated
+alongside GameCanvas's own rename.
 
 ## Compile-checked, not just read-through
 
@@ -91,3 +101,19 @@ early draft of `Monster.java` swapped which field held the monster's
 quest-turn-in roll was first wired to a same-shaped-looking table
 inside `Shop` itself instead of `Player`'s own `c(shopId,action)` method.
 Both are noted inline where they were caught.
+
+**Re-run after adding `GameCanvas.java`:** `Dungeon.java`/`Monster.java`
+now also compile with zero errors (the `i cannot be converted to
+Dungeon` error above no longer reproduces against the current tree).
+`GameCanvas.java` itself compiles with **zero errors**, and the
+`Screen.java`/`LoadingScreen.java` updates needed to point `canvas` at
+the real `GameCanvas` type (instead of the old unrenamed `e`) introduced
+no new errors either. All errors from this run are confined to the
+still-untouched `a`/`c`/`e`/`h`/`i`/`j`/`ESGame.java` -- the same
+inherent single-letter-field-vs-class-name collision issue as before,
+now also affecting `e.java` itself for the same reason it was never
+mechanically renamed in the first place. A careful re-read (not the
+compiler -- this was a semantic swap, not a type error) also caught one
+real transcription mistake in `GameCanvas.java`'s corridor
+object-renderer (`paintObjectAtPosition`): an early draft swapped the
+icon-index and frame-count columns read from `OBJECT_DRAW_TABLE`.

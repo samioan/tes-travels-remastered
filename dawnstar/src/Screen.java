@@ -9,6 +9,10 @@
 // from `mode` -- by convention only certain (mode, setup method)
 // combinations are actually used (e.g. ESGame always builds its
 // GenericInfoUI-style popups with mode 4 + setupMessage).
+//
+// `canvas` is typed `GameCanvas` (../src/GameCanvas.java), not the old
+// unrenamed `e` -- this file was updated alongside GameCanvas's own
+// rename pass, so the two integrate directly.
 import java.util.Vector;
 import javax.microedition.lcdui.Command;
 import javax.microedition.lcdui.CommandListener;
@@ -38,11 +42,7 @@ public class Screen {
    // setupPromptList for later re-substitution (e.g. dynamic NPC
    // dialogue topics). Null otherwise.
    String rawTaggedText;
-   // Type `e` (GameCanvas) is not mechanically renamed yet -- see
-   // CLASS_MAP.md. Member names below are e's ORIGINAL (unrenamed) ones:
-   // ay=width, l=height, an=dirty/needs-repaint flag, e()=isRunning,
-   // a(text,maxWidth,font)=wrapText.
-   e canvas;
+   GameCanvas canvas;
    Object unused2;
    // Displayable to return to -- set externally (e.g. ESGame wires
    // LoadingScreen.returnDisplay = errorForm).
@@ -354,7 +354,7 @@ public class Screen {
 
    String[] wrapText(String text) {
       int maxWidth = this.canvas.getWidth() - this.marginX - this.marginRight;
-      return this.canvas.a(text, maxWidth, this.textFont);
+      return this.canvas.wordWrap(text, maxWidth, this.textFont);
    }
 
    // Routes soft-key presses (game-action -6/-7) to the matching
@@ -443,8 +443,8 @@ public class Screen {
    }
 
    private void requestRepaint() {
-      if (this.canvas.e()) {
-         this.canvas.an = true;
+      if (this.canvas.isRunning()) {
+         this.canvas.repaintPending = true;
       } else {
          this.canvas.repaint();
          this.canvas.serviceRepaints();
@@ -590,10 +590,10 @@ public class Screen {
    }
 
    public int width() {
-      return this.canvas.ay;
+      return this.canvas.screenWidth;
    }
 
    public int height() {
-      return this.canvas.l;
+      return this.canvas.screenHeight;
    }
 }

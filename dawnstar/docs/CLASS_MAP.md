@@ -2,15 +2,18 @@
 
 Full read-through of every class in `decompiled/`, done from the code alone
 (no external docs exist for this engine). Confidence is high for the small
-classes (traced essentially every line) and high-but-not-exhaustive for the
-three large ones (`ESGame`, `e`, `j`) -- their overall architecture and most
-fields are confirmed, a handful of fields are still genuinely unclear and
-are marked as such rather than guessed.
+classes (traced essentially every line), now also for `e`/`GameCanvas`
+(same full hand-trace), and high-but-not-exhaustive for the two remaining
+large ones (`ESGame`, `j`) -- their overall architecture and most fields
+are confirmed, a handful of fields are still genuinely unclear and are
+marked as such rather than guessed.
 
 Renamed, hand-written source for the fully-understood classes lives in
-`../src/`. `e`/`j`/`ESGame` are NOT mechanically renamed (see "Why `e`/`j`
-aren't renamed yet" at the bottom) -- this document is their authoritative
-map for now.
+`../src/`. `e` (renamed `GameCanvas.java`) has now had the same
+hand-trace-then-compile-check treatment as the other 9; `j`/`ESGame`
+are still NOT mechanically renamed (see "Why `j` (and, previously, `e`)
+weren't renamed by mechanical means" at the bottom) -- this document
+remains their authoritative map.
 
 ## The shared "ngame" engine
 
@@ -170,45 +173,78 @@ or chases (one step toward the player, `Player`-relative axis pick).
 
 ## `e` -> `GameCanvas` (renderer + input + tick loop)
 
-`extends com.nokia.mid.ui.FullCanvas implements Runnable`. See "why not
-renamed" below -- documenting by role instead of a renamed file.
+Fully renamed, see `../src/GameCanvas.java`. `extends
+com.nokia.mid.ui.FullCanvas implements Runnable`. Unlike the other 9
+renamed classes it still depends on `Player`'s own unrenamed API for
+any value that crosses that boundary (the current `Dungeon`, the
+targeted `Monster`, etc. all keep their old single-letter types there)
+-- see the file's own header comment for exactly which fields that
+applies to, and CLASS_MAP's `j`/`Player` note below for why.
 
-- **First-person corridor renderer**: `k[5][6][4]` is a fixed lookup table
-  of wall-segment draw commands for 5 possible forward-visibility patterns
-  (how far you can see down a straight corridor before a wall/junction),
-  used by the private method that paints the 3D view every frame. Reads
-  tile-occlusion bits from a `Dungeon`-populated 17x17 (or 7x7 zoomed-out)
-  view grid, not the full level array directly.
+- **First-person corridor renderer**: `CORRIDOR_WALL_TABLE[5][6][4]`
+  (was `k`) is a fixed lookup table of wall-segment draw commands for 5
+  possible forward-visibility patterns (how far you can see down a
+  straight corridor before a wall/junction), used by
+  `paintCorridorWalls` every frame. Reads tile-occlusion bits from a
+  `Dungeon`-populated 17x17 (or 7x7 zoomed-out) view grid
+  (`visibleTileGrid`, was `C`), not the full level array directly.
+  **Newly confirmed while renaming**: the floor/wall texture pair used
+  (`floorTexture`+`wallTexture`, "floor3.png"/"wallsr.png", vs.
+  `floorIceTexture`+`wallIceTexture`, "floorIce.png"/"wallsi.png") is
+  selected by `Dungeon.e` (the *dungeon's own level number*, confirmed
+  via the field-order cross-check against `Dungeon.java`'s `number`
+  field -- **not** an ice/rock type flag as an earlier pass guessed):
+  level 1 (the hub town) uses the plain floor/wall images, every other
+  level (2-37, all icy) uses the Ice-suffixed ones. `gateTexture`
+  ("gate.png") is selected by tile bit 6 (the edge/transition marker)
+  taking priority over the wall-texture choice.
 - **HUD**: 3-bar Health/Magicka/(Fatigue?) meter reading `Player.l(2)`
   etc. against `Player.E[3]/E[5]/E[7]`; a compass-direction glyph +
-  minimap thumbnail (the `at` 89x89 offscreen `Image`, rebuilt by `p()`
-  whenever the player moves); a numeric hotbar (keys matching whichever
-  of 4 context-dependent action sets is active); a 2-line popup-message
-  system (`d[]`/`V` = current message + its on-screen countdown) that
-  backs every player-facing HUD string constant defined in this class
-  (`"Cannot"/"Camp!"`, `"No spells!"`, `"Not enough"/"magicka!"`,
-  `"No monster"/"here!"`, `"Rest"/"disturbed!"`/`"complete!"`,
-  `"Creature"/"is dead!"`/`"attacks!"`, `"Chest"`/`"locked!"`,
-  `"Inventory"/"full!"`, `"Found"/"item!"`, `"Several"/"items!"`,
-  `"Enemy"/"arrived!"`).
+  minimap thumbnail (`minimapImage`, was `at`, an 89x89 offscreen
+  `Image` rebuilt by `refreshMinimap` (was `p()`) whenever the player
+  moves); a numeric hotbar (keys matching whichever of 4
+  context-dependent action sets is active, see `computeHotbarContext`,
+  was `j()`); a 2-line popup-message system (`messageLines`/
+  `messagePriority`, was `d[]`/`V` -- `messagePriority` is a priority
+  gate on which message can *replace* the current one, not a countdown;
+  auto-hide after 3000ms is driven separately by `messageShownAt`) that
+  backs every player-facing HUD string constant, now named `MSG_*`
+  (`MSG_CANNOT_CAMP`, `MSG_NO_SPELLS`, `MSG_NOT_ENOUGH_MAGICKA`,
+  `MSG_NO_MONSTER`, `MSG_REST_DISTURBED`/`MSG_REST_COMPLETE`,
+  `MSG_CREATURE_DEAD`/`MSG_CREATURE_ATTACKS`, `MSG_CHEST`/
+  `MSG_CHEST_LOCKED`, `MSG_INVENTORY_FULL`, `MSG_FOUND_ITEM`/
+  `MSG_FOUND_SEVERAL_ITEMS`, `MSG_ENEMY_ARRIVED`).
 - **Input**: numeric keys 1-9,0 are spell/item/camp/options hotkeys
-  (mapping depends on the `j()` context-mode helper); `*` toggles the
+  (mapping depends on `computeHotbarContext`); `*` toggles the
   zoomed-out minimap; arrow/game-action keys move/turn (delegated to
-  `Player.move`/`turn`, this class's field `n`, 1-4).
+  `Player.a(dir,strafe)`, this class's field `pendingMoveDir`, was `n`,
+  1-4).
 - **Main tick loop** (`run()`, ~4Hz/250ms tick): drives camping
-  (interruptible timed rest, `c` field 0-3 = not-camping/camping states),
-  death/respawn (`aM` field), per-tick status-effect countdowns and
-  once-per-real-second passive regen/drain (`l()`), and a **scripted
-  ambush system**: a per-second counter (`Player.Q`) that spawns extra
-  monsters at hardcoded elapsed-second checkpoints (two different
-  checkpoint schedules depending on `Player.ah`, presumably normal vs.
-  "New Game+"), ending in a game-over if too many monsters end up alive
-  at once. This looks like a scripted "you've overstayed in one place"
+  (interruptible timed rest, `campState` field 0-3, was `c` -- 1=rolling
+  for interruption, 2=safe/undisturbed wait, 3=a rare scripted
+  "disturbed" event; see the field's doc comment in `GameCanvas.java`
+  for exactly when each is entered), death/respawn (`deathState`, was
+  `aM`), per-tick status-effect countdowns (`tickStatusCountdowns`, was
+  `e(long)`) and once-per-real-second passive regen/drain
+  (`tickPerSecond`, was `l()`), and a **scripted ambush system**: a
+  per-second counter (`Player.Q`) that spawns extra monsters at
+  hardcoded elapsed-second checkpoints (two different checkpoint
+  schedules depending on `Player.ah`, presumably normal vs. "New
+  Game+"), ending in a game-over if too many monsters end up alive at
+  once. This looks like a scripted "you've overstayed in one place"
   penalty rather than a per-level trigger -- confirm against where `Q` is
   set to non -1 before treating it as universal.
-- Delegates entirely to the active `Screen`(`g`) instance (field `Y`)
-  when one is open (menus, dialogs, NPC dialogue) -- the 3D view only
-  paints when `Y == null`.
+- Delegates entirely to the active `Screen` instance (field
+  `activeScreen`, was `Y`) when one is open (menus, dialogs, NPC
+  dialogue) -- the 3D view only paints when `activeScreen == null`.
+- A handful of fields turned out to be genuinely dead code while
+  tracing every reference for the rename (declared, never read anywhere
+  in the class, and not reachable externally): the `UNUSED_FONT`
+  constant (was `J`), `UNUSED_TABLE` (was `m`, an unused `int[3][3]`),
+  `unusedP`/`unusedAI` (was `P`/`aI`), `unusedAe` (was `ae`), and the
+  `unusedKey9Request` flag (was `aG` -- captured from key '9' outside
+  the chest/NPC context, but the tick dispatcher's branch for it is
+  empty).
 
 ## `f` -> `Util` (misc helpers, no state)
 
@@ -420,10 +456,12 @@ directly, but summarized here:
   (`a(shopId,slot){ return slot<4 ? ap[shopId+slot+1][slot] : ap[shopId+slot][slot]; }`)
   that reads like a deliberately-obfuscated lookup, not naturally-shaped
   game data. Needs dedicated tracing of every write site before renaming.
-- `GameCanvas`'s `ad[][]`, `G[][]`, `a[][]`/`m[][]` tile-atlas-looking
-  tables -- structure is clear (per-level-image variant lookups feeding
-  the corridor wall renderer) but the exact per-column meaning of each
-  isn't pinned down.
+- `GameCanvas`'s `OBJECT_DRAW_TABLE`/`OBJECT_EXTRA_FLAGS`/
+  `OBJECT_ICON_TABLE` (was `ad[][]`/`G[][]`/`a[][]`) -- structure is
+  clear (per-position-code base sprite + up to 4 extra decorations,
+  each an (dx,dy,icon) triple, consumed by `paintObjectAtPosition`) but
+  the exact per-column meaning of each isn't pinned down. `UNUSED_TABLE`
+  (was `m[][]`) is confirmed dead code (declared, never read).
 - The exact ambush-system trigger condition (`Player.Q >= 0`) -- when
   does `Q` actually get set to a non -1 value? Not yet located.
 - `Shop.UNCONFIRMED_A`/`UNCONFIRMED_B` (originally `k.a[24]`/`k.i[24]`) --
@@ -438,19 +476,28 @@ directly, but summarized here:
 - `Screen.secondaryParam`/`unused1` (originally `g.s`/`g.i`) -- read
   and stored, no confirmed use beyond storage.
 
-## Why `e`/`j` aren't renamed yet
+## Why `j` (and, previously, `e`) weren't renamed by mechanical means
 
 Vineflower's decompiled source for both classes contains **field names
-that collide with the single-letter class names** (`e.a` is a `byte[][]`
-field on `GameCanvas` itself, `j.a` is a static `Integer` field on
-`Player` itself) which are *also* used elsewhere in the same file as bare
-`a.` static references to the `Item` class. This only type-checks in real
-Java because the compiled bytecode fully qualifies every field/method
-owner -- Vineflower prints it as if unqualified, which means the source
-as printed doesn't actually recompile, and more importantly means a
-mechanical (regex/sed) rename of the single-letter tokens is unsafe: the
-same literal token means two different things depending on position. Safe
-renaming here requires the same hand-traced, one-class-at-a-time treatment
-the 9 small classes got below -- not yet done for these two given their
-size (2668 and 1893 lines). This document is their map until that pass
-happens.
+that collide with the single-letter class names** (`e.a` was a
+`byte[][]` field on `GameCanvas` itself, `j.a` is a static `Integer`
+field on `Player` itself) which are *also* used elsewhere in the same
+file as bare `a.` static references to the `Item` class. This only
+type-checks in real Java because the compiled bytecode fully qualifies
+every field/method owner -- Vineflower prints it as if unqualified,
+which means the source as printed doesn't actually recompile, and more
+importantly means a mechanical (regex/sed) rename of the single-letter
+tokens is unsafe: the same literal token means two different things
+depending on position. Safe renaming requires the same hand-traced,
+one-class-at-a-time treatment the small classes got, done field by
+field and cross-checked against every call site rather than any
+automated substitution.
+
+`GameCanvas` (`e.java`, 1893 lines) got exactly that treatment and is
+now `../src/GameCanvas.java`. `Player` (`j.java`, 2668 lines -- by far
+the largest and most central class, note the file sizes here were
+previously swapped in this document/the roadmap) has not yet -- it's
+next. Until then, any file that needs something from `Player` (which
+now includes `GameCanvas.java` itself) references it by its **original**
+single-letter members rather than inventing renamed-but-nonexistent
+APIs -- see each such file's own header comment for specifics.
