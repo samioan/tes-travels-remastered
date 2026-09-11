@@ -1,0 +1,21 @@
+# --- Copyrighted game data ---
+# Never commit the original .jar releases or anything extracted straight
+# from them (art, audio, level/script data, the class files themselves).
+/roms/*.jar
+/dawnstar/extracted/
+/oblivion/extracted/
+/stormhold/extracted/
+
+# --- Third-party tooling ---
+# Not project source; fetched locally, not tracked in git.
+/tools/vineflower.jar
+
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- PC port build output (regenerable via port/build.bat / CMake) ---
+/dawnstar/port/build/
+/oblivion/port/build/
+/stormhold/port/build/
+*.log
