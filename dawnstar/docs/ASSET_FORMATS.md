@@ -122,9 +122,17 @@ decides how they're grouped into help topics.
 ## `geomin.dat` -- CONFIRMED format
 
 ```
-<u8 x 37 x 6>   -- one 6-byte row per level: [northId, eastId, southId,
-                   westId, stairsUpDir, stairsDownDir], 0 = none
+<s8 x 37 x 6>   -- one SIGNED 6-byte row per level: [northId, eastId,
+                   southId, westId, stairsUpDir, stairsDownDir], <= 0 = none
 ```
+
+Signed, not just "0 = none": `Dungeon.tileAt`'s boundary check is
+`neighborLevel <= 0`, and the real data uses -1 (0xFF), not 0, for "no
+stairway"/"no neighbor" (e.g. level 1, the hub town, has no stairs at
+all). `neighbors` is declared `byte[]` in `Dungeon.java`, read via
+`readByte()` -- reading these unsigned would print 255 instead of -1 and
+obscure that every "none" check in the source is a `<= 0` comparison, not
+an `== 0` one. See `../port/src/assets/dungeon_geometry.h`.
 
 `stairsUpDir`/`stairsDownDir` are NOT tile columns (despite the name
 suggesting a coordinate) -- they're compass direction codes (1=N, 2=E,

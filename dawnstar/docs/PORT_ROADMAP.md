@@ -74,16 +74,42 @@ milestone rather than just read-through.
       sane-looking names/prices/stats (`Hatchet`/`Ice Axe`/`Battle Axe`,
       `Frenzy`/`Shield`/`Deft Security`).
 
+- [x] **M3 -- monster type database + dungeon geometry** (this session).
+      `MonsterDatabase` (`monstersin.dat`, `../src/Monster.java`'s static
+      type table -- count/names/17-byte stat rows; deliberately just the
+      per-*type* database, not per-instance Monster spawn/AI/combat, which
+      is gameplay logic for a later milestone) and `DungeonGeometry`
+      (`geomin.dat`'s 37 six-byte rows, `../src/DungeonGenerator.java`'s
+      `loadGeomRows()`/`../src/Dungeon.java`'s `neighbors[]`/
+      `stairsUpDir`/`stairsDownDir`). Verified by
+      `monster_dungeon_smoke.exe` against the real archive: 42 monster
+      types with sane names/stats (`Sickly Bandit`/`Bandit`/`Dark Bandit`),
+      and 37 geometry rows whose connectivity is topologically sane (level
+      1, the hub town, connects N/E/S/W to levels 2/11/20/29 with no
+      stairs; level 2 has real up/down stairs to 3/2).
+
+      Real bug caught building this: `geomin.dat`'s bytes are **signed**
+      (`Dungeon.java` declares `neighbors` as `byte[]`, and `Dungeon.tileAt`
+      treats *any* value `<= 0` as "no connection", not just literal `0`)
+      -- an initial unsigned read printed nonsense like `stairsUp=255`
+      instead of the real sentinel `-1`. Fixed in
+      `dungeon_geometry.h`/`.cpp` and tightened `docs/ASSET_FORMATS.md`'s
+      "0 = none" note to match. `MonsterDatabase`'s stat bytes stay
+      unsigned on purpose, though -- `Monster.java`'s own `stat(column)`
+      accessor explicitly does `& 0xFF`, i.e. the *intended* reading really
+      is unsigned there, unlike `geomin.dat`'s neighbor ids.
+
 ## Milestones next
 
-- [ ] **M3 and beyond (not yet planned in detail):** `imgfiles.lmp` +
-      `MonsterDatabase` + `geomin.dat`/`Dungeon` + `DungeonGenerator` (the
-      procedural level generator, already fully understood --
-      `../src/DungeonGenerator.java`), `charin.dat`/`Player` stats and
-      save format, `npcstrings.dat`/`helptext.dat`/`Shop` dialogue, the
+- [ ] **M4 and beyond (not yet planned in detail):** `imgfiles.lmp`,
+      `DungeonGenerator`'s procedural level generator itself (already fully
+      understood -- `../src/DungeonGenerator.java` -- but a real system to
+      port, including matching `java.util.Random`'s bit-for-bit sequence
+      for room/loot placement), `charin.dat`/`Player` stats and save
+      format, `npcstrings.dat`/`helptext.dat`/`Shop` dialogue, the
       first-person corridor renderer (`GameCanvas`'s
       `CORRIDOR_WALL_TABLE`), and finally `ESGame`'s own screen-wiring loop
-      tying it all together. Each gets its own milestone once M1/M2 land
-      and the shape of "how much fits in one slice" is clearer -- following
+      tying it all together. Each gets its own milestone once the shape of
+      "how much fits in one slice" is clearer -- following
       `shadowkey-decomp`'s pattern of not over-planning milestones far in
       advance of actually reaching them.

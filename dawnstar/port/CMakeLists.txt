@@ -9,10 +9,12 @@ if(MSVC)
   add_compile_options(/W4 /utf-8)
 endif()
 
-# M2: asset foundations -- see docs/PORT_ROADMAP.md and src/assets/.
+# M2/M3: asset foundations -- see docs/PORT_ROADMAP.md and src/assets/.
 add_library(dawnstar_assets STATIC
   src/assets/dat_archive.cpp
+  src/assets/dungeon_geometry.cpp
   src/assets/item_database.cpp
+  src/assets/monster_database.cpp
   src/assets/spell_database.cpp
 )
 target_include_directories(dawnstar_assets PUBLIC src)
@@ -33,3 +35,7 @@ endif()
 # console executable so it doesn't disturb the M0/M1 windowed app.
 add_executable(asset_smoke src/tests/m2_asset_smoke.cpp)
 target_link_libraries(asset_smoke PRIVATE dawnstar_assets)
+
+# M3 milestone smoke test -- see src/tests/m3_monster_dungeon_smoke.cpp.
+add_executable(monster_dungeon_smoke src/tests/m3_monster_dungeon_smoke.cpp)
+target_link_libraries(monster_dungeon_smoke PRIVATE dawnstar_assets)
