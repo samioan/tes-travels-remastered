@@ -63,9 +63,16 @@ readable Java, engines and asset-format families identified (see each
 game's `docs/`), PC port toolchain proven working (all three `port/`
 scaffolds configure, build, and link cleanly with `port/build.bat`).
 
-**Phase 1+ (reading through the decompiled source, renaming, cracking the
-asset formats, writing the actual port) has not started** -- start with
-whichever game's `docs/ROADMAP.md` looks most tractable. Dawnstar and
-Stormhold's data-table formats are partially crackable from a hexdump
-alone; Oblivion's `.scr`/`.cml`/`.jtm` formats are fully opaque and will
-need the engine's own parsing code read through first.
+**Dawnstar's phase 1+ is underway**: 9 of its 13 decompiled classes are
+read through, understood, and mechanically renamed into a compile-checked
+`dawnstar/src/` reference tree (see `dawnstar/docs/CLASS_MAP.md` and
+`dawnstar/src/README.md`); its asset formats (`datfiles.lmp`,
+`imgfiles.lmp`, and every `*.dat` data table) are fully confirmed. Given
+Dawnstar and Stormhold share Vir2L's "ngame" engine, Stormhold should
+reuse most of this work rather than starting from scratch.
+
+**Oblivion and Stormhold's phase 1+ has not started.** Stormhold's
+data-table formats are partially crackable from a hexdump alone the same
+way Dawnstar's were; Oblivion's `.scr`/`.cml`/`.jtm` formats are fully
+opaque and will need the Superscape engine's own parsing code read
+through first.

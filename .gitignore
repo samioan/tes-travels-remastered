@@ -9,6 +9,7 @@
 # --- Third-party tooling ---
 # Not project source; fetched locally, not tracked in git.
 /tools/vineflower.jar
+/tools/midp-stubs/
 
 # --- Python ---
 __pycache__/
