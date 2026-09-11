@@ -1,19 +1,19 @@
 # Dawnstar -- class map (phase 1 findings)
 
 Full read-through of every class in `decompiled/`, done from the code alone
-(no external docs exist for this engine). Confidence is high for the small
-classes (traced essentially every line), now also for `e`/`GameCanvas`
-(same full hand-trace), and high-but-not-exhaustive for the two remaining
-large ones (`ESGame`, `j`) -- their overall architecture and most fields
-are confirmed, a handful of fields are still genuinely unclear and are
-marked as such rather than guessed.
+(no external docs exist for this engine). Confidence is high for every
+class now, including `e`/`GameCanvas` and `j`/`Player` (both got the same
+full hand-trace as the small classes despite their size), except `ESGame`
+-- its overall architecture and most fields are confirmed, but a handful
+are still genuinely unclear and marked as such rather than guessed.
 
-Renamed, hand-written source for the fully-understood classes lives in
-`../src/`. `e` (renamed `GameCanvas.java`) has now had the same
-hand-trace-then-compile-check treatment as the other 9; `j`/`ESGame`
-are still NOT mechanically renamed (see "Why `j` (and, previously, `e`)
-weren't renamed by mechanical means" at the bottom) -- this document
-remains their authoritative map.
+Renamed, hand-written source for every non-`ESGame` class lives in
+`../src/`. `j` (renamed `Player.java`) was the last one, and by far the
+biggest (2668 lines) -- it has now had the same hand-trace-then-
+compile-check treatment as `GameCanvas` and the small classes before it
+(see "Why `e`/`j` weren't renamed by mechanical means" at the bottom for
+why a plain mechanical rename wasn't safe for either). `ESGame` alone is
+still NOT renamed -- this document remains its authoritative map.
 
 ## The shared "ngame" engine
 
@@ -174,12 +174,13 @@ or chases (one step toward the player, `Player`-relative axis pick).
 ## `e` -> `GameCanvas` (renderer + input + tick loop)
 
 Fully renamed, see `../src/GameCanvas.java`. `extends
-com.nokia.mid.ui.FullCanvas implements Runnable`. Unlike the other 9
-renamed classes it still depends on `Player`'s own unrenamed API for
-any value that crosses that boundary (the current `Dungeon`, the
-targeted `Monster`, etc. all keep their old single-letter types there)
--- see the file's own header comment for exactly which fields that
-applies to, and CLASS_MAP's `j`/`Player` note below for why.
+com.nokia.mid.ui.FullCanvas implements Runnable`. Now that `Player` is
+also renamed, `GameCanvas` integrates with it (and with `Monster`,
+`Item`, `Spell`, `Shop`, `Util`) using their real names throughout --
+the one remaining old-type leak is `Player.currentDungeon()` still
+returning the old unrenamed `i` (Dungeon) class, which surfaces at one
+call site reaching `Dungeon.tickNearbyMonsters` -- see the file's own
+header comment.
 
 - **First-person corridor renderer**: `CORRIDOR_WALL_TABLE[5][6][4]`
   (was `k`) is a fixed lookup table of wall-segment draw commands for 5
@@ -336,70 +337,104 @@ Fully renamed, see `../src/Dungeon.java`.
 
 ## `j` -> `Player` (player state, inventory, combat, spellcasting)
 
-By far the largest and most central class; see "why not renamed" below.
-Confirmed structure:
+Fully renamed, see `../src/Player.java`. By far the largest and most
+central class (2668 lines) -- see "why `e`/`j` weren't renamed by
+mechanical means" below for why it needed the same hand-trace treatment
+as `GameCanvas` rather than a mechanical rename. Confirmed structure:
 
 - `charin.dat` loader (`loadCharacterData`/static block): race/template
-  names `i[]`, gender labels `p[]` (2 entries), attribute names `u[]` (8),
-  skill names `ax[]` (14, must match exactly or the loader throws), stat
-  labels `ak[]` (used by the character-sheet string builder), and the big
-  per-race stat template table `l[races][41]` (base attributes, base
-  skills, starting spell-knowledge thresholds).
-- Core stats: `E[10]` = level, level-exp, curHP, maxHP, curMagicka,
-  maxMagicka, curFatigue(?), maxFatigue(?), and two more slots whose use
-  is unconfirmed (`E[8]`/`E[9]`, zeroed on rest, never otherwise touched
-  in what's been traced). `n[16]` = 8 attributes as base+bonus pairs.
-  `au[14][3]` = skills as rank/bonus/exp-toward-next-rank.
-- Inventory: `af[24]`=item-type ids (negative = currently equipped),
-  `ae[24]`=packed value/charge per slot, `aq`=slot count, `ag[7]`=equipped
-  item-type per equip slot (indexed by `Item.e`, the item's equip-slot
-  column).
-- Position/world: `x`/`w`=current tile, `aw`=facing (1-4, N/E/S/W per
-  `GameCanvas.L[]`), `ao`=current level number. `k`/`j`/`h`/`W` are the
-  *pending* target tile/level/facing used mid-move (`move(dir)` computes
-  them, `commitMove()` applies them) -- letting a move be validated
-  before committing, including the cross-level-boundary math.
-  `f`/`d`=previous tile (for the "just arrived here" chest/item
-  auto-trigger check).
-- Status: `r` = 8-bit active-ailment mask (matches `an[8]`'s named
-  debuffs: Frost Limbs, Snow Mirage, Blind, Troll Thirst, Glacier Curse,
-  Grievous Harm, Terrified, Winter Worn); `ar`/`O`/`J` = countdown timers
-  for 3 of those 8 (bits 3/4/6 specifically -- the other 5 ailments appear
-  to be binary/durationless in what's been traced, or use `D[]` instead);
-  `D[25]` = generic spell/effect duration timers, `-1`=until cured,
-  `-2`=until a condition check (`r(int)`) rather than a countdown.
-- `visibleObjects` (originally `al`, a **static** 13-element `Vector`
-  shared by the one live `Player`) -- the "what's renderable at each of
-  the 13 3D-view object slots this frame" cache, rebuilt by
-  `refreshVisibleObjects()` (originally `h()`) every move: does its own
-  wall-occlusion pass (reusing `Dungeon`'s tile bits) to decide which
-  slots are blocked, then `placeVisibleObject(kind, obj)` (originally
-  `a(int,Object)`) is called separately per monster/chest/NPC to drop it
-  into the correct slot based on its position relative to the player's
-  facing. `GameCanvas` reads this cache directly (`Player.al.elementAt(n)`)
-  to paint monster/chest/NPC sprites at the right screen column.
-- Combat: `attack(Monster)` (originally `a(d)`) and `castOnMonster`/
-  `castOnSelf` (originally `b(int,d)`/`m(int)`) all share the same
-  hit-tier lookup (`rollOutcome(atk,def)`, originally the static
-  `d(int,int)` -- returns 0=miss..3=crit, via two independent percentile
-  rolls) and the same `damage = max(power - defense, 4) * multiplier/100`
-  formula. Spell effects are a big switch on spell id (1-25) covering
-  buffs (`D[]` duration), direct heals (E[2]/E[4] restore), and
-  status-cure.
-- `useItem(slot, Monster)` (originally `a(int,d)`) handles the 13
-  "gift"/special consumable ids 87-99 by exact id -- confirms `Item.l[]`'s
-  flavor text 1:1 (87=Warp to Camp, 88=cure random ailment, 89=full heal
-  HP, 90=full heal Magicka, 91=Fatigue+3xMagicka, 92=+1 level-exp,
-  93=full HP+Magicka, 94=Increase Harm buff (`C` flag, +25 weapon
-  damage), 95=Increase Armor buff (`ac` flag, +15 armor), 96=Safe
-  Camping flag (`b` flag, skips camp-interruption roll), 97/98/99=instant-kill
-  scrolls gated on monster difficulty <=13/22/29).
+  names `raceNames[]`, gender labels `genderNames[]` (2 entries),
+  attribute names `attributeNames[]` (8), skill names `skillNames[]`
+  (14, must match exactly or the loader throws), stat labels
+  `statLabels[]` (used by the character-sheet string builder), and the
+  big per-race stat template table `raceTemplates[races][41]` (base
+  attributes, base skills, starting spell-knowledge thresholds).
+- Core stats: `coreStats[10]` = level, level-exp, curHP, maxHP,
+  curMagicka, maxMagicka, curFatigue(?), maxFatigue(?), and two more
+  slots whose use is unconfirmed (`coreStats[8]`/`[9]`, zeroed on rest,
+  never otherwise touched in what's been traced). `attributes[16]` = 8
+  attributes as base+bonus pairs. `skills[14][3]` = skills as
+  rank/bonus/exp-toward-next-rank.
+- Inventory: `inventoryItemIds[24]`=item-type ids (negative = currently
+  equipped), `inventoryItemData[24]`=packed value/charge per slot,
+  `inventoryCount`=slot count, `equippedItems[7]`=equipped item-type per
+  equip slot (indexed by `Item.equipSlot`).
+- Position/world: `tileX`/`tileY`=current tile, `facing`=facing (1-4,
+  N/E/S/W per `GameCanvas.COMPASS_GLYPHS[]`), `currentLevel`=current
+  level number. `pendingTileX`/`pendingTileY`/`pendingLevel`/
+  `pendingFacing` are the *pending* target tile/level/facing used
+  mid-move (`move(dir,strafe)` computes them via `computeMoveTarget`,
+  `commitMove()` applies them) -- letting a move be validated before
+  committing, including the cross-level-boundary math.
+  `prevTileX`/`prevTileY`=previous tile (for the "just arrived here"
+  chest/item auto-trigger check).
+- Status: `ailmentMask` = 8-bit active-ailment mask (matches
+  `AILMENT_NAMES[8]`'s named debuffs: Frost Limbs, Snow Mirage, Blind,
+  Troll Thirst, Glacier Curse, Grievous Harm, Terrified, Winter Worn);
+  `trollThirstTimer`/`glacierCurseTimer`/`terrifiedTimer` = countdown
+  timers for 3 of those 8 (bits 3/4/6 specifically -- the other 5
+  ailments appear to be binary/durationless in what's been traced, or
+  use `effectDurations[]` instead); `effectDurations[25]` = generic
+  spell/effect duration timers, `-1`=until cured, `-2`=until a condition
+  check (`isEffectActive(int)`) rather than a countdown.
+- `visibleObjects` (a **static** 13-element `Vector` shared by the one
+  live `Player`) -- the "what's renderable at each of the 13 3D-view
+  object slots this frame" cache, rebuilt by `refreshVisibleObjects()`
+  every move: does its own wall-occlusion pass (sampling
+  `corridorView`, see below) to decide which slots are blocked, then
+  `placeVisibleObject(kind, obj)` is called separately per
+  monster/chest/NPC to drop it into the correct slot based on its
+  position relative to the player's facing. `GameCanvas` reads this
+  cache directly (`Player.visibleObjects.elementAt(n)`) to paint
+  monster/chest/NPC sprites at the right screen column.
+- `corridorView` (a 9x5 `byte[][]`, previously flagged here as an
+  unconfirmed "`ap[9][5]` built from a strange formula") is actually the
+  corridor tile-occlusion view grid the 3D renderer and minimap both
+  sample from, populated by `refreshCorridorView()` and read via
+  `tileAt(dx, dy)` -- confirmed once `GameCanvas`'s own call sites
+  (passing `(dx, dy)` offsets, not `(shopId, slot)` as first guessed)
+  were cross-checked against this file. The recentering formula itself
+  (`dy < 4 ? corridorView[dx+dy+1][dy] : corridorView[dx+dy][dy]`)
+  is preserved as found in a second, seemingly-identical accessor
+  (`lookupUnconfirmedTable`) whose own original call sites weren't
+  re-traced.
+- Combat: `attack(Monster)` and `castOnMonster`/`castOnSelf` all share
+  the same hit-tier lookup (`rollOutcome(atkChance,defChance)` -- returns
+  0=miss..3=crit, via two independent percentile rolls) and the same
+  `damage = max(power - defense, 4) * multiplier/100` formula. Spell
+  effects are a big switch on spell id (1-25) covering buffs
+  (`effectDurations[]` duration), direct heals (`coreStats[2]`/`[4]`
+  restore), and status-cure.
+- `useItem(slot, Monster)` handles the 13 "gift"/special consumable ids
+  87-99 by exact id -- confirms `Item.specialEffectText[]`'s flavor text
+  1:1 (87=Warp to Camp, 88=cure random ailment, 89=full heal HP,
+  90=full heal Magicka, 91=Fatigue+3xMagicka, 92=+1 level-exp, 93=full
+  HP+Magicka, 94=Increase Harm buff (`increaseHarmBuff` flag, +25
+  weapon damage), 95=Increase Armor buff (`increaseArmorBuff` flag, +15
+  armor), 96=Safe Camping flag (`safeCampingBuff` flag, skips
+  camp-interruption roll), 97/98/99=instant-kill scrolls gated on
+  monster difficulty <=13/22/29).
+- Camp/warp bookmarking: `campLevel`/`campX`/`campY`/`campFacing` are
+  set by `markCampAndReturnToTown` (walking onto a tile-bit-8
+  "camp-marker" tile, or using the "Warp to Camp" item while not
+  already in town) and consumed by `warpToCampMark`/`hasCampMark` (used
+  by the "Warp to Camp" item when already in town). The method's own
+  `skipMark` parameter is always called `false` in this build -- the
+  `true` path is never exercised.
 - Save format: two serializations from the same `toBytes`/`fromBytes`
-  pair, switched by a boolean (`true`=full in-progress save: everything
-  including inventory/position/status; `false`=lightweight "character
-  summary" with no position/inventory -- likely a high-score/leaderboard
-  record, needs confirming against where the `false` path is actually
-  called from `ESGame`).
+  pair, switched by a boolean (`full`=complete in-progress save:
+  everything including inventory/position/status; not `full`
+  =lightweight "character summary" with no position/inventory -- likely
+  a high-score/leaderboard record, needs confirming against where the
+  not-`full` path is actually called from `ESGame`).
+- A vestigial/dead-code trio worth noting: `endOfGameTriggered` (was
+  `R`) is read by `GameCanvas` but never set `true` anywhere in the
+  entire codebase, so that branch is unreachable; `serverUserId` (was
+  `N`) is written by `ESGame`'s own dead Pluto-Server-URL mechanism but
+  never read back here; and `unusedV`/`raceCountRedundant`/`unconfirmedZ`/
+  `raceUnknownPair`/`unconfirmedB` round out the fields that are
+  declared and (de)serialized but have no confirmed meaningful read
+  site in what's been traced.
 
 ## `k` -> `Shop` (NPC dialogue, shop transactions, quest/rumor tracking)
 
@@ -438,9 +473,9 @@ directly, but summarized here:
   buy (`action==14`, catalog slot into `SHOP_STOCK`), sell (`action==15`,
   blocks selling "gift"-category items), and the richer scripted
   branches for shops 5-8 (deliver a specific quest item for a reward).
-  The quest-turn-in outcome roll is **`Player`'s own** `c(shopId, action)`
-  method (not renamed, still `j.c`), not anything on `Shop` itself --
-  caught and fixed after an initial wrong guess wired it to a
+  The quest-turn-in outcome roll is **`Player`'s own**
+  `rollShopOutcome(shopId, action)` method, not anything on `Shop`
+  itself -- caught and fixed after an initial wrong guess wired it to a
   same-shaped-looking table inside `Shop` instead (`shopActionCode`/
   `isValidShopAction`, which turn out to have no confirmed caller at
   all -- kept in `Shop.java` since they're clearly a matched pair, but
@@ -450,20 +485,34 @@ directly, but summarized here:
 
 - `Monster.i` (boolean), `Monster.c[]` indices beyond 5-8, `Monster.k`
   (8-byte value, likely a timestamp).
-- `Player.E[8]`/`E[9]`, `S`, `y[0]`/`y[1]` -- read/written but never
-  observed being used meaningfully in what's been traced.
-- `Player.ap[9][5]` -- built from a strange formula
-  (`a(shopId,slot){ return slot<4 ? ap[shopId+slot+1][slot] : ap[shopId+slot][slot]; }`)
-  that reads like a deliberately-obfuscated lookup, not naturally-shaped
-  game data. Needs dedicated tracing of every write site before renaming.
+- `Player.coreStats[8]`/`[9]` (was `E[8]`/`E[9]`), `raceMagickaFactor`'s
+  sibling `raceUnknownPair` (was `y[0]`/`y[1]`), and `unconfirmedZ` (was
+  `Z`) -- read/written (including in the save format) but never observed
+  being used meaningfully in what's been traced.
+- `Player.corridorView` (was `ap[9][5]`) -- previously flagged here as
+  built from a "strange formula" (`a(shopId,slot){ return slot<4 ?
+  ap[shopId+slot+1][slot] : ap[shopId+slot][slot]; }`) that looked
+  deliberately obfuscated. **Resolved** while renaming `Player`: it's the
+  corridor tile-occlusion view grid `GameCanvas`'s 3D renderer and
+  minimap both sample from (via `tileAt(dx,dy)`), not a shop-related
+  table -- the "shopId,slot" reading was a coincidence of an unrelated
+  call site (`lookupUnconfirmedTable`, kept as a second accessor with
+  the same formula since its own callers weren't re-traced).
 - `GameCanvas`'s `OBJECT_DRAW_TABLE`/`OBJECT_EXTRA_FLAGS`/
   `OBJECT_ICON_TABLE` (was `ad[][]`/`G[][]`/`a[][]`) -- structure is
   clear (per-position-code base sprite + up to 4 extra decorations,
   each an (dx,dy,icon) triple, consumed by `paintObjectAtPosition`) but
   the exact per-column meaning of each isn't pinned down. `UNUSED_TABLE`
   (was `m[][]`) is confirmed dead code (declared, never read).
-- The exact ambush-system trigger condition (`Player.Q >= 0`) -- when
-  does `Q` actually get set to a non -1 value? Not yet located.
+- The ambush-system trigger condition (`Player.ambushTimer >= 0`, was
+  `Q >= 0`). **Resolved as dead code** while renaming `Player`: nowhere
+  in the entire codebase is `ambushTimer` ever assigned anything other
+  than its `-1` field initializer, so `GameCanvas.tickPerSecond`'s whole
+  "overstayed in one place" ambush-spawner branch is unreachable in this
+  build.
+- `Player.unconfirmedB` (was `B`) -- packed into the save format
+  alongside `traitorIndex`, no confirmed read site beyond the
+  packing/unpacking itself.
 - `Shop.UNCONFIRMED_A`/`UNCONFIRMED_B` (originally `k.a[24]`/`k.i[24]`) --
   24 entries each (matches `Player`'s 24 inventory slots), values in
   13-60, no confirmed read site. Plausibly inventory-screen layout
@@ -471,16 +520,17 @@ directly, but summarized here:
 - `Shop.shopActionCode`/`isValidShopAction` (originally `k.b(int,int)`/
   `k.c(int,int)`) -- a clearly-matched pair, but no confirmed caller
   anywhere traced (the quest-turn-in roll in `dialogue()` that looked
-  like it should call these actually calls `Player.c(shopId,action)`
-  instead -- see the `Shop` section above).
+  like it should call these actually calls
+  `Player.rollShopOutcome(shopId,action)` instead -- see the `Shop`
+  section above).
 - `Screen.secondaryParam`/`unused1` (originally `g.s`/`g.i`) -- read
   and stored, no confirmed use beyond storage.
 
-## Why `j` (and, previously, `e`) weren't renamed by mechanical means
+## Why `e`/`j` weren't renamed by mechanical means
 
 Vineflower's decompiled source for both classes contains **field names
 that collide with the single-letter class names** (`e.a` was a
-`byte[][]` field on `GameCanvas` itself, `j.a` is a static `Integer`
+`byte[][]` field on `GameCanvas` itself, `j.a` was a static `Integer`
 field on `Player` itself) which are *also* used elsewhere in the same
 file as bare `a.` static references to the `Item` class. This only
 type-checks in real Java because the compiled bytecode fully qualifies
@@ -493,11 +543,13 @@ one-class-at-a-time treatment the small classes got, done field by
 field and cross-checked against every call site rather than any
 automated substitution.
 
-`GameCanvas` (`e.java`, 1893 lines) got exactly that treatment and is
-now `../src/GameCanvas.java`. `Player` (`j.java`, 2668 lines -- by far
-the largest and most central class, note the file sizes here were
-previously swapped in this document/the roadmap) has not yet -- it's
-next. Until then, any file that needs something from `Player` (which
-now includes `GameCanvas.java` itself) references it by its **original**
-single-letter members rather than inventing renamed-but-nonexistent
+Both got exactly that treatment: `GameCanvas` (`e.java`, 1893 lines) is
+now `../src/GameCanvas.java`, and `Player` (`j.java`, 2668 lines -- by
+far the largest and most central class; note the file sizes here were
+previously swapped in this document/the roadmap) is now
+`../src/Player.java`. `ESGame` is the only class left unrenamed. Any
+file that needs something from `ESGame` (or from the *old*, still-
+unrenamed `i`/Dungeon type that `Player.currentDungeon()` returns, since
+that's just forwarding `ESGame.dungeons[]`'s own element type) references
+it by its original members rather than inventing renamed-but-nonexistent
 APIs -- see each such file's own header comment for specifics.

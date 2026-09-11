@@ -1,8 +1,13 @@
 // Renamed from decompiled/i.java. See ../docs/CLASS_MAP.md and
 // ../docs/ASSET_FORMATS.md (geomin.dat).
 //
-// NOTE: `j` here is the Player class (decompiled/j.java) -- not yet
-// mechanically renamed, see CLASS_MAP.md's "why e/j aren't renamed yet".
+// `Player` here is the real, already-renamed Player class. Note this
+// class's own `tickNearbyMonsters` (and by extension this whole class)
+// is presently unreachable from GameCanvas/Player: they hold dungeons
+// via the OLD unrenamed `i` class (ESGame.dungeons[] is still typed
+// `i[]`), not this one -- see Player.java's and GameCanvas.java's class
+// header notes. Kept updated to the real Player type anyway, ready for
+// when ESGame's own rename pass makes `Dungeon` reachable.
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Vector;
@@ -294,9 +299,9 @@ public class Dungeon {
    // adjacent (distance 1) monsters and Monster.chase (one step toward
    // the player) on distance-2/3 monsters. Returns bit flags: 2 = a
    // monster attacked, 1 = a monster moved.
-   byte tickNearbyMonsters(long now, j player) {
-      byte px = player.x;
-      byte py = player.w;
+   byte tickNearbyMonsters(long now, Player player) {
+      byte px = player.tileX;
+      byte py = player.tileY;
       boolean attacked = false;
       boolean moved = false;
       Monster scratch = new Monster();

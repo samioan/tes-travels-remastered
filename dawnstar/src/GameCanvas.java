@@ -7,20 +7,16 @@
 // -- movement, combat, spellcasting, camping, death/respawn, and the
 // scripted "overstayed in one place" ambush spawner (see tickPerSecond).
 //
-// NOTE: `j` (Player), `ESGame`, `d` (Monster) and `i` (Dungeon) below are
-// NOT the already-renamed Player/Monster/Dungeon classes -- every value
-// that flows through Player's own (unrenamed) API keeps Player's
-// original single-letter member names, because Player itself hasn't
-// been mechanically renamed yet (see CLASS_MAP.md's "why e/j aren't
-// renamed yet"). In particular `targetMonster` is typed `d`, not the
-// real `Monster` class, because Player.n()/a(d)/b(int,d) all still
-// declare that type -- assigning/passing it as `Monster` would not
-// compile against the untouched j.java. Only fully GameCanvas-owned
-// locals (the scratch Monster built fresh each second in tickPerSecond,
-// never handed to Player) use the real, already-renamed Monster class.
-// Likewise `Item`/`Spell`/`Shop`/`Util` calls below use their real,
-// already-renamed names -- those calls only cross primitives or values
-// GameCanvas itself constructs, so there's no such boundary problem.
+// NOTE: `ESGame` and `i` (Dungeon) below are NOT the already-renamed
+// ESGame/Dungeon classes for every call site. ESGame genuinely isn't
+// renamed yet. `Dungeon` *is* renamed, but the one Dungeon reference
+// this file holds (via Player.currentDungeon()) keeps the old type `i`
+// because Player's own currentDungeon() still declares that return type
+// -- see Player.java's own header note on why. `Player`, `Monster`,
+// `Item`, `Spell`, `Shop`, and `Util` are all now the real,
+// already-renamed classes: this file was updated alongside Player's own
+// rename pass to integrate directly with it, the same way it and
+// Screen.java were updated alongside GameCanvas's own rename.
 //
 // Like Dungeon.java before it, this file will NOT compile drop-in
 // against the untouched decompiled/ESGame.java: ESGame's own field is
@@ -135,8 +131,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
    private boolean threadPaused;
    private boolean threadRunning;
    private boolean threadKillRequested;
-   // Player. Kept typed `j` (unrenamed) -- see the class header note.
-   j player;
+   Player player;
    // 1 = alive, 2 = HP just hit 0 (one-tick pause), 3 = "You're Dead!"
    // screen showing, waiting to respawn.
    byte deathState;
@@ -244,13 +239,11 @@ public class GameCanvas extends FullCanvas implements Runnable {
    private static boolean actionTakenThisTick = false;
    static boolean showLevelNameMessage = false;
    // True while the nearby target monster's attack-animation flag
-   // (targetMonster.c[6] equivalent) is set -- gates one of the timed
-   // status-ailment countdowns in tickStatusCountdowns.
+   // (targetMonster.scratch[6] equivalent) is set -- gates one of the
+   // timed status-ailment countdowns in tickStatusCountdowns.
    static boolean monsterAttacking = false;
    // The player's current combat target, refreshed by refreshTargetMonster.
-   // Typed `d` (unrenamed Monster), not the real Monster class -- see the
-   // class header note.
-   static d targetMonster = null;
+   static Monster targetMonster = null;
    // Set every tick to the previous tick's processing duration; never
    // read back anywhere in this class -- write-only diagnostic.
    private static long lastTickDuration = 0L;
@@ -343,16 +336,16 @@ public class GameCanvas extends FullCanvas implements Runnable {
          this.paintErrorOverlay(g);
       }
 
-      if (!this.player.i(3)) {
+      if (!this.player.hasAilment(3)) {
          g.setColor(16777215);
          if (!minimapZoomedOut) {
             g.setFont(SMALL_FONT);
-            g.drawChar(COMPASS_GLYPHS[this.player.aw], 16, 10, 20);
+            g.drawChar(COMPASS_GLYPHS[this.player.facing], 16, 10, 20);
             g.setClip(10, 20, 23, 23);
             g.drawImage(this.minimapImage, 10, 20, 20);
          } else {
             g.setFont(COMPASS_FONT_ZOOMED);
-            g.drawChar(COMPASS_GLYPHS[this.player.aw], 58, 10, 20);
+            g.drawChar(COMPASS_GLYPHS[this.player.facing], 58, 10, 20);
             g.drawImage(this.minimapImage, 15, 25, 20);
          }
       }
@@ -393,9 +386,9 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // mirrored side, by scanning CORRIDOR_WALL_TABLE's candidate offsets
    // for the first occluding (wall, bit0) or transition (edge, bit6) tile.
    private void paintCorridorWalls(Graphics g) {
-      i dungeon = this.player.a();
-      if (!this.player.i(3)) {
-         if (this.player.i(4)) {
+      i dungeon = this.player.currentDungeon();
+      if (!this.player.hasAilment(3)) {
+         if (this.player.hasAilment(4)) {
             g.setColor(10485760);
             g.fillRect(0, 0, this.screenWidth, floorTexture.getHeight());
          } else {
@@ -420,13 +413,13 @@ public class GameCanvas extends FullCanvas implements Runnable {
             int column = CORRIDOR_WALL_TABLE[step][row][1];
             int dx = CORRIDOR_WALL_TABLE[step][row][2];
             int dy = CORRIDOR_WALL_TABLE[step][row][3];
-            if (Util.testBit((byte)1, this.player.a(dx, dy))) {
+            if (Util.testBit((byte)1, this.player.tileAt(dx, dy))) {
                int frame = this.resolveWallFrame(cmd, column, -1);
                this.drawWallSegment(g, frame, x, dungeon.e);
                break;
             }
 
-            if (Util.testBit((byte)64, this.player.a(dx, dy))) {
+            if (Util.testBit((byte)64, this.player.tileAt(dx, dy))) {
                int frame = this.resolveWallFrame(cmd, column, -1);
                this.drawWallSegment(g, frame, x, -1);
                break;
@@ -442,13 +435,13 @@ public class GameCanvas extends FullCanvas implements Runnable {
             int column = CORRIDOR_WALL_TABLE[9 - step][row][1];
             int dx = -CORRIDOR_WALL_TABLE[9 - step][row][2];
             int dy = CORRIDOR_WALL_TABLE[9 - step][row][3];
-            if (Util.testBit((byte)1, this.player.a(dx, dy))) {
+            if (Util.testBit((byte)1, this.player.tileAt(dx, dy))) {
                int frame = this.resolveWallFrame(cmd, column, 1);
                this.drawWallSegment(g, frame, x, dungeon.e);
                break;
             }
 
-            if (Util.testBit((byte)64, this.player.a(dx, dy))) {
+            if (Util.testBit((byte)64, this.player.tileAt(dx, dy))) {
                int frame = this.resolveWallFrame(cmd, column, 1);
                this.drawWallSegment(g, frame, x, -1);
                break;
@@ -620,9 +613,9 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // bit 5, "blocked marker" used for shop-room tiles) and, if so, sets
    // npcInSight and shows that shop's greeting.
    public void refreshNpcInSight() {
-      byte tileBits = this.player.a(0, 1);
+      byte tileBits = this.player.tileAt(0, 1);
       if (Util.testBit((byte)32, tileBits)) {
-         int shopId = this.player.p();
+         int shopId = this.player.npcInFront();
          if (shopId == -1) {
             npcInSight = -1;
             System.out.println("NPC infront is not defined!!!");
@@ -693,14 +686,14 @@ public class GameCanvas extends FullCanvas implements Runnable {
    }
 
    // Paints every visible monster/chest/NPC object cached in Player's
-   // static visibleObjects Vector (j.al, 13 slots) -- far slots (8-12)
+   // static visibleObjects Vector (13 slots) -- far slots (8-12)
    // via the "far" drawers, mid slots (4-6) via the "mid" drawers, and
    // the single closest slot (1) via the shared position-code renderer.
    private void paintVisibleObjects(Graphics g) {
       monsterAttacking = false;
 
       for (int slot = 8; slot <= 12; slot++) {
-         Object obj = j.al.elementAt(slot);
+         Object obj = Player.visibleObjects.elementAt(slot);
          if (obj instanceof byte[]) {
             byte[] rec = (byte[])obj;
             if (rec.length == 28) {
@@ -724,7 +717,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
       }
 
       for (int slot = 4; slot <= 6; slot++) {
-         Object obj = j.al.elementAt(slot);
+         Object obj = Player.visibleObjects.elementAt(slot);
          if (obj instanceof byte[]) {
             byte[] rec = (byte[])obj;
             if (rec.length == 28) {
@@ -747,7 +740,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
          }
       }
 
-      Object obj = j.al.elementAt(1);
+      Object obj = Player.visibleObjects.elementAt(1);
       if (obj instanceof byte[]) {
          byte[] rec = (byte[])obj;
          if (rec.length == 28) {
@@ -988,13 +981,13 @@ public class GameCanvas extends FullCanvas implements Runnable {
       g.fillRect(5, 138, 40, 7);
       g.fillRect(5, 146, 40, 7);
       g.setColor(16711680);
-      int fill = this.player.l(2) * 38 / this.player.E[3];
+      int fill = this.player.effectiveStat(2) * 38 / this.player.coreStats[3];
       g.fillRect(6, 131, fill, 5);
       g.setColor(65280);
-      fill = this.player.l(4) * 38 / this.player.E[5];
+      fill = this.player.effectiveStat(4) * 38 / this.player.coreStats[5];
       g.fillRect(6, 139, fill, 5);
       g.setColor(255);
-      fill = this.player.l(6) * 38 / this.player.E[7];
+      fill = this.player.effectiveStat(6) * 38 / this.player.coreStats[7];
       if (fill > 40) {
          fill = 40;
       }
@@ -1144,14 +1137,14 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // 5px/cell) and painting it into minimapImage's own Graphics.
    void refreshMinimap() {
       this.minimapDirty = false;
-      byte x = this.player.x;
-      byte y = this.player.w;
-      byte facing = this.player.aw;
+      byte x = this.player.tileX;
+      byte y = this.player.tileY;
+      byte facing = this.player.facing;
       if (!minimapZoomedOut) {
-         this.player.a().a(x, y, facing, 7, visibleTileGrid);
+         this.player.currentDungeon().a(x, y, facing, 7, visibleTileGrid);
          this.paintMinimapGrid(this.minimapImage.getGraphics(), 1, 1, 7, 3);
       } else {
-         this.player.a().a(x, y, facing, 17, visibleTileGrid);
+         this.player.currentDungeon().a(x, y, facing, 17, visibleTileGrid);
          this.paintMinimapGrid(this.minimapImage.getGraphics(), 2, 2, 17, 5);
       }
    }
@@ -1302,12 +1295,12 @@ public class GameCanvas extends FullCanvas implements Runnable {
                      } else {
                         this.campStartTime = 0L;
                         this.suppressMoveInput = true;
-                        this.player.h(false);
+                        this.player.rest(false);
                         if (this.campState == 3) {
-                           if (!this.player.a().a(this.player.x, this.player.w, 41)) {
+                           if (!this.player.currentDungeon().a(this.player.tileX, this.player.tileY, 41)) {
                            }
                         } else {
-                           this.player.a().a(this.player.x, this.player.w, -1);
+                           this.player.currentDungeon().a(this.player.tileX, this.player.tileY, -1);
                         }
 
                         this.campState = 0;
@@ -1324,7 +1317,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
                      this.campState = 0;
                      this.campStartTime = 0L;
                      this.suppressMoveInput = true;
-                     this.player.h(true);
+                     this.player.rest(true);
                      if (this.showMessage(MSG_REST_COMPLETE, 1)) {
                         messageShownAt = now;
                         messageVisible = true;
@@ -1342,16 +1335,16 @@ public class GameCanvas extends FullCanvas implements Runnable {
                   runTick = false;
                   if (now - this.deathTime > 5000L) {
                      System.out.println("Restart after dead");
-                     this.player.a(this.player.E);
+                     this.player.normalizeForSummary(this.player.coreStats);
 
-                     for (int slot = this.player.aq - 1; slot >= 0; slot--) {
-                        if (!this.player.A(slot)) {
-                           this.player.w(slot);
+                     for (int slot = this.player.inventoryCount - 1; slot >= 0; slot--) {
+                        if (!this.player.isEquipped(slot)) {
+                           this.player.removeInventorySlot(slot);
                         }
                      }
 
-                     this.player.T = false;
-                     this.player.f(true);
+                     this.player.starFrostBonusActive = false;
+                     this.player.resetState(true);
                      this.deathTime = 0L;
                      this.deathState = 1;
                      Shop.showDeathGreeting = true;
@@ -1360,7 +1353,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
                      showLevelNameMessage = true;
                      runTick = true;
                      if (showLevelNameMessage) {
-                        if (this.showMessage(this.wrapToTwoLines(this.player.a().a()), 1)) {
+                        if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().a()), 1)) {
                            messageShownAt = System.currentTimeMillis();
                            messageVisible = true;
                         }
@@ -1371,7 +1364,16 @@ public class GameCanvas extends FullCanvas implements Runnable {
                }
 
                if (runTick) {
-                  byte flags = this.player.a().a(now, this.player);
+                  // Known integration gap (see class header note): this
+                  // reaches Dungeon.tickNearbyMonsters through the OLD
+                  // unrenamed `i` class (Player.currentDungeon()'s
+                  // return type, forced by ESGame.dungeons[] still
+                  // being `i[]`), whose own `a(long, ???)` still expects
+                  // the OLD `j` Player type -- not this file's `player`
+                  // field, which is now genuinely typed `Player`. Won't
+                  // compile until ESGame (and the old i.java path it
+                  // exposes) gets its own rename pass.
+                  byte flags = this.player.currentDungeon().a(now, this.player);
                   if ((flags & 1) != 0) {
                      this.minimapDirty = true;
                   }
@@ -1383,15 +1385,15 @@ public class GameCanvas extends FullCanvas implements Runnable {
 
                   this.dispatchTickActions(now);
                   this.processIdleTick(now, elapsed);
-                  if (this.player.I) {
-                     this.player.I = false;
+                  if (this.player.levelUpPending) {
+                     this.player.levelUpPending = false;
                      this.pauseThread();
                      this.game.LevelUpUI = this.game.newLevelUpUI(1);
                      this.game.setCurrentDisplay(this.game.LevelUpUI);
                      canvasActive = false;
                   }
 
-                  this.player.c(false);
+                  this.player.tickVisibleObjects(false);
                   if (this.minimapDirty) {
                      this.refreshMinimap();
                   }
@@ -1494,10 +1496,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
    private void processAttack(long now) {
       if (now - this.lastAttackTime >= 500L && targetMonster != null) {
          actionTakenThisTick = true;
-         byte hpBefore = targetMonster.g;
-         this.player.a(targetMonster);
+         byte hpBefore = targetMonster.hp;
+         this.player.attack(targetMonster);
          this.lastAttackTime = now;
-         if (hpBefore > targetMonster.g) {
+         if (hpBefore > targetMonster.hp) {
             monsterHitFlash = true;
          }
       }
@@ -1510,23 +1512,23 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // roll, then removes it from the level and applies the Player's
    // "Increase Harm" kill-heal bonus if active.
    private void resolveMonsterDeath() {
-      if (targetMonster != null && targetMonster.g <= 0) {
-         if (targetMonster.l == 41) {
-            this.player.aj = true;
-            this.player.M = false;
+      if (targetMonster != null && targetMonster.hp <= 0) {
+         if (targetMonster.monsterType == 41) {
+            this.player.specialEncounterResolved = true;
+            this.player.roamingSpecialMonsterPresent = false;
          }
 
-         if (targetMonster.l == 42) {
+         if (targetMonster.monsterType == 42) {
             this.game.endOfGameUI = this.game.newEndOfGameUI();
             this.game.setCurrentDisplay(this.game.endOfGameUI);
          } else {
-            targetMonster.a(false);
+            targetMonster.onDeath(false);
          }
 
-         ESGame.removeMonster(this.player.ao, targetMonster.o, targetMonster.m);
-         if (this.player.i(4)) {
-            this.player.E[2] = (short)(this.player.E[2] + 3 * this.player.E[3] / 10);
-            this.player.E[2] = (short)Math.min(this.player.E[2], this.player.E[3]);
+         ESGame.removeMonster(this.player.currentLevel, targetMonster.x, targetMonster.y);
+         if (this.player.hasAilment(4)) {
+            this.player.coreStats[2] = (short)(this.player.coreStats[2] + 3 * this.player.coreStats[3] / 10);
+            this.player.coreStats[2] = (short)Math.min(this.player.coreStats[2], this.player.coreStats[3]);
          }
 
          if (this.showMessage(MSG_CREATURE_DEAD, 1)) {
@@ -1543,10 +1545,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // Re-queries Player for the nearest attackable monster and shows its
    // name the moment one comes into range.
    private void refreshTargetMonster() {
-      targetMonster = this.player.n();
+      targetMonster = this.player.nearestAttackableMonster();
       if (targetMonster != null) {
          monsterTargeted = true;
-         if (this.showMessage(this.wrapToTwoLines(targetMonster.a()), 1)) {
+         if (this.showMessage(this.wrapToTwoLines(targetMonster.typeName()), 1)) {
             messageShownAt = System.currentTimeMillis();
             messageVisible = true;
          }
@@ -1558,7 +1560,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // Re-queries Player for a chest in front and shows the "Chest" popup
    // the moment one comes into sight.
    public void refreshChestInSight() {
-      byte[] chest = this.player.g();
+      byte[] chest = this.player.chestInFront();
       if (chest != null) {
          chestInSight = true;
       } else {
@@ -1577,18 +1579,18 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // sighting for the new tile.
    private void commitMove() {
       if (this.pendingMoveDir != 0) {
-         byte slotsBefore = this.player.aq;
+         byte slotsBefore = this.player.inventoryCount;
          actionTakenThisTick = true;
-         this.player.a(this.pendingMoveDir, this.strafeMove);
-         if (j.R) {
+         this.player.move(this.pendingMoveDir, this.strafeMove);
+         if (Player.endOfGameTriggered) {
             this.game.endOfGameUI = this.game.newEndOfGameUI();
             this.game.setCurrentDisplay(this.game.endOfGameUI);
             canvasActive = false;
          } else {
-            if (this.player.L) {
+            if (this.player.levelChanged) {
                showLevelNameMessage = true;
                if (showLevelNameMessage) {
-                  if (this.showMessage(this.wrapToTwoLines(this.player.a().a()), 1)) {
+                  if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().a()), 1)) {
                      messageShownAt = System.currentTimeMillis();
                      messageVisible = true;
                   }
@@ -1603,7 +1605,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
          }
 
          this.pendingMoveDir = 0;
-         int pickedUp = this.player.aq - slotsBefore;
+         int pickedUp = this.player.inventoryCount - slotsBefore;
          if (pickedUp == 1) {
             if (this.showMessage(this.buildFoundItemMessage(), -1)) {
                messageShownAt = System.currentTimeMillis();
@@ -1622,13 +1624,13 @@ public class GameCanvas extends FullCanvas implements Runnable {
 
    private void processSpellCast(long now) {
       if (castSpellRequested) {
-         byte spellId = this.player.c;
+         byte spellId = this.player.selectedSpellId;
          if (!Spell.isValidId(spellId)) {
             castSpellRequested = false;
             return;
          }
 
-         if (Spell.byId(spellId).magickaCost > this.player.l(4)) {
+         if (Spell.byId(spellId).magickaCost > this.player.effectiveStat(4)) {
             if (this.showMessage(MSG_NOT_ENOUGH_MAGICKA, 3)) {
                messageShownAt = now;
                messageVisible = true;
@@ -1642,11 +1644,11 @@ public class GameCanvas extends FullCanvas implements Runnable {
                      messageVisible = true;
                   }
                } else {
-                  this.player.b(spellId, targetMonster);
+                  this.player.castOnMonster(spellId, targetMonster);
                   spellHitFlash = true;
                }
             } else {
-               this.player.m(spellId);
+               this.player.castOnSelf(spellId);
                selfSpellFlash = true;
             }
 
@@ -1659,14 +1661,14 @@ public class GameCanvas extends FullCanvas implements Runnable {
 
    private void cycleSelectedSpell(long now) {
       if (spellCycleRequested) {
-         int spellId = this.player.k();
+         int spellId = this.player.cycleSelectedSpell();
          if (spellId == 0) {
             if (this.showMessage(MSG_NO_SPELLS, -1)) {
                messageShownAt = now;
                messageVisible = true;
             }
          } else {
-            this.player.c = (byte)spellId;
+            this.player.selectedSpellId = (byte)spellId;
             if (this.showMessage(this.wrapToTwoLines(Spell.byId(spellId).name), -1)) {
                messageShownAt = now;
                messageVisible = true;
@@ -1683,8 +1685,8 @@ public class GameCanvas extends FullCanvas implements Runnable {
       if (npcInSight >= 0) {
          this.openNpcDialogue(npcInSight);
       } else if (chestInSight) {
-         byte[] chest = this.player.g();
-         int result = this.player.a(chest);
+         byte[] chest = this.player.chestInFront();
+         int result = this.player.pickUpDroppedItem(chest);
          if (result == -1) {
             if (this.showMessage(MSG_CHEST_LOCKED, 4)) {
                messageShownAt = now;
@@ -1711,8 +1713,8 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // Builds the "you found <item>" popup body for the item that was
    // just added to the last inventory slot.
    private String[] buildFoundItemMessage() {
-      int slot = this.player.aq - 1;
-      int itemId = Math.abs(this.player.af[slot]);
+      int slot = this.player.inventoryCount - 1;
+      int itemId = Math.abs(this.player.inventoryItemIds[slot]);
       return this.wrapToTwoLines(Item.nameOf(itemId));
    }
 
@@ -1729,15 +1731,15 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // 3, quest flag not yet set).
    private void enterCampState(long now) {
       this.campState = 1;
-      if (this.player.b) {
+      if (this.player.safeCampingBuff) {
          this.campState = 2;
       }
 
-      if (!this.player.aj && this.player.E[0] > 3 && Util.randomInt(10) == 1) {
+      if (!this.player.specialEncounterResolved && this.player.coreStats[0] > 3 && Util.randomInt(10) == 1) {
          this.campState = 3;
       }
 
-      if (this.player.ao == 1) {
+      if (this.player.currentLevel == 1) {
          this.campState = 2;
       }
 
@@ -1767,7 +1769,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // action was taken this tick, runs Player's own passive per-tick
    // update.
    private void processIdleTick(long now, long elapsed) {
-      int hp = this.player.l(2);
+      int hp = this.player.effectiveStat(2);
       if (hp <= 0) {
          monsterTargeted = false;
          this.deathState = 2;
@@ -1775,7 +1777,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
       }
 
       if (!actionTakenThisTick) {
-         this.player.a(elapsed);
+         this.player.tickFatigueRegen(elapsed);
       }
    }
 
@@ -1789,7 +1791,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
 
    protected void showNotify() {
       if (this.activeScreen == null) {
-         this.player.v();
+         this.player.refreshCorridorView();
          this.minimapDirty = true;
          this.refreshChestInSight();
          this.refreshNpcInSight();
@@ -1797,7 +1799,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
          canvasActive = true;
          this.resumeThread();
          if (showLevelNameMessage) {
-            if (this.showMessage(this.wrapToTwoLines(this.player.a().a()), 1)) {
+            if (this.showMessage(this.wrapToTwoLines(this.player.currentDungeon().a()), 1)) {
                messageShownAt = System.currentTimeMillis();
                messageVisible = true;
             }
@@ -1815,34 +1817,34 @@ public class GameCanvas extends FullCanvas implements Runnable {
    }
 
    // Counts down 3 of Player's timed status ailments (bits 3/4/6 of
-   // Player.r) and applies the matching debuff bit once each expires.
-   // The bit-6 ailment (Terrified) only counts down while a monster is
-   // actively attacking (monsterAttacking).
+   // Player.ailmentMask) and applies the matching debuff bit once each
+   // expires. The bit-6 ailment (Terrified) only counts down while a
+   // monster is actively attacking (monsterAttacking).
    private void tickStatusCountdowns(long elapsed) {
-      if (this.player.i(4)) {
-         this.player.ar = (short)(this.player.ar - elapsed);
-         if (this.player.ar < 0) {
-            this.player.ar = 0;
+      if (this.player.hasAilment(4)) {
+         this.player.trollThirstTimer = (short)(this.player.trollThirstTimer - elapsed);
+         if (this.player.trollThirstTimer < 0) {
+            this.player.trollThirstTimer = 0;
             byte bit = 3;
-            this.player.r = (byte)Util.setBit((int)bit, (int)this.player.r);
+            this.player.ailmentMask = (byte)Util.setBit((int)bit, (int)this.player.ailmentMask);
          }
       }
 
-      if (this.player.i(5)) {
-         this.player.O = (short)(this.player.O - elapsed);
-         if (this.player.O < 0) {
-            this.player.O = 0;
+      if (this.player.hasAilment(5)) {
+         this.player.glacierCurseTimer = (short)(this.player.glacierCurseTimer - elapsed);
+         if (this.player.glacierCurseTimer < 0) {
+            this.player.glacierCurseTimer = 0;
             byte bit = 4;
-            this.player.r = (byte)Util.setBit((int)bit, (int)this.player.r);
+            this.player.ailmentMask = (byte)Util.setBit((int)bit, (int)this.player.ailmentMask);
          }
       }
 
-      if (this.player.i(7) && monsterAttacking) {
-         this.player.J = (short)(this.player.J - elapsed);
-         if (this.player.J < 0) {
-            this.player.J = 0;
+      if (this.player.hasAilment(7) && monsterAttacking) {
+         this.player.terrifiedTimer = (short)(this.player.terrifiedTimer - elapsed);
+         if (this.player.terrifiedTimer < 0) {
+            this.player.terrifiedTimer = 0;
             byte bit = 6;
-            this.player.r = (byte)Util.setBit((int)bit, (int)this.player.r);
+            this.player.ailmentMask = (byte)Util.setBit((int)bit, (int)this.player.ailmentMask);
          }
       }
    }
@@ -1854,38 +1856,38 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // schedules depending on Player.ah -- presumably normal vs. "New
    // Game+").
    private void tickPerSecond() {
-      if (this.player.i(4)) {
-         int drain = 2 * this.player.E[3] / 100;
+      if (this.player.hasAilment(4)) {
+         int drain = 2 * this.player.coreStats[3] / 100;
          drain = Math.max(drain, 0);
-         this.player.E[2] = (short)(this.player.E[2] - drain);
+         this.player.coreStats[2] = (short)(this.player.coreStats[2] - drain);
       }
 
-      if (this.player.i(5)) {
-         int regen = this.player.E[5] / 10;
-         this.player.E[4] = (short)(this.player.E[4] + regen);
-         if (this.player.E[4] >= this.player.E[5]) {
-            this.player.E[4] = 0;
-            int drain = this.player.E[5] / 10;
-            this.player.E[2] = (short)(this.player.E[2] - drain);
+      if (this.player.hasAilment(5)) {
+         int regen = this.player.coreStats[5] / 10;
+         this.player.coreStats[4] = (short)(this.player.coreStats[4] + regen);
+         if (this.player.coreStats[4] >= this.player.coreStats[5]) {
+            this.player.coreStats[4] = 0;
+            int drain = this.player.coreStats[5] / 10;
+            this.player.coreStats[2] = (short)(this.player.coreStats[2] - drain);
          }
       }
 
       for (int i = 0; i < 25; i++) {
-         if (this.player.D[i] > 0) {
-            this.player.D[i]--;
-            if (this.player.D[i] <= 0) {
-               this.player.D[i] = 0;
+         if (this.player.effectDurations[i] > 0) {
+            this.player.effectDurations[i]--;
+            if (this.player.effectDurations[i] <= 0) {
+               this.player.effectDurations[i] = 0;
                if (i == 5) {
-                  int slot = this.player.n(101);
+                  int slot = this.player.findInventorySlotOf(101);
                   if (slot != -1) {
-                     this.player.w(slot);
+                     this.player.removeInventorySlot(slot);
                   }
                }
             }
          }
       }
 
-      Hashtable levelMonsters = ESGame.monsters[this.player.ao - 1];
+      Hashtable levelMonsters = ESGame.monsters[this.player.currentLevel - 1];
       if (levelMonsters != null) {
          Enumeration monsters = levelMonsters.elements();
          Monster scratch = new Monster();
@@ -1903,10 +1905,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
          }
       }
 
-      if (this.player.Q >= 0) {
-         int elapsedSeconds = ++this.player.Q;
+      if (this.player.ambushTimer >= 0) {
+         int elapsedSeconds = ++this.player.ambushTimer;
          byte spawnType = -1;
-         if (this.player.ah) {
+         if (this.player.newGamePlus) {
             switch (elapsedSeconds) {
                case 3:
                   spawnType = 4;
@@ -2003,11 +2005,11 @@ public class GameCanvas extends FullCanvas implements Runnable {
          if (spawnType > 0) {
             int spawnX = 1 + Util.randomInt(17);
 
-            for (int spawnY = 1 + Util.randomInt(17); !this.player.a().a(spawnX, spawnY, spawnType); spawnY = 1 + Util.randomInt(17)) {
+            for (int spawnY = 1 + Util.randomInt(17); !this.player.currentDungeon().a(spawnX, spawnY, spawnType); spawnY = 1 + Util.randomInt(17)) {
                spawnX = 1 + Util.randomInt(17);
             }
 
-            if (ESGame.monsters[this.player.ao - 1].size() > 5) {
+            if (ESGame.monsters[this.player.currentLevel - 1].size() > 5) {
                this.game.endOfGameUI = this.game.newGameOverUI();
                this.game.setCurrentDisplay(this.game.endOfGameUI);
             } else if (this.showMessage(MSG_ENEMY_ARRIVED, 3)) {

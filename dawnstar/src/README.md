@@ -18,24 +18,37 @@ what each class does and how confident each renaming is.
 | `Dungeon.java` | `i.java` | One dungeon level's live state |
 | `Shop.java` | `k.java` | NPC dialogue, shops, quest tracking |
 | `GameCanvas.java` | `e.java` | Renderer + input handler + main tick loop |
+| `Player.java` | `j.java` | Player stats, inventory, combat, spellcasting |
 
-`ESGame` and `Player` (`j.java`) are **not** renamed here -- see
-`CLASS_MAP.md`'s "why e/j aren't renamed yet" for the reason
-(Vineflower's output for `e`/`j` has field names that literally collide
-with the single-letter class names, making a mechanical rename unsafe
-without the same full hand-trace the other classes got). `GameCanvas`
-*is* now renamed (same hand-trace-then-compile-check treatment as the
-other 9), but it still depends on `Player`'s own unrenamed API: any
-value that flows through Player's methods (the current `Dungeon`, the
-targeted `Monster`, etc.) keeps Player's original single-letter type/
-member names rather than the real renamed classes -- see the class
-header comment in `GameCanvas.java` for exactly which fields that
-applies to. Files in this directory that need something from `ESGame`/
-`Player` reference them by their **original** names (`j`, `ESGame` and
-its members) rather than inventing renamed-but-nonexistent APIs.
-`Screen.java`/`LoadingScreen.java` *do* reference the real `GameCanvas`
-type now (their `canvas` field), since that integration was updated
-alongside GameCanvas's own rename.
+All 12 decompiled classes except `ESGame` are now renamed here (`k`
+was Shop, not a 13th class -- see `CLASS_MAP.md`'s class-by-class
+writeup). `Player` was the last one and by far the largest (2668
+lines) -- see `CLASS_MAP.md`'s "why `j`/`ESGame` weren't renamed by
+mechanical means" for why it needed the same full hand-trace treatment
+as `GameCanvas` rather than a mechanical rename.
+
+`ESGame` is **not** renamed here -- its own member names are already
+readable in the decompiled output (no mechanical-rename blocker like
+`e`/`j` had), it just hasn't had its own pass yet (tracked as future
+work). Every other renamed file that needs something from `ESGame`
+references it by its **original** member names (the class itself is
+already called `ESGame`, only some of *its* fields/methods are still
+single-letter) rather than inventing renamed-but-nonexistent APIs.
+`GameCanvas.java` and `Player.java` both fully integrate with each
+other and with `Monster`/`Shop`/`Dungeon`/`Item`/`Spell`/`Util` using
+their real renamed names now -- `Monster.java`, `Shop.java`, and
+`Dungeon.java` were updated alongside Player's own rename pass the same
+way `Screen.java`/`LoadingScreen.java` were updated alongside
+GameCanvas's. The one remaining old-type leak: `Player.currentDungeon()`
+still returns the *old* unrenamed `i` (Dungeon) class, because it just
+forwards `ESGame.dungeons[]`'s element type, which won't become
+`Dungeon[]` until `ESGame` gets its own rename pass -- see
+`Player.java`'s and `GameCanvas.java`'s class header comments for
+exactly where that leak surfaces (one specific call site in
+`GameCanvas.dispatchTickActions` that reaches `Dungeon.tickNearbyMonsters`
+through that old type, which is why `Dungeon.java`'s own
+`tickNearbyMonsters` -- already updated to accept the real `Player`
+type -- is presently unreachable dead code until then).
 
 ## Compile-checked, not just read-through
 
@@ -66,7 +79,7 @@ javac -cp "tools/midp-stubs/*" -d out *.java ngame/midlet/*.java
 Both the renamed files here AND the untouched `decompiled/*.java` need
 to be present together: `e.java`/`j.java`/`ESGame.java` still reference
 `a`-`k` by their original names, so those originals must stay on the
-classpath even though renamed replacements for 9 of them also exist
+classpath even though renamed replacements for all of them also exist
 alongside (different class names, no collision).
 
 **Result (last run while writing `Dungeon.java`/`Monster.java`):** the
@@ -117,3 +130,14 @@ compiler -- this was a semantic swap, not a type error) also caught one
 real transcription mistake in `GameCanvas.java`'s corridor
 object-renderer (`paintObjectAtPosition`): an early draft swapped the
 icon-index and frame-count columns read from `OBJECT_DRAW_TABLE`.
+
+**Re-run after adding `Player.java`:** same error counts and same 7
+files (`a`/`c`/`e`/`h`/`i`/`j`/`ESGame.java`) as every run above --
+`Player.java` itself, and the `GameCanvas.java`/`Monster.java`/
+`Shop.java`/`Dungeon.java` updates needed to integrate with it (Player's
+own methods now use the real `Monster`/`Item`/`Spell`/`Shop`/`Util`
+types and names throughout), all compile with **zero errors**. This is
+the last of the 12 non-`ESGame` classes renamed -- `dawnstar/src/`'s
+only remaining integration debt is the single documented `i`-typed leak
+from `Player.currentDungeon()` (see above), which is expected to
+resolve once `ESGame.java` gets its own rename pass.

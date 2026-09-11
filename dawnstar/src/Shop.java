@@ -1,8 +1,8 @@
 // Renamed from decompiled/k.java. See ../docs/CLASS_MAP.md and
 // ../docs/ASSET_FORMATS.md (npcstrings.dat).
 //
-// NOTE: `j` here is the Player class (decompiled/j.java) -- not yet
-// mechanically renamed, see CLASS_MAP.md's "why e/j aren't renamed yet".
+// `Player` here is the real, already-renamed Player class -- this file
+// was updated alongside Player's own rename pass to integrate directly.
 import java.io.DataInputStream;
 
 public class Shop {
@@ -160,16 +160,16 @@ public class Shop {
    // the current one if already revealed once (2nd+ ask -> a slightly
    // different phrasing citing the previous reveal, see original for
    // the exact `<TAG>` substitution).
-   static String rumorFor(j player, int step) {
-      short revealed = player.au[step][0];
+   static String rumorFor(Player player, int step) {
+      short revealed = player.skills[step][0];
       if (revealed == 0) {
-         player.au[step][0] = 1;
+         player.skills[step][0] = 1;
          String template = dialogue[9][1];
-         return Util.replace(template, "<TAG>", j.ax[step]);
+         return Util.replace(template, "<TAG>", Player.skillNames[step]);
       } else {
-         player.au[step][0] = (short)(revealed + 1);
+         player.skills[step][0] = (short)(revealed + 1);
          String template = dialogue[9][2];
-         String[] values = new String[]{j.ax[step], String.valueOf(revealed), String.valueOf(revealed + 1)};
+         String[] values = new String[]{Player.skillNames[step], String.valueOf(revealed), String.valueOf(revealed + 1)};
          return Util.replace(template, "<TAG>", values);
       }
    }
@@ -182,7 +182,7 @@ public class Shop {
    // level-up-gated dialogue). Exact meaning of each action code beyond
    // what's used here (1/2/3/4/5/8/10/11/12/13/14/15) is inferred from
    // this switch alone, not from the UI call sites choosing them.
-   static String dialogue(j player, int shopId, int action, int extra) {
+   static String dialogue(Player player, int shopId, int action, int extra) {
       switch (shopId) {
          case 0:
          case 1:
@@ -194,13 +194,13 @@ public class Shop {
                int catalogSlot = extra;
                byte itemId = SHOP_STOCK[shopId][catalogSlot];
                int price = Item.column(4, itemId);
-               if (price > player.o) {
+               if (price > player.gold) {
                   return dialogue[shopId][1];
                } else {
                   short spawnId = Item.nextSpawnId();
-                  boolean added = player.a(itemId, spawnId, 0);
+                  boolean added = player.addInventoryItem(itemId, spawnId, 0);
                   if (added) {
-                     player.d(-price);
+                     player.addGold(-price);
                      return dialogue[shopId][2];
                   }
 
@@ -209,14 +209,14 @@ public class Shop {
             } else {
                if (action == 15) {
                   int slot = extra;
-                  int itemId = Math.abs(player.af[slot]);
+                  int itemId = Math.abs(player.inventoryItemIds[slot]);
                   if (Item.column(1, itemId) == 11) {
                      return "Sorry, you may not sell a gift item.  It should be given to one of the champions.";
                   }
 
                   int saleValue = Item.column(5, itemId);
-                  player.d(saleValue);
-                  player.w(slot);
+                  player.addGold(saleValue);
+                  player.removeInventorySlot(slot);
                   return "For that you can have " + saleValue + " gold.";
                }
 
@@ -239,19 +239,19 @@ public class Shop {
                   return dialogue[shopId][4];
                }
 
-               // Player's own quest-skill-check roll (`int c(int,int)`,
-               // not renamed -- see j.java), not Shop's shopActionCode.
-               int outcome = player.c(shopId, action);
+               // Player's own quest-skill-check roll, not Shop's
+               // shopActionCode.
+               int outcome = player.rollShopOutcome(shopId, action);
                if (outcome == 0) {
                   questState1[shopId - 5] = 1;
                } else if (outcome == 1) {
-                  player.b(13, 2);
+                  player.gainSkillExp(13, 2);
                } else if (outcome == 2) {
-                  player.b(13, 5);
+                  player.gainSkillExp(13, 5);
                   rewardsGiven[shopId - 5]++;
                   questState1[shopId - 5] = 1;
                } else if (outcome == 3) {
-                  player.b(13, 8);
+                  player.gainSkillExp(13, 8);
                   rewardsGiven[shopId - 5]++;
                   questState1[shopId - 5] = 1;
                }
@@ -263,19 +263,19 @@ public class Shop {
                   return dialogue[shopId][4];
                }
 
-               int outcome = player.c(shopId, action);
+               int outcome = player.rollShopOutcome(shopId, action);
                int variant = extra <= 1 ? 0 : 1;
                if (outcome == 0) {
                   questState2[shopId - 5] = 2;
                } else if (outcome == 1) {
-                  player.b(13, 2);
+                  player.gainSkillExp(13, 2);
                   questState2[shopId - 5] = 2;
                } else if (outcome == 2) {
-                  player.b(13, 5);
+                  player.gainSkillExp(13, 5);
                   rewardsGiven[shopId - 5]++;
                   questState2[shopId - 5] = 1;
                } else if (outcome == 3) {
-                  player.b(13, 8);
+                  player.gainSkillExp(13, 8);
                   rewardsGiven[shopId - 5]++;
                   questState2[shopId - 5] = 1;
                }
@@ -285,11 +285,11 @@ public class Shop {
             } else if (action == 4) {
                if (questState1[shopId - 5] != 2 && questState2[shopId - 5] != 2) {
                   int slot = extra;
-                  int itemId = Math.abs(player.af[slot]);
+                  int itemId = Math.abs(player.inventoryItemIds[slot]);
                   if (Item.column(1, itemId) == 11) {
                      int flags = questFlagsFor(shopId, itemId);
                      if (flags > 0) {
-                        player.w(slot);
+                        player.removeInventorySlot(slot);
                         rewardsGiven[shopId - 5] = (short)(rewardsGiven[shopId - 5] + flags);
                         questState1[shopId - 5] = 0;
                         questState2[shopId - 5] = 0;
@@ -317,7 +317,7 @@ public class Shop {
             if (action == 1) {
                if (firstVisit[shopId]) {
                   firstVisit[shopId] = false;
-                  player.at = 0;
+                  player.rumorRevealStep = 0;
                   if (showDeathGreeting) {
                      showDeathGreeting = false;
                      return dialogue[4][13] + "\n \n" + dialogue[4][0] + "\n \n" + dialogue[4][1] + "\n \n" + dialogue[4][2];
@@ -325,9 +325,9 @@ public class Shop {
 
                   return dialogue[4][0] + "\n \n" + dialogue[4][1] + "\n \n" + dialogue[4][2];
                } else {
-                  int advancement = ESGame.getGameAdvancementLevel(player.av);
-                  if (advancement > player.at) {
-                     player.at++;
+                  int advancement = ESGame.getGameAdvancementLevel(player.giftPointsFound);
+                  if (advancement > player.rumorRevealStep) {
+                     player.rumorRevealStep++;
                   }
 
                   if (showDeathGreeting) {
@@ -340,22 +340,22 @@ public class Shop {
             } else {
                if (action != 13) {
                   if (action == 10) {
-                     player.r = 0;
+                     player.ailmentMask = 0;
                      return dialogue[shopId][9];
                   }
 
                   if (action == 11) {
-                     if (!player.w()) {
+                     if (!player.hasCampMark()) {
                         return dialogue[shopId][10];
                      }
 
-                     player.d();
+                     player.warpToCampMark();
                      return dialogue[shopId][11];
                   }
 
                   if (action == 12) {
-                     player.E[2] = player.E[3];
-                     player.E[4] = player.E[5];
+                     player.coreStats[2] = player.coreStats[3];
+                     player.coreStats[4] = player.coreStats[5];
                      return dialogue[shopId][12];
                   }
 
@@ -366,21 +366,21 @@ public class Shop {
                int step = 0;
 
                for (; step < 6; step++) {
-                  if (player.ad[90 + step]) {
+                  if (player.eventFlags[90 + step]) {
                      revealedCount++;
                   }
                }
 
                String result = "";
-               if (revealedCount <= player.at) {
-                  result = dialogue[shopId][3 + player.at];
+               if (revealedCount <= player.rumorRevealStep) {
+                  result = dialogue[shopId][3 + player.rumorRevealStep];
                   int pick = 0;
                   if (revealedCount < 6) {
                      pick = Util.randomInt(6 - revealedCount) - 1;
                   }
 
                   for (int i = 0; i < 6; i++) {
-                     if (!player.ad[90 + i]) {
+                     if (!player.eventFlags[90 + i]) {
                         if (pick == 0) {
                            pick = i;
                            break;
@@ -390,8 +390,8 @@ public class Shop {
                      }
                   }
 
-                  player.ad[90 + pick] = true;
-                  result = Util.replace(result, "<TAG>", dialogue[9][5 + RUMOR_STRING_OFFSET[player.ai][pick]]);
+                  player.eventFlags[90 + pick] = true;
+                  result = Util.replace(result, "<TAG>", dialogue[9][5 + RUMOR_STRING_OFFSET[player.traitorIndex][pick]]);
                } else {
                   result = "I have no new rumors.";
                }

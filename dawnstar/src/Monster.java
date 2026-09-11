@@ -1,8 +1,8 @@
 // Renamed from decompiled/d.java. See ../docs/CLASS_MAP.md and
 // ../docs/ASSET_FORMATS.md (monstersin.dat).
 //
-// NOTE: `j` here is the Player class (decompiled/j.java) -- not yet
-// mechanically renamed, see CLASS_MAP.md's "why e/j aren't renamed yet".
+// `Player` here is the real, already-renamed Player class -- this file
+// was updated alongside Player's own rename pass to integrate directly.
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.util.Random;
@@ -265,7 +265,7 @@ public class Monster {
    // Alternates an 800ms "wind-up" phase (aiPhase 0->1) and an action
    // phase (1->2->1) so an attack doesn't land the instant a monster
    // notices the player. Returns true once an attack actually lands.
-   boolean tick(j player, long now) {
+   boolean tick(Player player, long now) {
       boolean act = false;
       if (this.aiPhase == 0) {
          this.timestamp = now;
@@ -281,11 +281,11 @@ public class Monster {
       this.aiPhase = 2;
       this.timestamp = now;
       byte detectionStat = typeStats[this.monsterType - 1][4];
-      int stealth = player.b(true);
+      int stealth = player.weaponSkillValue(true);
       int diff = stealth - detectionStat;
       diff = Math.min(diff, typeStats[this.monsterType - 1][2]);
       int chanceA = typeStats[this.monsterType - 1][3] - diff * 5;
-      int chanceB = player.F() + diff * 5;
+      int chanceB = player.baseEvasion() + diff * 5;
       chanceA = Math.min(Math.max(chanceA, 10), 95);
       chanceB = Math.min(Math.max(chanceB, 10), 95);
       int rollA = Util.randomInt(100);
@@ -315,18 +315,18 @@ public class Monster {
       }
 
       byte attackStat = typeStats[this.monsterType - 1][5];
-      int defense = player.t();
+      int defense = player.armorValue();
       if (outcome == 1) {
          defense = 2 * defense;
       }
 
       int power = attackStat - defense;
       power = Math.max(power, 4);
-      int damage = power * player.E[3] / 100;
-      player.E[2] = (short)(player.E[2] - damage);
-      player.E[2] = (short)Math.max(player.E[2], 0);
+      int damage = power * player.coreStats[3] / 100;
+      player.coreStats[2] = (short)(player.coreStats[2] - damage);
+      player.coreStats[2] = (short)Math.max(player.coreStats[2], 0);
       if (detectedB) {
-         player.b(player.C(), 1);
+         player.gainSkillExp(player.activeWeaponSkillIndex(), 1);
       }
 
       if (outcome < 3) {
@@ -338,16 +338,16 @@ public class Monster {
          byte ailment = typeStats[this.monsterType - 1][11];
          if (ailment > 0) {
             int bit = ailment - 1;
-            player.r = (byte)(player.r | 1 << bit);
+            player.ailmentMask = (byte)(player.ailmentMask | 1 << bit);
             if (ailment != 1) {
                if (ailment == 2) {
                   Dungeon level = ESGame.dungeons[this.dungeonLevel - 1];
                   level.populateRandomMonsters(3);
                } else if (ailment != 3) {
                   if (ailment == 4) {
-                     player.ar = 30000;
+                     player.trollThirstTimer = 30000;
                   } else if (ailment == 5) {
-                     player.O = 30000;
+                     player.glacierCurseTimer = 30000;
                   } else if (ailment != 6 && ailment != 7 && ailment == 8) {
                   }
                }
