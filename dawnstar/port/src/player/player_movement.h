@@ -7,10 +7,14 @@
 
 namespace dawnstar {
 
-// Renamed-source counterpart of ../../../src/Player.java's movement:
-// computeMoveTarget()/commitMove()/move()/isWalkable(). `levels` mirrors
-// ESGame.dungeons[] -- one GeneratedLevel per dungeon level, indexed by
-// levelNumber-1 (see world/dungeon_generator.h).
+// Renamed-source counterpart of ../../../src/Player.java's movement and
+// hub/camp positioning: computeMoveTarget()/commitMove()/move()/
+// isWalkable()/hasCampMark()/resetToHubPosition()/
+// markCampAndReturnToTown()/warpToCampMark() (the latter four added in
+// M18 for combat/combat_resolution.h's UseItem -- see
+// docs/PORT_ROADMAP.md). `levels` mirrors ESGame.dungeons[] -- one
+// GeneratedLevel per dungeon level, indexed by levelNumber-1 (see
+// world/dungeon_generator.h).
 //
 // SIMPLIFIED versus the original (each is a real behavioral gap, not
 // just an implementation detail -- see docs/PORT_ROADMAP.md's M13 entry):
@@ -47,6 +51,30 @@ public:
 
     // Wall(bit0)/blocked(bit5)/monster(bit1) test for a move target tile.
     static bool IsWalkable(uint8_t tileBits);
+
+    // Player.java's hasCampMark(): whether markCampAndReturnToTown has
+    // ever bookmarked a camp point.
+    static bool HasCampMark(const PlayerState& p) { return p.campLevel > 0; }
+
+    // Player.java's resetToHubPosition(altSpawn): repositions to one of
+    // two fixed level-1 entry points (the normal spawn, or the
+    // "returning from camp" alt-spawn just inside the hub's door) and
+    // refreshes the corridor view. SIMPLIFIED: skips the roaming-
+    // special-monster cleanup (no live per-level monster registry, same
+    // gap as Move()'s class comment) and the chest/NPC-visibility
+    // refresh calls (rendering, not ported).
+    static void ResetToHubPosition(PlayerState& p, bool altSpawn, const std::vector<GeneratedLevel>& levels);
+
+    // Player.java's markCampAndReturnToTown(skipMark): bookmarks the
+    // current position (unless skipMark, a path never actually
+    // exercised in the original either -- always called with false) and
+    // returns to the hub via ResetToHubPosition(true).
+    static void MarkCampAndReturnToTown(PlayerState& p, bool skipMark, const std::vector<GeneratedLevel>& levels);
+
+    // Player.java's warpToCampMark(): warps to the bookmarked camp
+    // point. SIMPLIFIED: skips the chest/NPC-visibility refresh calls,
+    // same as ResetToHubPosition.
+    static void WarpToCampMark(PlayerState& p, const std::vector<GeneratedLevel>& levels);
 
 private:
     struct PendingMove {

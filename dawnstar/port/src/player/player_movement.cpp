@@ -145,6 +145,47 @@ bool PlayerMovement::CommitMove(PlayerState& p, int direction, std::vector<Gener
     return true;
 }
 
+void PlayerMovement::ResetToHubPosition(PlayerState& p, bool altSpawn, const std::vector<GeneratedLevel>& levels) {
+    // roaming-special-monster cleanup: SKIPPED, see class comment.
+    if (!altSpawn) {
+        p.currentLevel = 1;
+        p.tileX = 9;
+        p.tileY = 9;
+        p.facing = 1;
+    } else {
+        p.currentLevel = 1;
+        p.tileX = 13;
+        p.tileY = 6;
+        p.facing = 4;
+    }
+
+    RefreshCorridorView(p, levels);
+    // chest/NPC-visibility refresh: SKIPPED, see class comment.
+}
+
+void PlayerMovement::MarkCampAndReturnToTown(PlayerState& p, bool skipMark, const std::vector<GeneratedLevel>& levels) {
+    if (!skipMark) {
+        p.campLevel = static_cast<int8_t>(p.currentLevel);
+        p.campX = static_cast<int8_t>(p.tileX);
+        p.campY = static_cast<int8_t>(p.tileY);
+        p.campFacing = static_cast<int8_t>(p.facing);
+    }
+
+    ResetToHubPosition(p, true, levels);
+    p.suppressStrafeAdjust = true;
+}
+
+void PlayerMovement::WarpToCampMark(PlayerState& p, const std::vector<GeneratedLevel>& levels) {
+    p.currentLevel = p.campLevel;
+    p.tileX = p.campX;
+    p.tileY = p.campY;
+    p.facing = p.campFacing;
+
+    RefreshCorridorView(p, levels);
+    p.suppressStrafeAdjust = true;
+    // chest/NPC-visibility refresh: SKIPPED, see class comment.
+}
+
 void PlayerMovement::RefreshCorridorView(PlayerState& p, const std::vector<GeneratedLevel>& levels) {
     DungeonView view(levels[static_cast<size_t>(p.currentLevel - 1)]);
     uint8_t out[9][5];

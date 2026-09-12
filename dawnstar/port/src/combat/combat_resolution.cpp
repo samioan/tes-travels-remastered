@@ -1,9 +1,12 @@
 #include "combat/combat_resolution.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include "monster/monster_runtime.h"
 #include "player/player_combat_stats.h"
+#include "player/player_inventory.h"
+#include "player/player_movement.h"
 #include "player/player_spellcasting.h"
 
 namespace dawnstar {
@@ -343,6 +346,82 @@ void CombatResolution::CastOnMonster(PlayerState& player, MonsterState& target, 
         if (drain < 1) drain = 1;
         player.coreStats[2] = static_cast<int16_t>(player.coreStats[2] - drain);
     }
+}
+
+void CombatResolution::UseItem(PlayerState& player, int slot, MonsterState* target, const ItemDatabase& items,
+                                const MonsterDatabase& monsterDb, std::vector<GeneratedLevel>& levels,
+                                JavaRandom& globalRng) {
+    int itemId = std::abs(static_cast<int>(player.inventoryItemIds[slot]));
+    int8_t category = items.category[static_cast<size_t>(itemId - 1)];
+    if (category != 13) return;
+
+    bool consume = true;
+    switch (itemId) {
+        case 87:
+            if (player.currentLevel == 1 && PlayerMovement::HasCampMark(player)) {
+                PlayerMovement::WarpToCampMark(player, levels);
+                break;
+            }
+            PlayerMovement::MarkCampAndReturnToTown(player, false, levels);
+            break;
+        case 88:
+            PlayerSpellcasting::CureRandomAilment(player, globalRng);
+            break;
+        case 89:
+            player.coreStats[2] = player.coreStats[3];
+            break;
+        case 90:
+            player.coreStats[4] = player.coreStats[5];
+            break;
+        case 91:
+            player.coreStats[6] = static_cast<int16_t>(player.coreStats[6] + 3 * player.coreStats[5]);
+            break;
+        case 92:
+            player.coreStats[1]++;
+            break;
+        case 93:
+            player.coreStats[2] = player.coreStats[3];
+            player.coreStats[4] = player.coreStats[5];
+            break;
+        case 94:
+            player.increaseHarmBuff = true;
+            break;
+        case 95:
+            player.increaseArmorBuff = true;
+            break;
+        case 96:
+            player.safeCampingBuff = true;
+            consume = false;
+            break;
+        case 97:
+            if (target != nullptr) {
+                int def = MonsterRuntime::Stat(*target, monsterDb, 4);
+                int evasion = MonsterRuntime::Stat(*target, monsterDb, 10);
+                if (def <= 13 && evasion <= 13) target->hp = 0;
+                // target.store(): SKIPPED, see this method's doc comment.
+            }
+            break;
+        case 98:
+            if (target != nullptr) {
+                int def = MonsterRuntime::Stat(*target, monsterDb, 4);
+                int evasion = MonsterRuntime::Stat(*target, monsterDb, 10);
+                if (def <= 22 && evasion <= 22) target->hp = 0;
+                // target.store(): SKIPPED.
+            }
+            break;
+        case 99:
+            if (target != nullptr) {
+                int def = MonsterRuntime::Stat(*target, monsterDb, 4);
+                int evasion = MonsterRuntime::Stat(*target, monsterDb, 10);
+                if (def <= 29 && evasion <= 29) target->hp = 0;
+                // target.store(): SKIPPED.
+            }
+            break;
+        default:
+            break;
+    }
+
+    if (consume) PlayerInventory::RemoveSlot(player, items, slot);
 }
 
 }  // namespace dawnstar

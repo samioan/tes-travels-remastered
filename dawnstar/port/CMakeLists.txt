@@ -161,3 +161,7 @@ target_link_libraries(spellcasting_smoke PRIVATE dawnstar_combat)
 # M17 milestone smoke test -- see src/tests/m17_summary_save_smoke.cpp.
 add_executable(summary_save_smoke src/tests/m17_summary_save_smoke.cpp)
 target_link_libraries(summary_save_smoke PRIVATE dawnstar_player)
+
+# M18 milestone smoke test -- see src/tests/m18_use_item_smoke.cpp.
+add_executable(use_item_smoke src/tests/m18_use_item_smoke.cpp)
+target_link_libraries(use_item_smoke PRIVATE dawnstar_combat)

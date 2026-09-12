@@ -98,4 +98,9 @@ bool PlayerInventory::EquipLastPickedUpItem(PlayerState& p, const ItemDatabase& 
     return Equip(p, items, slot, autoUnequipConflict);
 }
 
+bool PlayerInventory::CanUseItem(const PlayerState& p, const ItemDatabase& items, int slot) {
+    int itemId = std::abs(static_cast<int>(p.inventoryItemIds[slot]));
+    return items.category[static_cast<size_t>(itemId - 1)] == 13;
+}
+
 }  // namespace dawnstar

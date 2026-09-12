@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <vector>
 
 #include "assets/character_data.h"
 #include "assets/item_database.h"
@@ -8,6 +9,7 @@
 #include "monster/monster_state.h"
 #include "player/player_state.h"
 #include "util/java_random.h"
+#include "world/dungeon_generator.h"
 
 namespace dawnstar {
 
@@ -61,6 +63,29 @@ public:
     static void CastOnMonster(PlayerState& player, MonsterState& target, const CharacterData& charData,
                                const ItemDatabase& items, const MonsterDatabase& monsterDb,
                                const SpellDatabase& spells, JavaRandom& globalRng);
+
+    // Player.useItem(slot, target): the fourth entry point that needs
+    // both Player and Monster -- its 97/98/99 instant-kill scrolls read
+    // `target`'s stat(4)/stat(10) and, if the roll-free threshold check
+    // passes, zero its hp directly (`target.hp = 0`, not TakeDamage --
+    // ported exactly, bypassing whatever TakeDamage's own clamping does).
+    // `target` is nullable, matching Java's `Monster target` (null when
+    // called from ESGame's inventory screen with no monster targeted;
+    // GameCanvas.targetMonster itself isn't ported, so the 1-arg
+    // useItem(slot) overload that reads it isn't either -- callers pass
+    // whatever target they have, or nullptr). Every other item id (87-96)
+    // is Player-only: 87 (warp-to-camp-or-mark) delegates to
+    // player/player_movement.h's HasCampMark/WarpToCampMark/
+    // MarkCampAndReturnToTown (hence the `levels` parameter), 88 to
+    // player/player_spellcasting.h's CureRandomAilment (hence
+    // `globalRng`). Every used item is consumed (removed from its slot)
+    // afterward except 96 ("Safe Camping"), which the original
+    // deliberately leaves in the inventory -- ported via the same
+    // `consume` flag the original uses. SIMPLIFIED: like the other
+    // combat entry points, skips target.store().
+    static void UseItem(PlayerState& player, int slot, MonsterState* target, const ItemDatabase& items,
+                         const MonsterDatabase& monsterDb, std::vector<GeneratedLevel>& levels,
+                         JavaRandom& globalRng);
 };
 
 }  // namespace dawnstar

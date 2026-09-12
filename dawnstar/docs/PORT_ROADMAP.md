@@ -703,16 +703,68 @@ milestone rather than just read-through.
       classes and to NOT happen for the three classes with no starting
       spells at all. All checks passed.
 
+- [x] **M18 -- the "gift"/special-consumable `useItem` switch and the
+      camp system** (this session). `CombatResolution::UseItem`
+      (`combat/combat_resolution.h`/`.cpp`) ports `Player.java`'s
+      `useItem(slot, target)`: the 87-99 "gift" item switch (warp/mark
+      camp, ailment cure, HP/Magicka/Fatigue/level-exp restoratives,
+      harm/armor/safe-camping buffs, and three instant-kill scrolls
+      gated on a monster's difficulty stats). Items 97-99 need a live
+      `Monster` target, so -- like `PlayerAttack`/`MonsterTick`/
+      `CastOnMonster` before it -- this is the fourth entry point that
+      needs both `Player` and `Monster`, and it lives in `combat/` for
+      the same reason those three do. `PlayerInventory::CanUseItem`
+      (the `canUseItem()` menu gate, Player-only) went into
+      `player_inventory.h` instead, alongside its sibling gating
+      methods.
+
+      Item 87 ("Warp to Camp") needed the camp/hub-positioning system
+      `Player.java` keeps as its own small cluster of methods
+      (`hasCampMark`/`resetToHubPosition`/`markCampAndReturnToTown`/
+      `warpToCampMark`) -- these went into `player/player_movement.h`
+      (position management is already that module's job, and
+      `resetToHubPosition` reuses its existing private
+      `RefreshCorridorView` directly, no new dependency needed).
+      SIMPLIFIED the same way `PlayerMovement`'s existing methods
+      already are: the roaming-special-monster cleanup and rendering-
+      refresh calls (chest/NPC visibility) are no-ops, for the same
+      reasons documented in that header's class comment.
+
+      Nothing here needed fixing or reinterpreting -- every branch
+      ported directly matches the source, including two habits worth
+      noting even though they aren't bugs: item 91's Fatigue restore
+      (`+3*maxMagicka`) has no upper clamp against `maxFatigue` (unlike
+      most of this codebase's other stat changes), and item 92's
+      level-exp point is a bare `coreStats[1]++` with no level-up check
+      of its own (unlike `PlayerCombatStats::GainSkillExp`, which does
+      check).
+
+      Verified via `use_item_smoke.exe` (no JVM ground truth, same
+      reason as M6/M9/M11/M13/M14/M15/M16/M17) against the real 37-level
+      generated world, real `ItemDatabase`/`MonsterDatabase` data, a real
+      character (M11's `PlayerCreation`), and real spawned monsters
+      (M15's `MonsterRuntime::Spawn`): confirmed all of ids 87-99 are
+      really category-13 in the real item table; every camp-system
+      method checked for its exact position/flag effects, including both
+      branches of item 87 (mark vs. warp); each of items 88-96 checked
+      individually (including 96's real, singular "not consumed"
+      exception, and the unclamped/no-level-up-check quirks above);
+      items 97/98/99 checked against monster types found by directly
+      querying real `MonsterRuntime::Stat` data for one type within and
+      one type beyond the instant-kill threshold, plus an explicit
+      null-target call (matching the original's own `Monster target`
+      nullability) to confirm it's still handled safely and the item is
+      still consumed. All checks passed.
+
 ## Milestones next
 
-- [ ] **M18 and beyond (not yet planned in detail):** the inventory/
-      equip-menu-gating methods `player_inventory.h` didn't need yet
-      (`dropInventoryItem`, the "gift"/special-consumable `useItem`
-      switch); object/monster/chest/NPC sprites and the HUD/minimap
-      (`GameCanvas.paintGameView()`'s other calls, now that the base
-      corridor view renders, the player can move through it, and combat
-      resolves); and finally `ESGame`'s own screen-wiring loop tying it
-      all together. Each gets its own milestone once the shape of "how
-      much fits in one slice" is clearer -- following `shadowkey-decomp`'s
-      pattern of not over-planning milestones far in advance of actually
-      reaching them.
+- [ ] **M19 and beyond (not yet planned in detail):** `dropInventoryItem`
+      (needs a live dropped-item registry, the same gap `player_movement.h`
+      and `monster_runtime.h` already carry); object/monster/chest/NPC
+      sprites and the HUD/minimap (`GameCanvas.paintGameView()`'s other
+      calls, now that the base corridor view renders, the player can
+      move through it, and combat resolves); and finally `ESGame`'s own
+      screen-wiring loop tying it all together. Each gets its own
+      milestone once the shape of "how much fits in one slice" is
+      clearer -- following `shadowkey-decomp`'s pattern of not over-
+      planning milestones far in advance of actually reaching them.

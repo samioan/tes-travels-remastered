@@ -7,7 +7,7 @@ namespace dawnstar {
 // Renamed-source counterpart of ../../../src/Player.java's inventory
 // slot/equip-state management: addInventoryItem()/removeInventorySlot()/
 // unequipInventorySlot()/isEquipped()/canEquipOrUnequip()/equipItem()/
-// equipLastPickedUpItem(). Split out of player/player_creation.h (which
+// equipLastPickedUpItem()/canUseItem(). Split out of player/player_creation.h (which
 // used to carry small private copies of AddInventoryItem/EquipItem/
 // UnequipItemInSlot for grantStartingItems()) so player/
 // player_spellcasting.h's castOnSelf (spell 6's "cure poison" scroll
@@ -51,6 +51,14 @@ public:
 
     // Equips the most-recently-added inventory item (inventoryCount-1).
     static bool EquipLastPickedUpItem(PlayerState& p, const ItemDatabase& items, bool autoUnequipConflict);
+
+    // Gates the "Use" inventory-item menu option (M18): true only for
+    // the 87-99 "gift"/special-consumable category (13) -- Player.java's
+    // canUseItem(). The actual use logic (useItem()) needs a Monster
+    // target for its instant-kill items (97/98/99), so it lives in
+    // combat/combat_resolution.h instead, alongside PlayerAttack/
+    // MonsterTick/CastOnMonster.
+    static bool CanUseItem(const PlayerState& p, const ItemDatabase& items, int slot);
 };
 
 }  // namespace dawnstar
