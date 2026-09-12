@@ -29,6 +29,7 @@
 #include "player/player_state.h"
 #include "player/visible_objects.h"
 #include "render/frame_renderer.h"
+#include "render/hotbar_renderer.h"
 #include "render/hud_renderer.h"
 #include "render/message_popup.h"
 #include "render/minimap_renderer.h"
@@ -117,6 +118,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::MonsterImageNames monsterImageNames = dawnstar::MonsterImageNames::Load(archive);
         dawnstar::VisibleObjectTextures visibleObjectTextures =
             dawnstar::VisibleObjectTextures::Load(imageArchive, monsterImageNames);
+        dawnstar::HotbarTextures hotbarTextures = dawnstar::HotbarTextures::Load(imageArchive);
 
         // M22/M23's live per-level monster/chest/dropped-item registry.
         // M24 populates it with every level's pre-placed monster/chest
@@ -204,6 +206,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     // comment for why); the showMessage half is here.
                     const std::array<uint8_t, 8>* chest =
                         dawnstar::PlayerMovement::ChestInFront(player, levels, world);
+                    // M31: persisted for HotbarRenderer::ComputeHotbarContext
+                    // (see player/player_state.h's own doc comment on why).
+                    player.chestInSight = chest != nullptr;
                     if (chest != nullptr) {
                         dawnstar::MessagePopup::Show(messagePopup, {"Chest", ""}, 1, nowMs);
                     }
@@ -252,9 +257,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                     player.npcInSight);
             }
             dawnstar::HudRenderer::PaintStatusBars(backbuffer, player, charData);
-            // paintGameView()'s own paintMessagePopup() call (hotbar
-            // itself is still not ported, see docs/PORT_ROADMAP.md) --
-            // M30.
+            // paintGameView()'s own paintHotbar() call -- M31.
+            // `monsterTargeted` is always false here: nothing in this
+            // port sets it yet (see render/hotbar_renderer.h's own doc
+            // comment).
+            int hotbarContext =
+                dawnstar::HotbarRenderer::ComputeHotbarContext(false, player.chestInSight, player.npcInSight);
+            dawnstar::HotbarRenderer::Paint(backbuffer, hotbarTextures, hotbarContext);
+            // paintGameView()'s own paintMessagePopup() call -- M30.
             dawnstar::MessagePopup::Paint(backbuffer, messagePopup);
             // paintGameView()'s own actual LAST drawing step (outside
             // its own try block, after paintMessagePopup/

@@ -177,6 +177,16 @@ struct PlayerState {
     // event, so main.cpp's own one-time setup plays that role instead).
     bool minimapDirty = true;
     bool minimapZoomedOut = false;
+
+    // --- M31: GameCanvas.chestInSight. Same GameCanvas-static-folded-in
+    // reasoning as npcInSight above -- but unlike M30 (which only ever
+    // needed ChestInFront's own one-off pointer, read once inside the
+    // tick-gated move block to fire a showMessage call), M31's
+    // HotbarRenderer::ComputeHotbarContext needs this value every frame
+    // (paintHotbar runs unconditionally, not just on a movement tick),
+    // so it has to be persisted here rather than kept as a purely local
+    // per-tick value.
+    bool chestInSight = false;
 };
 
 }  // namespace dawnstar

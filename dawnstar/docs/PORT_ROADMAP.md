@@ -1554,14 +1554,74 @@ milestone rather than just read-through.
       confirming the whole pipeline end-to-end before the diagnostic
       was removed.
 
+- [x] **M31 -- the hotbar panel** (this session). Closes the last piece
+      of M22's long-flagged hotbar/message-popup pair (the message
+      popup half landed in M30). Ports `GameCanvas.paintHotbar()`/
+      `computeHotbarContext()`/`drawHotbarIcon()` (`HotbarRenderer`,
+      `render/hotbar_renderer.h`/`.cpp`): the bottom panel background
+      (`panel.png`, real 176x52, drawn unscaled at (0,156), exactly
+      filling the 176x208 backbuffer's last 52 rows) plus 4 fixed-
+      position numeric-key prompts, each a digit char (a black "shadow"
+      1px down-right of a white fill, exactly reproducing the original's
+      own two-pass `drawChar` calls) and an icon frame from `icons.png`
+      (real 270x24 -- 9 icons, 30px each, confirmed against the real
+      archive rather than assumed; its 24px height exactly matches
+      `drawHotbarIcon`'s own clip height, so `Backbuffer::Blit`'s
+      existing `[clipX0, clipX1)` range alone reproduces the original's
+      `setClip(x, y, 30, 24)` with no separate vertical clip needed).
+
+      `BitmapFont` (M30) gains 0-9 (10 more hand-authored glyphs, 40
+      total) for `HOTBAR_DIGIT_CHARS` -- same invented-shape status as
+      every other glyph there, no original digit bitmap to recover
+      either.
+
+      `ComputeHotbarContext` is `computeHotbarContext()` transcribed
+      directly: monster-targeted (combat hotbar) beats chest/NPC-in-
+      sight (interact hotbar) beats neither (explore hotbar) -- a real
+      if/else priority order, not an AND of all three conditions.
+      `monsterTargeted` is passed as a plain parameter rather than
+      folded into `PlayerState` as a 4th instance of M28/M29's own
+      GameCanvas-statics precedent, because nothing in this port ever
+      sets it yet: `GameCanvas.monsterTargeted` is only ever written by
+      the combat attack-targeting flow, which isn't wired into the live
+      tick loop -- adding a field nothing writes would just be dead
+      state. Every real call site (`main.cpp`) passes `false` until that
+      wiring lands. `chestInSight`, by contrast, IS added to
+      `PlayerState` (unlike M30, which only ever needed
+      `ChestInFront`'s one-off pointer inside the tick-gated move block
+      to fire a `showMessage` call, `paintHotbar` itself runs every
+      frame, not just on a movement tick, so this value has to be
+      persisted rather than kept purely local).
+
+      NOT ported here or anywhere yet: `paintActionFlashes()`
+      (`monsterHitFlash`/`spellHitFlash`/`selfSpellFlash`, also
+      `drawHotbarIcon`-based, but driven by the same unwired combat
+      flow) and the `keyPressed()` dispatch that reads `hotbarContext`
+      back (`attackRequested`/`interactRequested`/`campRequested` --
+      same reason).
+
+      Verified via the new `hotbar_renderer_smoke.exe`: real
+      `icons.png`/`panel.png` dimensions confirmed against the archive;
+      `ComputeHotbarContext`'s full priority-order truth table; each of
+      the 3 contexts' panel background, all 4 icon positions (sampling
+      each icon's own first opaque pixel within its 30px frame, not just
+      "some sprite pixel"), and digit glyph placement (independently
+      hand-traced from the new digit glyph rows, not read back from
+      `hotbar_renderer.cpp`). All checks passed. Full clean rebuild zero
+      warnings; all 31 smoke tests pass. Also rendered two real frames
+      via a temporary diagnostic (a real created character standing in
+      the real hub level) confirming context 0 (explore) and context 2
+      (chest-in-sight) visually -- panel, all 4 icons, and legible digit
+      prompts, with the expected single-icon swap between the two
+      contexts' last slot -- before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M31 and beyond (not yet planned in detail):** the hotbar panel,
-      the only piece of M22's original hotbar/message-popup pair still
-      open. Every other `showMessage()` call site beyond the 3 M30
-      wired up remains unreachable until attack/spellcast/camp/menu
-      actions are themselves wired into the live tick loop. Monster
-      death-drops (`Monster.onDeath()` -> `DungeonRuntime::
+- [ ] **M32 and beyond (not yet planned in detail):** every remaining
+      `showMessage()` call site beyond the 3 M30 wired up stays
+      unreachable until attack/spellcast/camp/menu actions are
+      themselves wired into the live tick loop. Monster death-drops
+      (`Monster.onDeath()` -> `DungeonRuntime::
       AddDroppedItem`) still has no wiring, since `onDeath()` itself is
       only ever called from `GameCanvas`, not from `Player`/`Monster`'s
       own methods -- genuinely blocked on the screen-wiring milestone

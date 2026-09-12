@@ -44,24 +44,26 @@ add_library(dawnstar_world STATIC
 target_include_directories(dawnstar_world PUBLIC src)
 target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 
-# M9/M10/M21/M26/M27/M28/M29/M30: corridor rendering + the HUD
+# M9/M10/M21/M26/M27/M28/M29/M30/M31: corridor rendering + the HUD
 # status-bar overlay + the far/mid/close monster-chest-dropped-item-NPC
 # sprite renderer (now also the closest slot's monster sprite/stairs
-# icon, NPC portraits, the minimap, and the message popup) -- see
-# docs/PORT_ROADMAP.md, src/render/, src/world/dungeon_view.h. M29's
-# minimap_renderer.cpp is the second module (after player/
-# player_movement.cpp) needing both a live WorldRegistry
+# icon, NPC portraits, the minimap, the message popup, and the bottom
+# hotbar panel) -- see docs/PORT_ROADMAP.md, src/render/, src/world/
+# dungeon_view.h. M29's minimap_renderer.cpp is the second module (after
+# player/player_movement.cpp) needing both a live WorldRegistry
 # (dawnstar_dungeon) and rendering (dawnstar_render) at once -- no cycle
 # results, since dawnstar_dungeon doesn't depend back on dawnstar_render.
 # M30's graphics/bitmap_font.cpp (a hand-authored pixel font -- see its
 # own doc comment) is compiled directly into this library too, the same
 # "no separate library needed for a header-only-adjacent utility only
 # one consumer needs" precedent src/platform/win32/window.cpp already
-# set for dawnstar_port itself.
+# set for dawnstar_port itself. M31's hotbar_renderer.cpp reuses that
+# same font (digits, extended for this milestone).
 add_library(dawnstar_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
   src/render/frame_renderer.cpp
+  src/render/hotbar_renderer.cpp
   src/render/message_popup.cpp
   src/render/minimap_renderer.cpp
   src/render/visible_object_renderer.cpp
@@ -245,3 +247,7 @@ target_link_libraries(minimap_smoke PRIVATE dawnstar_render)
 # M30 milestone smoke test -- see src/tests/m30_message_popup_smoke.cpp.
 add_executable(message_popup_smoke src/tests/m30_message_popup_smoke.cpp)
 target_link_libraries(message_popup_smoke PRIVATE dawnstar_render)
+
+# M31 milestone smoke test -- see src/tests/m31_hotbar_renderer_smoke.cpp.
+add_executable(hotbar_renderer_smoke src/tests/m31_hotbar_renderer_smoke.cpp)
+target_link_libraries(hotbar_renderer_smoke PRIVATE dawnstar_render)

@@ -30,6 +30,10 @@ namespace dawnstar {
 // extracted item/monster names and Shop.NAMES (confirmed by a
 // temporary diagnostic dump, not assumed) is one of space/'/-/! or a
 // letter.
+//
+// M31 adds 0-9 (10 more glyphs, 40 total) for GameCanvas.
+// HOTBAR_DIGIT_CHARS, the hotbar panel's own numeric prompts -- same
+// hand-authored, invented-shape status as every other glyph here.
 namespace BitmapFont {
 
 constexpr int kGlyphWidth = 4;

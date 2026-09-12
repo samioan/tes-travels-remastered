@@ -14,7 +14,7 @@ namespace {
 // character advance for real popup content to wrap the way
 // bitmap_font.h's own kAdvance doc comment explains.
 // clang-format off
-constexpr uint8_t kGlyphRows[30][7] = {
+constexpr uint8_t kGlyphRows[40][7] = {
     // space
     {0b0000, 0b0000, 0b0000, 0b0000, 0b0000, 0b0000, 0b0000},
     // '
@@ -75,6 +75,26 @@ constexpr uint8_t kGlyphRows[30][7] = {
     {0b1001, 0b1001, 0b0110, 0b0100, 0b0100, 0b0100, 0b0100},
     // Z
     {0b1111, 0b0001, 0b0010, 0b0100, 0b1000, 0b1000, 0b1111},
+    // 0 (M31, for the hotbar's HOTBAR_DIGIT_CHARS)
+    {0b0110, 0b1001, 0b1001, 0b1001, 0b1001, 0b1001, 0b0110},
+    // 1
+    {0b0010, 0b0110, 0b0010, 0b0010, 0b0010, 0b0010, 0b0111},
+    // 2
+    {0b0110, 0b1001, 0b0001, 0b0010, 0b0100, 0b1000, 0b1111},
+    // 3
+    {0b1111, 0b0001, 0b0010, 0b0110, 0b0001, 0b1001, 0b0110},
+    // 4
+    {0b0010, 0b0110, 0b1010, 0b1010, 0b1111, 0b0010, 0b0010},
+    // 5
+    {0b1111, 0b1000, 0b1110, 0b0001, 0b0001, 0b1001, 0b0110},
+    // 6
+    {0b0110, 0b1000, 0b1000, 0b1110, 0b1001, 0b1001, 0b0110},
+    // 7
+    {0b1111, 0b0001, 0b0010, 0b0010, 0b0100, 0b0100, 0b0100},
+    // 8
+    {0b0110, 0b1001, 0b1001, 0b0110, 0b1001, 0b1001, 0b0110},
+    // 9
+    {0b0110, 0b1001, 0b1001, 0b0111, 0b0001, 0b0001, 0b0110},
 };
 // clang-format on
 
@@ -87,6 +107,7 @@ int GlyphIndex(char c) {
     if (c == '!') return 3;
     char upper = (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
     if (upper >= 'A' && upper <= 'Z') return 4 + (upper - 'A');
+    if (c >= '0' && c <= '9') return 30 + (c - '0');
     return -1;
 }
 
