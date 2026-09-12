@@ -1347,20 +1347,127 @@ milestone rather than just read-through.
 
 ## Milestones next
 
-- [ ] **M29 and beyond (not yet planned in detail):** the hotbar panel/
-      message popup/minimap M22's own entry already flagged (M28's own
-      SIMPLIFIED note above -- the shop-greeting popup specifically --
-      is now blocked on this too). Monster death-drops
-      (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`) still has
-      no wiring, since `onDeath()` itself is only ever called from
-      `GameCanvas`, not from `Player`/`Monster`'s own methods --
-      genuinely blocked on the screen-wiring milestone below, not
-      something a registry-only milestone can close. And finally
-      `ESGame`'s own screen-wiring loop (character creation, menus,
-      dialogue, shops -- the full `Shop.dialogue()` dispatcher traced
-      while scoping M28 is still unported, only its `npcstrings.dat`
-      text itself loads so far, M8) tying it all together in place of
-      M20's fixed stand-in character. Each gets its own milestone once
-      the shape of "how much fits in one slice" is clearer -- following
-      `shadowkey-decomp`'s pattern of not over-planning milestones far
-      in advance of actually reaching them.
+- [x] **M29 -- the minimap** (this session). Ports `GameCanvas.
+      sampleSquareView()` (`DungeonRuntime::SampleSquareView`,
+      `dungeon/dungeon_runtime.h`/`.cpp`) and `refreshMinimap()`/
+      `paintMinimapGrid()`/`paintGameView()`'s own minimap-compositing
+      step (`MinimapSurface`/`MinimapRenderer`,
+      `render/minimap_renderer.h`/`.cpp`) -- closing the "minimap" third
+      of M22's long-flagged hotbar/message-popup/minimap entry (the
+      other two remain open).
+
+      `SampleSquareView` needed a live `WorldRegistry` (to test a seen
+      monster's own `flag`) alongside `world/dungeon_view.h`'s
+      `DungeonView::TileAt` (M19) -- the same "needs two existing
+      sibling modules at once" shape `dungeon/dungeon_runtime.h` itself,
+      `player/player_movement.cpp`, and `combat/combat_resolution.cpp`
+      already have, so it lives on `DungeonRuntime` (`dawnstar_dungeon`,
+      which already depends on `dawnstar_world`) rather than beside
+      `SampleCorridorView` in `dawnstar_world` itself, which cannot
+      depend back on `dawnstar_dungeon` without cycling.
+      `render/minimap_renderer.cpp` is the second module (after
+      `player/player_movement.cpp`) needing both `dawnstar_dungeon` and
+      rendering at once, so `dawnstar_render` gained a direct link to
+      `dawnstar_dungeon` too (previously only reached transitively
+      through `dawnstar_player`).
+
+      SIMPLIFIED: the compass glyph GameCanvas draws right alongside the
+      minimap image in both zoom states (`g.drawChar(COMPASS_GLYPHS[...]
+      , ...)`) is NOT ported -- it's real MIDP built-in-font text
+      rendering, and this port still has no text-rendering system at
+      all (the same underlying reason every message-popup call site
+      across M13-M28 has been SIMPLIFIED away, not something specific to
+      the minimap). The minimap-zoom-toggle key (`key == 42`, MIDP's
+      numeric-keypad `*`) is remapped to `'M'` for a PC keyboard, with
+      real edge-detection against a held key (unlike movement, which
+      polls every tick on purpose) since the original's `keyPressed()`
+      is a one-shot event, not a per-tick poll -- not a behavior
+      simplification, the same kind of physical-key remap
+      VK_UP/DOWN/LEFT/RIGHT already are.
+
+      **Two real, faithfully-preserved bugs found while transcribing
+      `paintMinimapGrid`, both the same classic Java trap** (`<<` binds
+      looser than `+`, so `a + b << c` parses as `(a + b) << c`, not
+      `a + (b << c)`):
+      1. The background fill's size, `gridSize*cellSize+border << 1`,
+         evaluates to `(gridSize*cellSize+border) << 1` -- DOUBLE the
+         apparently-intended `gridSize*cellSize + 2*border` (44 instead
+         of 23 when zoomed in; 174 instead of 89 when zoomed out).
+         Proven observable (not merely theoretical) by pre-dirtying a
+         fresh `MinimapSurface` and confirming a real `Refresh()` call
+         actually erases a marker pixel at (35,35) -- inside the buggy
+         44px reach, outside the "intended" 23px one -- while a pixel at
+         (60,60), outside even the buggy reach, survives untouched.
+      2. The very next `drawRect`'s size uses `<< 0` (a no-op) instead
+         of doubling `border` either, so the white outer border is
+         exactly `border` pixels short of `gridSize*cellSize + 2*border`
+         -- missing its own second border-width on the right/bottom
+         edge. Also proven observable: the border's real (buggy) right
+         edge sits at x=22 (zoomed in), not x=23 where a correctly
+         doubled computation would have put it.
+      3. A related, purely arithmetic finding: `border==2`'s (zoomed-out
+         only) INNER `drawRect` call has a literal `<<-1` in the source.
+         Java's `<<` masks its shift amount to the low 5 bits (JLS
+         15.19), so `<<-1` means `<<31`, not a right-shift or a no-op --
+         for this call's one real value (`base`=87, odd), that comes out
+         to exactly `Integer.MIN_VALUE`. Reproduced with an unsigned
+         intermediate (C++ gives UB for a negative/out-of-range shift
+         count) and absorbed as a no-op by `MinimapSurface::DrawRect`'s
+         own non-positive-dimension guard -- a reasonable stand-in for
+         "undefined MIDP behavior no real device's `drawRect` contract
+         covers anyway," not an attempt to reproduce one vendor's exact
+         garbage output.
+      4. Also independently deduced (not tested -- see the reasoning
+         directly in `minimap_renderer.cpp`'s own `PaintMinimapGrid` doc
+         comment): bug 1's background-fill overshoot is completely
+         UNOBSERVABLE in the zoomed-out case specifically, because both
+         the buggy value (174) and the "intended" correct one
+         (`17*5+2*2=89`) meet or exceed the 89px surface, converging to
+         "fill the whole surface" either way. It's only bug-vs-intended-
+         DISTINGUISHABLE in the zoomed-in case (22 vs 23 not compared to
+         44 vs 89), which is exactly the case this milestone's test
+         exercises.
+
+      Also a real, faithfully-ported quirk in `sampleSquareView` itself:
+      its monster-presence lookup always queries the registry for the
+      level SAMPLING STARTED from, using the sampled tile's own raw
+      (possibly cross-level-stitched) coordinates -- so right at a level
+      boundary, a neighboring level's real tile bits can show up on the
+      minimap without ever resolving to a "seen monster" red square (see
+      `DungeonRuntime::SampleSquareView`'s own doc comment).
+
+      Verified via the new `minimap_smoke.exe`: pure `MinimapSurface`
+      primitive checks (`FillRect`/`DrawRect` clipping and inclusive-
+      corner shape, no game data needed); both real size bugs above,
+      demonstrated precisely via a pre-dirtied surface and a real
+      `Refresh()` call; `SampleSquareView` against real generated chest/
+      no-spawn-room/seen-monster positions (centered in the sample
+      window, so the center cell always maps back to the sampled
+      position regardless of facing -- no col/row math needed to
+      predict where to look); and `Composite`'s ailment-3 visibility
+      gate plus its zoomed-in-clipped-to-23x23 vs. zoomed-out-full-89x89
+      draw. All checks passed. Full clean rebuild zero warnings; all 28
+      smoke tests pass; the real windowed app re-verified via screen
+      capture in BOTH zoom states (including pressing 'M' live to
+      confirm the toggle itself works).
+
+## Milestones next
+
+- [ ] **M30 and beyond (not yet planned in detail):** the hotbar panel/
+      message-popup pair of M22's own entry (the minimap third is now
+      closed, M29) -- the shop-greeting popup M28's own SIMPLIFIED note
+      flagged is blocked on the message-popup half specifically.
+      Monster death-drops (`Monster.onDeath()` ->
+      `DungeonRuntime::AddDroppedItem`) still has no wiring, since
+      `onDeath()` itself is only ever called from `GameCanvas`, not from
+      `Player`/`Monster`'s own methods -- genuinely blocked on the
+      screen-wiring milestone below, not something a registry-only
+      milestone can close. And finally `ESGame`'s own screen-wiring loop
+      (character creation, menus, dialogue, shops -- the full
+      `Shop.dialogue()` dispatcher traced while scoping M28 is still
+      unported, only its `npcstrings.dat` text itself loads so far, M8)
+      tying it all together in place of M20's fixed stand-in character.
+      Each gets its own milestone once the shape of "how much fits in
+      one slice" is clearer -- following `shadowkey-decomp`'s pattern of
+      not over-planning milestones far in advance of actually reaching
+      them.

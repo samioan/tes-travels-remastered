@@ -172,6 +172,36 @@ public:
     // this port yet, since there's no save/load of a WorldRegistry
     // itself).
     static void RefreshTileFlags(GeneratedLevel& level, const WorldRegistry& world, int levelIndex);
+
+    // Dungeon.sampleSquareView(x,y,direction,size,out) -- the minimap's
+    // own widening-window tile sample (M29, render/minimap_renderer.h),
+    // a close cousin of world/dungeon_view.h's SampleCorridorView but
+    // re-mapping each sampled tile's raw bits into 4 minimap categories
+    // (wall/monster-seen/"special"/no-spawn-room) instead of passing
+    // them through -- and, unlike SampleCorridorView, needing a live
+    // WorldRegistry (to test a seen monster's own `flag`), which is
+    // exactly why this lives here (dawnstar_dungeon) rather than
+    // alongside SampleCorridorView in world/dungeon_view.h: that header
+    // is part of dawnstar_world, which dawnstar_dungeon already depends
+    // on -- the reverse (world/dungeon_view.h including
+    // dungeon/dungeon_runtime.h for WorldRegistry) would cycle. `out` is
+    // sized to the largest real caller (17x17, the zoomed-out minimap);
+    // only `[0,size)x[0,size)` is written.
+    //
+    // A real, faithfully-preserved quirk: the monster-presence lookup
+    // always queries `world.monsters[levelIndex]` (the level sampling
+    // STARTED from) using the sampled tile's own raw, unstitched (x,y)
+    // -- even for a sampled tile that DungeonView::TileAt actually
+    // resolved from a neighboring level (near a level's edge, sampling a
+    // window this size can reach past its bounds). So right at a level
+    // boundary, a neighboring level's real "monster area" tile bit can
+    // show up on the minimap, yet never actually resolve to a red "seen
+    // monster" square (the lookup key never matches anything in the
+    // wrong level's own registry) -- ported exactly as Dungeon.java
+    // shapes it, not "corrected" to consult the neighbor's own registry.
+    static void SampleSquareView(const std::vector<GeneratedLevel>& levels, int levelIndex, int x, int y,
+                                  int direction, int size, const WorldRegistry& world,
+                                  std::array<std::array<uint8_t, 17>, 17>& out);
 };
 
 }  // namespace dawnstar

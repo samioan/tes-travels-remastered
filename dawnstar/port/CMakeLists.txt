@@ -44,18 +44,23 @@ add_library(dawnstar_world STATIC
 target_include_directories(dawnstar_world PUBLIC src)
 target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 
-# M9/M10/M21/M26/M27/M28: corridor rendering + the HUD status-bar
+# M9/M10/M21/M26/M27/M28/M29: corridor rendering + the HUD status-bar
 # overlay + the far/mid/close monster-chest-dropped-item-NPC sprite
-# renderer (now also the closest slot's monster sprite/stairs icon and
-# NPC portraits) -- see docs/PORT_ROADMAP.md, src/render/,
-# src/world/dungeon_view.h.
+# renderer (now also the closest slot's monster sprite/stairs icon, NPC
+# portraits, and the minimap) -- see docs/PORT_ROADMAP.md, src/render/,
+# src/world/dungeon_view.h. M29's minimap_renderer.cpp is the second
+# module (after player/player_movement.cpp) needing both a live
+# WorldRegistry (dawnstar_dungeon) and rendering (dawnstar_render) at
+# once -- no cycle results, since dawnstar_dungeon doesn't depend back
+# on dawnstar_render.
 add_library(dawnstar_render STATIC
   src/render/corridor_render_plan.cpp
   src/render/frame_renderer.cpp
+  src/render/minimap_renderer.cpp
   src/render/visible_object_renderer.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
-target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player)
+target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon)
 
 # M11/M12/M13/M14/M16/M17/M23/M25/M28: player character creation + full
 # save format + movement (now also touching the live world registry for
@@ -225,3 +230,7 @@ target_link_libraries(object_at_position_smoke PRIVATE dawnstar_render)
 # M28 milestone smoke test -- see src/tests/m28_npc_portrait_smoke.cpp.
 add_executable(npc_portrait_smoke src/tests/m28_npc_portrait_smoke.cpp)
 target_link_libraries(npc_portrait_smoke PRIVATE dawnstar_render)
+
+# M29 milestone smoke test -- see src/tests/m29_minimap_smoke.cpp.
+add_executable(minimap_smoke src/tests/m29_minimap_smoke.cpp)
+target_link_libraries(minimap_smoke PRIVATE dawnstar_render)

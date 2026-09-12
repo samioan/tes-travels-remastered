@@ -168,6 +168,15 @@ struct PlayerState {
     // loop directly instead). Shop id (0-8) of the NPC directly in
     // front of the player, or -1.
     int npcInSight = -1;
+
+    // --- M29: GameCanvas.minimapDirty/minimapZoomedOut (see
+    // render/minimap_renderer.h). Same GameCanvas-static-folded-in
+    // reasoning as npcInSight just above. minimapDirty starts true
+    // (GameCanvas.showNotify()'s own unconditional dirty on first
+    // becoming visible -- this port has no separate "canvas shown"
+    // event, so main.cpp's own one-time setup plays that role instead).
+    bool minimapDirty = true;
+    bool minimapZoomedOut = false;
 };
 
 }  // namespace dawnstar

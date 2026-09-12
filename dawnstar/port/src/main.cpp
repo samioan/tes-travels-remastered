@@ -28,6 +28,7 @@
 #include "player/visible_objects.h"
 #include "render/frame_renderer.h"
 #include "render/hud_renderer.h"
+#include "render/minimap_renderer.h"
 #include "render/visible_object_renderer.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
@@ -70,7 +71,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     dawnstar::Window window(dawnstar::Backbuffer::kWidth * 2, dawnstar::Backbuffer::kHeight * 2,
                              L"Dawnstar Port");
     dawnstar::Backbuffer backbuffer;
+    dawnstar::MinimapSurface minimap;
     dawnstar::GameClock clock;
+    // GameCanvas.keyPressed()'s `key == 42` handler (minimap zoom
+    // toggle) fires once per physical key-down transition, not once per
+    // 250ms tick like movement -- edge-detected here (rather than
+    // reusing KeyPressed's held-key polling as-is) so holding the key
+    // doesn't rapid-toggle every tick. Remapped from the original's
+    // numeric-keypad '*' to 'M' for a PC keyboard; not a behavior
+    // simplification, just a different physical key for the same
+    // one-shot toggle (same spirit as VK_UP/DOWN/LEFT/RIGHT already
+    // standing in for whatever the original's own arrow/game-action keys
+    // were).
+    bool zoomKeyWasDown = false;
 
     // Same default-relative-path convention every console smoke test
     // uses (see e.g. tests/m10_frame_render_smoke.cpp) -- this exe also
@@ -109,6 +122,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             dawnstar::PlayerCreation::CreateCharacter(0, "Traveler", charData, items, globalRng);
 
         window.RunMessageLoop([&] {
+            // Sampled every loop iteration rather than gated behind
+            // clock.ConsumeTick(): the original's keyPressed() event
+            // fires immediately on a physical key-down, independent of
+            // the 250ms game tick, so polling it at full framerate is
+            // the more faithful reproduction here (its actual effect --
+            // minimapDirty -- is still only ever consumed inside the
+            // tick-gated block below, same as the original).
+            bool zoomKeyDown = KeyPressed('M');
+            if (zoomKeyDown && !zoomKeyWasDown) {
+                player.minimapZoomedOut = !player.minimapZoomedOut;
+                player.minimapDirty = true;
+            }
+            zoomKeyWasDown = zoomKeyDown;
+
             if (clock.ConsumeTick()) {
                 // GameCanvas.run()'s own steady-250ms-tick cadence (see
                 // engine/game_clock.h) is also when the real key state
@@ -137,12 +164,21 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // right after player.move() with no success check).
                 if (moveAttempted) {
                     dawnstar::PlayerMovement::RefreshNpcInSight(player, levels, world);
+                    // commitMove()'s own unconditional `this.minimapDirty
+                    // = true;` right after refreshNpcInSight -- M29.
+                    player.minimapDirty = true;
                 }
 
                 // GameCanvas.run()'s own per-tick order: movement first,
                 // then Player.tickVisibleObjects() (M25) -- unconditional
                 // every tick, not just on a movement tick.
                 dawnstar::VisibleObjects::Tick(player, levels, world);
+
+                // run()'s own "if (minimapDirty) refreshMinimap()" gate,
+                // right after tickVisibleObjects -- M29.
+                if (player.minimapDirty) {
+                    dawnstar::MinimapRenderer::Refresh(minimap, player, levels, world);
+                }
             }
 
             dawnstar::DungeonView view(levels, player.currentLevel - 1);
@@ -157,6 +193,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                     player.npcInSight);
             }
             dawnstar::HudRenderer::PaintStatusBars(backbuffer, player, charData);
+            // paintGameView()'s own last drawing step -- M29.
+            dawnstar::MinimapRenderer::Composite(backbuffer, minimap, player);
             window.Present(backbuffer);
         });
     } catch (const std::exception&) {

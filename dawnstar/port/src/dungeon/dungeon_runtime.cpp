@@ -191,4 +191,51 @@ void DungeonRuntime::RefreshTileFlags(GeneratedLevel& level, const WorldRegistry
     }
 }
 
+void DungeonRuntime::SampleSquareView(const std::vector<GeneratedLevel>& levels, int levelIndex, int x, int y,
+                                      int direction, int size, const WorldRegistry& world,
+                                      std::array<std::array<uint8_t, 17>, 17>& out) {
+    DungeonView view(levels, levelIndex);
+    int half = size / 2;
+    const auto& monsterMap = world.monsters[static_cast<size_t>(levelIndex)];
+
+    for (int row = 0; row < size; row++) {
+        for (int col = 0; col < size; col++) {
+            int sx, sy;
+            if (direction == 1 || direction == 3) {
+                int sign = direction == 1 ? 1 : -1;
+                sx = x + (col - half) * sign;
+                sy = y + (row - half) * sign;
+            } else {
+                int sign = direction == 2 ? 1 : -1;
+                sx = x - (row - half) * sign;
+                sy = y + (col - half) * sign;
+            }
+
+            uint8_t tile = view.TileAt(sx, sy);
+            uint8_t value = static_cast<uint8_t>(tile & 1);
+            if ((value & 1) == 0) {
+                if ((tile & 4) == 0 && (tile & 16) == 0 && (tile & 32) == 0) {
+                    value = static_cast<uint8_t>(tile & 8);
+                } else {
+                    value = static_cast<uint8_t>(value | 4);
+                }
+
+                if ((tile & 2) != 0) {
+                    // See this method's own header doc comment: the
+                    // lookup always uses `levelIndex`'s own registry and
+                    // the raw (sx, sy), even when TileAt actually
+                    // resolved `tile` from a neighboring level.
+                    auto it = monsterMap.find(PackPosKey(sx, sy));
+                    if (it != monsterMap.end()) {
+                        MonsterState m = MonsterRuntime::FromBytes(it->second);
+                        if (m.flag) value = static_cast<uint8_t>(value | 2);
+                    }
+                }
+            }
+
+            out[static_cast<size_t>(col)][static_cast<size_t>(row)] = value;
+        }
+    }
+}
+
 }  // namespace dawnstar
