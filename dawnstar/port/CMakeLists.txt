@@ -9,11 +9,21 @@ if(MSVC)
   add_compile_options(/W4 /utf-8)
 endif()
 
-# M2/M3/M4/M7/M8: asset foundations -- see docs/PORT_ROADMAP.md and
+# M10: vendored stb_image (PNG decoding) -- see
+# third_party/stb/PROVENANCE.md.
+add_library(stb_image STATIC third_party/stb/stb_image_impl.cpp)
+target_include_directories(stb_image PUBLIC third_party/stb)
+if(MSVC)
+  # Vendored third-party source, not held to this project's own /W4.
+  target_compile_options(stb_image PRIVATE /W3)
+endif()
+
+# M2/M3/M4/M7/M8/M10: asset foundations -- see docs/PORT_ROADMAP.md and
 # src/assets/.
 add_library(dawnstar_assets STATIC
   src/assets/character_data.cpp
   src/assets/dat_archive.cpp
+  src/assets/decoded_image.cpp
   src/assets/dungeon_geometry.cpp
   src/assets/help_text.cpp
   src/assets/img_archive.cpp
@@ -23,6 +33,7 @@ add_library(dawnstar_assets STATIC
   src/assets/spell_database.cpp
 )
 target_include_directories(dawnstar_assets PUBLIC src)
+target_link_libraries(dawnstar_assets PRIVATE stb_image)
 
 # M6: procedural dungeon generation -- see docs/PORT_ROADMAP.md and
 # src/world/.
@@ -32,10 +43,11 @@ add_library(dawnstar_world STATIC
 target_include_directories(dawnstar_world PUBLIC src)
 target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 
-# M9: corridor wall-segment selection logic -- see docs/PORT_ROADMAP.md
-# and src/render/, src/world/dungeon_view.h.
+# M9/M10: corridor rendering -- see docs/PORT_ROADMAP.md, src/render/,
+# src/world/dungeon_view.h.
 add_library(dawnstar_render STATIC
   src/render/corridor_render_plan.cpp
+  src/render/frame_renderer.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world)
@@ -85,3 +97,7 @@ target_link_libraries(dialogue_smoke PRIVATE dawnstar_assets)
 # M9 milestone smoke test -- see src/tests/m9_corridor_plan_smoke.cpp.
 add_executable(corridor_plan_smoke src/tests/m9_corridor_plan_smoke.cpp)
 target_link_libraries(corridor_plan_smoke PRIVATE dawnstar_render)
+
+# M10 milestone smoke test -- see src/tests/m10_frame_render_smoke.cpp.
+add_executable(frame_render_smoke src/tests/m10_frame_render_smoke.cpp)
+target_link_libraries(frame_render_smoke PRIVATE dawnstar_render)

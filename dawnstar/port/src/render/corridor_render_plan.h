@@ -26,8 +26,21 @@ enum class WallTexture { kWall, kWallIce, kGate };
 
 struct WallDrawCall {
     WallTexture texture = WallTexture::kWall;
+    // Image draw origin -- can legitimately land far outside [0,
+    // screenWidth) (even negative), because the *visible* portion is
+    // whatever of the image falls inside the clip window below, not
+    // wherever this origin itself sits.
     int x = 0;
     int y = 0;
+    // GameCanvas.drawWallSegment()'s `g.setClip(x, 0, 18, screenHeight)`
+    // -- a fixed 18px-wide screen column, positioned at the corridor
+    // step's own x (step*18), i.e. NOT the same x as the field above:
+    // the original draws the full texture at `x` (offset by
+    // WALL_DRAW_OFFSETS[frame], possibly an extra -18) and lets the clip
+    // rect crop it down to just this step's column. A renderer consuming
+    // this must clip to [clipX, clipX+18) when blitting, not just draw at
+    // (x,y) directly.
+    int clipX = 0;
 };
 
 class CorridorRenderPlan {

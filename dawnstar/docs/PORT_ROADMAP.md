@@ -295,15 +295,46 @@ milestone rather than just read-through.
       coincidentally producing the same output regardless of facing.
       `corridor_plan_smoke.exe`.
 
+- [x] **M10 -- real rendered frames** (this session). Vendored
+      `stb_image.h` (`port/third_party/stb/`, see its own
+      `PROVENANCE.md` -- pinned commit, dual MIT/public-domain, same
+      rationale `shadowkey-decomp` vendored `puff`/`stb_vorbis` for: a
+      small well-known library for a solved problem rather than a
+      from-scratch PNG/DEFLATE decoder). `DecodedImage`
+      (`port/src/assets/decoded_image.h`/`.cpp`) decodes M7's raw PNG
+      bytes to RGBA8; `Backbuffer::Blit()` (`port/src/graphics/
+      backbuffer.h`) composites a `DecodedImage` onto the RGB565
+      backbuffer with binary (on/off) transparency -- matching real MIDP
+      hardware this old, which doesn't alpha-blend PNGs either -- and an
+      optional column clip range; `FrameRenderer`
+      (`port/src/render/frame_renderer.h`/`.cpp`) ties it together with
+      M9's `CorridorRenderPlan`: black background, the floor loop
+      (ice/plain by dungeon number, default no-`Player`-ailment path
+      only), then every wall/gate segment blitted with its own 18px clip
+      window (`GameCanvas.drawWallSegment()`'s `g.setClip(x, 0, 18,
+      screenHeight)` -- M9 had missed that this clip position is a
+      *different* value than the image's draw origin; fixed there as
+      part of this milestone, see `WallDrawCall::clipX`).
+
+      **First real rendered frames of the actual game** -- verified by
+      looking at them, same spirit as M7: a real M6-generated level's
+      stairway corridor renders as a correctly-perspective receding ice
+      corridor (walls narrowing toward a vanishing point, tiled floor);
+      the hub town (level 1) renders with the *plain* brick/cobblestone
+      textures instead of ice, confirming `dungeonNumber`-based texture
+      selection; and a small room's door tile renders as an
+      immediate close-up wall, consistent with M9's own finding that
+      small rooms don't leave much room to see down. `frame_render_smoke.exe`
+      writes an uncompressed BMP (no encoder dependency needed) for
+      direct viewing.
+
 ## Milestones next
 
-- [ ] **M10 and beyond (not yet planned in detail):** a real PNG decoder
-      (likely vendoring a small, well-known library the way
-      `shadowkey-decomp` vendored `puff`/`stb_vorbis`, rather than writing
-      one from scratch) to finally turn M7's raw PNG bytes and M9's
-      draw-call plan into an actual rendered frame on the M1 `Backbuffer`;
-      the rest of `Player`'s runtime instance state (stats/inventory/
-      equipment/combat) and the save format; and finally `ESGame`'s own
+- [ ] **M11 and beyond (not yet planned in detail):** the rest of
+      `Player`'s runtime instance state (stats/inventory/equipment/
+      combat) and the save format; object/monster/chest/NPC sprites and
+      the HUD/minimap (`GameCanvas.paintGameView()`'s other calls, now
+      that the base corridor view renders); and finally `ESGame`'s own
       screen-wiring loop tying it all together. Each gets its own
       milestone once the shape of "how much fits in one slice" is clearer
       -- following `shadowkey-decomp`'s pattern of not over-planning

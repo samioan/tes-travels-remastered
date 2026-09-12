@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
                     continue;
                 }
                 for (const auto& call : calls) {
-                    std::printf(" %s@%d", TextureName(call.texture), call.x);
+                    std::printf(" %s@x=%d/clip=%d", TextureName(call.texture), call.x, call.clipX);
                 }
                 std::printf("\n");
             }

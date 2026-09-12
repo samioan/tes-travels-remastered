@@ -40,6 +40,10 @@ WallDrawCall DrawWallSegment(int frame, int x, int wallType, bool& wallDrawnNear
     WallDrawCall call;
     call.y = wallType == -1 ? 8 : 0;
     call.texture = wallType == -1 ? WallTexture::kGate : (wallType != 1 ? WallTexture::kWallIce : WallTexture::kWall);
+    // g.setClip(x, 0, 18, screenHeight) in the original -- always this
+    // step's own column, regardless of which draw-origin formula below
+    // ends up used.
+    call.clipX = x;
 
     if (frame != 0 && frame != 1) {
         wallDrawnNear = false;
