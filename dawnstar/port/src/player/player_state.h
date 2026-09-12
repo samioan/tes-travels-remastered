@@ -120,6 +120,13 @@ struct PlayerState {
     // yet, so always false in practice), consumed by the next Move()
     // call to skip its strafe turn-back step.
     bool suppressStrafeAdjust = false;
+
+    // --- M14: touched by PlayerCombatStats::GainSkillExp. Consumed
+    // elsewhere by ESGame's level-up UI, not ported yet.
+    bool levelUpPending = false;
+    // Set once grantStarFrostItem has run (that method isn't ported
+    // yet); read by SkillValue's +4 bonus.
+    bool starFrostBonusActive = false;
 };
 
 }  // namespace dawnstar

@@ -52,12 +52,14 @@ add_library(dawnstar_render STATIC
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world)
 
-# M11/M12/M13: player character creation + full save format + movement
-# -- see docs/PORT_ROADMAP.md and src/player/.
+# M11/M12/M13/M14: player character creation + full save format +
+# movement + combat/skill stat math -- see docs/PORT_ROADMAP.md and
+# src/player/.
 add_library(dawnstar_player STATIC
   src/player/player_creation.cpp
   src/player/player_save.cpp
   src/player/player_movement.cpp
+  src/player/player_combat_stats.cpp
 )
 target_include_directories(dawnstar_player PUBLIC src)
 target_link_libraries(dawnstar_player PUBLIC dawnstar_assets dawnstar_world)
@@ -123,3 +125,7 @@ target_link_libraries(player_save_smoke PRIVATE dawnstar_player)
 # M13 milestone smoke test -- see src/tests/m13_player_movement_smoke.cpp.
 add_executable(player_movement_smoke src/tests/m13_player_movement_smoke.cpp)
 target_link_libraries(player_movement_smoke PRIVATE dawnstar_player)
+
+# M14 milestone smoke test -- see src/tests/m14_player_combat_stats_smoke.cpp.
+add_executable(player_combat_stats_smoke src/tests/m14_player_combat_stats_smoke.cpp)
+target_link_libraries(player_combat_stats_smoke PRIVATE dawnstar_player)

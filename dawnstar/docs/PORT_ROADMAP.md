@@ -452,15 +452,54 @@ milestone rather than just read-through.
       independently hand-traced copy of `computeMoveTarget`'s formula,
       matching exactly. All checks passed.
 
+- [x] **M14 -- player combat/skill stat math** (this session).
+      `PlayerCombatStats` (`port/src/player/player_combat_stats.h`/`.cpp`)
+      ports the entirely self-contained half of `Player.java`'s combat
+      system -- `skillValue()`/`skillBonus()`/`weaponSkillValue()`/
+      `baseEvasion()`/`bestArmorSkillIndex()`/`activeWeaponSkillIndex()`/
+      `offhandSkillIndex()`/`attackPower()`/`attackAccuracy()`/
+      `weaponDamage()`/`armorValue()`/`isEffectActive()`/`clearEffect()`/
+      `hasAilment()`/`gainSkillExp()`, plus the static `rollOutcome()`
+      hit-tier roll -- deliberately *not* `attack()` itself, which needs a
+      live `Monster` target (`stat()`/`takeDamage()`/`store()`) this port
+      has no runtime counterpart for yet (only M3/M6's static
+      `MonsterDatabase`/generation-time spawn list). Splitting the combat
+      system exactly along this line let a real, useful slice land now
+      instead of waiting on a full Monster port. `PlayerState` grew
+      `levelUpPending`/`starFrostBonusActive` (touched by this milestone's
+      code, their real producers -- `grantStarFrostItem()`,
+      `ESGame`'s level-up UI -- not ported yet).
+
+      Preserved verbatim rather than tidied: `armorValue()` only sums
+      equip slots 1-5's magnitude column (weighted 4/2/2/1/1, `/10`) --
+      slot 6 is never read, exactly as the Java source has it.
+
+      Verified via `player_combat_stats_smoke.exe` with no JVM ground
+      truth available (same reason as M6/M9/M11/M13): `isEffectActive`'s
+      three duration conventions (-1/-2/>0) and `hasAilment`'s bit test
+      checked directly; `gainSkillExp` checked against a hand-computed
+      multi-rank-up-in-one-call case (+25 exp triggering 3 rank-ups, an
+      attribute flag, and a level-up in a single call); `rollOutcome`
+      checked bit-exact (build on M5's proven `JavaRandom`) against 4
+      chance combinations chosen to force each of its 4 outcome branches
+      regardless of the actual dice, plus 2 that compare against an
+      independently-drawn hand trace of the same roll; and all the
+      equipment-dependent stats checked for all 7 classes' real starting
+      gear (M11) against an independently-transcribed copy of the
+      category-to-skill dispatch table, plus targeted checks that each
+      effect/buff bonus (harm/armor buffs, effects 1/2/14/17) actually
+      applies on top of a real character's base stats. All checks passed.
+
 ## Milestones next
 
-- [ ] **M14 and beyond (not yet planned in detail):** `Player`'s combat
-      and spellcasting, and the lightweight "character summary" save
-      format M12 deferred; object/monster/chest/NPC sprites and the
-      HUD/minimap (`GameCanvas.paintGameView()`'s other calls, now that
-      the base corridor view renders and the player can actually move
-      through it); and finally `ESGame`'s own screen-wiring loop tying it
-      all together. Each gets its own milestone once the shape of "how
-      much fits in one slice" is clearer -- following `shadowkey-decomp`'s
-      pattern of not over-planning milestones far in advance of actually
-      reaching them.
+- [ ] **M15 and beyond (not yet planned in detail):** a Monster runtime
+      port (so `Player.attack()` itself, and the rest of combat, has
+      something to resolve against) and `Player`'s spellcasting; the
+      lightweight "character summary" save format M12 deferred;
+      object/monster/chest/NPC sprites and the HUD/minimap
+      (`GameCanvas.paintGameView()`'s other calls, now that the base
+      corridor view renders and the player can actually move through it);
+      and finally `ESGame`'s own screen-wiring loop tying it all together.
+      Each gets its own milestone once the shape of "how much fits in one
+      slice" is clearer -- following `shadowkey-decomp`'s pattern of not
+      over-planning milestones far in advance of actually reaching them.
