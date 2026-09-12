@@ -107,6 +107,22 @@ public:
     // NOT the level number itself, a permutation (see
     // Dungeon.DIFFICULTY_TIER_LOOKUP's doc comment in the Java source).
     static int InitTier(int levelNumber);
+
+    // Dungeon.MONSTER_TABLE[tierIndex][bucket] (tierIndex = tier - 1,
+    // bucket 0-3): a single public accessor onto the same table
+    // PopulateLevel's own room-monster placement already reads
+    // internally, so monster/monster_runtime.h's PickMonsterType (M15)
+    // -- the port's counterpart of Monster.spawn(), which the real
+    // DungeonGenerator.java actually calls rather than inlining this
+    // dispatch itself -- has one place to read it from instead of a
+    // second copy of the table. PopulateLevel's own inline copy of the
+    // tier-roll/bucket arithmetic (not the table) is left as its own
+    // small, harmless duplication of PickMonsterType's identical logic:
+    // swapping it for an actual call would make dawnstar_world depend on
+    // the monster module, which would need dawnstar_world back (for
+    // DungeonView) -- not worth a library dependency cycle for 5 lines
+    // of duplicated arithmetic over a single-sourced table.
+    static int MonsterTypeForTierBucket(int tierIndex, int bucket);
 };
 
 }  // namespace dawnstar

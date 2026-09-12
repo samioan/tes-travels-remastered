@@ -66,6 +66,16 @@ public:
     static bool HasAilment(const PlayerState& p, int ailmentNumber) {
         return (p.ailmentMask & (1 << (ailmentNumber - 1))) != 0;
     }
+    // Player.java's fatigueCostMultiplier(): 3x while "Frost Limbs"
+    // (ailment bit 0) is active, else 1x. Public (unlike the other
+    // methods here that are internal helpers) since combat/
+    // combat_resolution.h's PlayerAttack needs it too --
+    // player/player_movement.cpp keeps its own small pre-existing copy
+    // (predates this method's move to a public API) rather than being
+    // churned to call this one, the same kind of harmless single-
+    // formula duplication as world/dungeon_generator.h's
+    // MonsterTypeForTierBucket doc comment discusses.
+    static int FatigueCostMultiplier(const PlayerState& p) { return (p.ailmentMask & 1) == 1 ? 3 : 1; }
 
     // Adds `amount` skill exp, rolling every full 10 points into +1 skill
     // rank (each rank-up also flags the governing attribute for its next

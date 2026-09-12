@@ -30,6 +30,22 @@ public:
         return level_.tiles[x][y];
     }
 
+    // Dungeon.java's isWalkable(int,int) -- NOT the same rule as
+    // Player.isWalkable(byte) (player/player_movement.h)! This one does
+    // its own bounds check and additionally treats bit 8 (no-spawn
+    // special room) as blocking -- used by Monster movement (monsters
+    // can't wander into a no-spawn room), whereas Player.isWalkable is
+    // tested against a tile the caller already knows is in-bounds and
+    // doesn't care about bit 8 at all.
+    bool IsWalkable(int x, int y) const {
+        if (x < 0 || y < 0 || x >= level_.width || y >= level_.height) return false;
+        uint8_t flags = level_.tiles[x][y];
+        if ((flags & 1) != 0) return false;
+        if ((flags & 2) != 0) return false;
+        if ((flags & 8) != 0) return false;
+        return (flags & 32) == 0;
+    }
+
     // Dungeon.java's sampleCorridorView(): a widening-diamond sample of
     // tile bits ahead of (x,y) facing `direction` (1=N,2=E,3=S,4=W),
     // for the first-person corridor renderer's per-column occlusion

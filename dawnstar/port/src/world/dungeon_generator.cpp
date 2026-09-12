@@ -279,6 +279,8 @@ int DungeonGenerator::InitTier(int levelNumber) {
     return 1;
 }
 
+int DungeonGenerator::MonsterTypeForTierBucket(int tierIndex, int bucket) { return kMonsterTable[tierIndex][bucket]; }
+
 GeneratedLevel DungeonGenerator::BuildHubLevel(const DungeonGeomRow& geomRow) {
     GeneratedLevel level;
     level.number = 1;

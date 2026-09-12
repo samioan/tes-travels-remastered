@@ -64,6 +64,23 @@ add_library(dawnstar_player STATIC
 target_include_directories(dawnstar_player PUBLIC src)
 target_link_libraries(dawnstar_player PUBLIC dawnstar_assets dawnstar_world)
 
+# M15: monster runtime state/AI/combat-support (everything except
+# tick()/attack(), which need both Player and Monster -- see
+# src/combat/) -- see docs/PORT_ROADMAP.md and src/monster/.
+add_library(dawnstar_monster STATIC
+  src/monster/monster_runtime.cpp
+)
+target_include_directories(dawnstar_monster PUBLIC src)
+target_link_libraries(dawnstar_monster PUBLIC dawnstar_assets dawnstar_world)
+
+# M15: the two combat entry points needing both Player and Monster --
+# see docs/PORT_ROADMAP.md and src/combat/.
+add_library(dawnstar_combat STATIC
+  src/combat/combat_resolution.cpp
+)
+target_include_directories(dawnstar_combat PUBLIC src)
+target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster)
+
 # M1: real tick loop + backbuffer + present -- see docs/PORT_ROADMAP.md and
 # src/engine/, src/graphics/, src/platform/win32/.
 add_executable(dawnstar_port WIN32
@@ -129,3 +146,7 @@ target_link_libraries(player_movement_smoke PRIVATE dawnstar_player)
 # M14 milestone smoke test -- see src/tests/m14_player_combat_stats_smoke.cpp.
 add_executable(player_combat_stats_smoke src/tests/m14_player_combat_stats_smoke.cpp)
 target_link_libraries(player_combat_stats_smoke PRIVATE dawnstar_player)
+
+# M15 milestone smoke test -- see src/tests/m15_monster_combat_smoke.cpp.
+add_executable(monster_combat_smoke src/tests/m15_monster_combat_smoke.cpp)
+target_link_libraries(monster_combat_smoke PRIVATE dawnstar_combat)

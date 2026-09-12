@@ -490,16 +490,83 @@ milestone rather than just read-through.
       effect/buff bonus (harm/armor buffs, effects 1/2/14/17) actually
       applies on top of a real character's base stats. All checks passed.
 
+- [x] **M15 -- Monster runtime + combat resolution** (this session).
+      `MonsterState`/`MonsterRuntime` (`port/src/monster/`) port
+      `Monster.java` in full except `tick()`/`attack()`'s Monster-side
+      half; a new `CombatResolution` (`port/src/combat/`) holds those two
+      -- `Player.attack(Monster)` and `Monster.tick(Player, now)` -- since
+      each needs both `Player` and `Monster` state. Splitting it this way
+      keeps `player/` and `monster/` siblings with no dependency on each
+      other (mirroring M14's split of combat stats away from `attack()`
+      itself); only `combat/` depends on both, and only `dawnstar_world`
+      (needed for `DungeonView`/tile data) is a shared dependency
+      underneath. Ported: spawn/type-selection, the packed 28-byte
+      `toBytes`/`fromBytes` record *and* the separate unpacked
+      `readFrom`/`writeTo` stream format (two genuinely different
+      serializations in the source), movement + stairway-tile detection,
+      chase AI (with its own 1-in-5 move cadence, distinct from
+      `tick()`'s 800ms wind-up cadence), and death-loot rolling.
+
+      **A real, deliberately-preserved distinction found while
+      transcribing this class:** `Monster.java`'s own methods read its
+      static `typeStats` table two different ways depending on which
+      method. `stat(column)` (the public accessor `Player.attack()`
+      calls via `target.stat(...)`) masks every byte `& 0xFF`. But
+      `tick()` and `onDeath()` bypass `stat()` entirely and read
+      `typeStats[...]` directly as a private field of their own class --
+      getting the *raw signed byte* instead. These give different `int`
+      values whenever a column's stored byte is >=128 as an unsigned
+      reading. `MonsterRuntime::Stat()` (masked) and `::RawStat()` (raw)
+      keep both conventions distinct and route every call site to the
+      one the real method actually used -- `CombatResolution::PlayerAttack`
+      uses `Stat()`, `::MonsterTick`/`MonsterRuntime::OnDeath` use
+      `RawStat()`.
+
+      **A second real finding, caught by testing every generated level
+      rather than just one:** `isStairwayTile()`'s cascading if-chain
+      checks stairway directions in a fixed priority order (N, then S,
+      then W, then E) using `stairsUpDir`/`stairsDownDir` together. A
+      level whose up-stairway and down-stairway point in two *different*
+      directions can only ever register the higher-priority one at this
+      method -- e.g. an up-stair East + down-stair West level's East
+      coordinate (30,17) never reads as a stairway, because the chain's
+      West check (`stairsDownDir==4`) is reached and returns first. This
+      is a real property of the original nested-if, not a bug introduced
+      here; ported byte-for-byte rather than "fixed" into an
+      order-independent check.
+
+      Verified via `monster_combat_smoke.exe` against the real 37-level
+      generated world (no JVM ground truth, same reason as M6/M9/M11/
+      M13/M14): `PickMonsterType` checked against an independently
+      hand-traced tier/bucket roll; `Spawn`/`IsUndead`/`TakeDamage`
+      checked directly; both save formats round-tripped at sign-bit
+      boundaries (a negative `spawnId`, `hp=0xFF`, a negative
+      `timestamp`); `Move` checked for tile-bit mutation and blocking;
+      `IsStairwayTile` cross-checked for *all 37 levels x all 4 canonical
+      coordinates* against an independently-transcribed copy of the
+      cascading logic (this is what caught the priority-order finding
+      above); `Chase`'s 1-in-5 cadence checked exactly over 10 calls;
+      `OnDeath` checked for a valid, correctly-flagged guaranteed drop;
+      and `PlayerAttack`/`MonsterTick` integration-tested against a real
+      character and a real monster over enough attempts that damage,
+      fatigue cost, and HP floor-clamping were all actually exercised.
+      All checks passed.
+
+      Simplifications carried over from earlier milestones (no live
+      per-level monster registry, so `store()`/`Dungeon.
+      populateRandomMonsters()`/dropped-item storage are all no-ops here)
+      are documented in `monster_runtime.h`'s and `combat_resolution.h`'s
+      class comments rather than repeated here.
+
 ## Milestones next
 
-- [ ] **M15 and beyond (not yet planned in detail):** a Monster runtime
-      port (so `Player.attack()` itself, and the rest of combat, has
-      something to resolve against) and `Player`'s spellcasting; the
-      lightweight "character summary" save format M12 deferred;
-      object/monster/chest/NPC sprites and the HUD/minimap
+- [ ] **M16 and beyond (not yet planned in detail):** `Player`'s
+      spellcasting; the lightweight "character summary" save format M12
+      deferred; object/monster/chest/NPC sprites and the HUD/minimap
       (`GameCanvas.paintGameView()`'s other calls, now that the base
-      corridor view renders and the player can actually move through it);
-      and finally `ESGame`'s own screen-wiring loop tying it all together.
-      Each gets its own milestone once the shape of "how much fits in one
-      slice" is clearer -- following `shadowkey-decomp`'s pattern of not
-      over-planning milestones far in advance of actually reaching them.
+      corridor view renders, the player can move through it, and combat
+      resolves); and finally `ESGame`'s own screen-wiring loop tying it
+      all together. Each gets its own milestone once the shape of "how
+      much fits in one slice" is clearer -- following `shadowkey-decomp`'s
+      pattern of not over-planning milestones far in advance of actually
+      reaching them.
