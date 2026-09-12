@@ -11,6 +11,31 @@ namespace {
 // (ailment bit 0) is active, else 1x.
 int FatigueCostMultiplier(const PlayerState& p) { return (p.ailmentMask & 1) == 1 ? 3 : 1; }
 
+// Player.tileAt(dx,dy)'s exact re-centering formula over corridorView --
+// a third independent copy of the same formula render/
+// corridor_render_plan.cpp and player/visible_objects.cpp each already
+// carry their own local copy of (see visible_objects.cpp's
+// CorridorTileAt doc comment) -- no shared Shop/tile-query module exists
+// yet to consolidate them into.
+uint8_t TileAt(const PlayerState& p, int dx, int dy) {
+    return dy < 4 ? p.corridorView[static_cast<size_t>(dx + dy + 1)][static_cast<size_t>(dy)]
+                  : p.corridorView[static_cast<size_t>(dx + dy)][static_cast<size_t>(dy)];
+}
+
+// Shop.SHOP_X/Y[0..4] -- the hub town's 5 fixed peddler positions. Same
+// values player/visible_objects.cpp's own kHubShopX/kHubShopY carry
+// (see that file's doc comment for why no shared Shop class exists yet).
+constexpr int kHubShopX[5] = {12, 6, 7, 12, 12};
+constexpr int kHubShopY[5] = {12, 11, 7, 8, 6};
+
+// Shop.hubShopAt(x, y).
+int HubShopAt(int x, int y) {
+    for (int i = 0; i < 5; i++) {
+        if (x == kHubShopX[i] && y == kHubShopY[i]) return i;
+    }
+    return -1;
+}
+
 }  // namespace
 
 void PlayerMovement::CleanupRoamingMonsterIfPresent(PlayerState& p, std::vector<GeneratedLevel>& levels,
@@ -276,6 +301,29 @@ bool PlayerMovement::Move(PlayerState& p, int direction, bool strafe, std::vecto
 
     p.suppressStrafeAdjust = false;
     return moved;
+}
+
+int PlayerMovement::NpcInFront(PlayerState& p, std::vector<GeneratedLevel>& levels, WorldRegistry& world) {
+    PendingMove pm = ComputeMoveTarget(p, 1, levels, world);
+    if (pm.level <= 0) return -1;
+
+    if (pm.level == 3 || pm.level == 12 || pm.level == 21 || pm.level == 30) {
+        int shopIndex = pm.level == 3 ? 5 : pm.level == 12 ? 6 : pm.level == 21 ? 7 : 8;
+        const GeneratedLevel& target = levels[static_cast<size_t>(pm.level - 1)];
+        if (pm.tileX == target.specialShopX && pm.tileY == target.specialShopY) return shopIndex;
+        return -1;
+    }
+
+    return pm.level != 1 ? -1 : HubShopAt(pm.tileX, pm.tileY);
+}
+
+void PlayerMovement::RefreshNpcInSight(PlayerState& p, std::vector<GeneratedLevel>& levels, WorldRegistry& world) {
+    uint8_t tile = TileAt(p, 0, 1);
+    if ((tile & 32) != 0) {
+        p.npcInSight = NpcInFront(p, levels, world);
+    } else {
+        p.npcInSight = -1;
+    }
 }
 
 }  // namespace dawnstar

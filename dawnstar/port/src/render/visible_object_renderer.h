@@ -41,11 +41,13 @@ struct VisibleObjectTextures {
 // dropped-item icon (M26) AND its monster case (M27, via
 // paintObjectAtPosition -- see PaintObjectAtPosition's own doc comment).
 //
-// STILL DEFERRED: full NPC portraits (paintNpcPortrait, actually keyed
-// by a completely separate `npcInSight` mechanism this port hasn't
-// traced/ported at all yet, not by visibleObjects). NPCs DO already
-// render correctly at far/mid range (M26) as a generic monster-shaped
-// silhouette icon, exactly like the original.
+// M28 additionally ports paintNpcPortrait (PaintNpcPortrait below),
+// keyed by PlayerState::npcInSight (player/player_movement.h's
+// RefreshNpcInSight) -- a completely separate mechanism from
+// visibleObjects/Render above, matching the original's own paint()
+// calling paintVisibleObjects() and (conditionally) paintNpcPortrait()
+// as two independent, sequential steps rather than one drawing the
+// other.
 class VisibleObjectRenderer {
 public:
     static void Render(Backbuffer& bb, const VisibleObjectTextures& textures,
@@ -53,14 +55,24 @@ public:
 
     // GameCanvas.paintObjectAtPosition(): the closest-slot monster
     // renderer, also (separately) reused by the original for all 9 NPC
-    // portrait dispatches (paintNpcPortrait -- not ported here, see the
-    // class comment above) -- exposed publicly for that reason, even
-    // though VisibleObjectRenderer::Render is currently its only real
-    // caller. `frameOverride` >= 0 overrides OBJECT_ICON_TABLE's default
-    // second-sprite frame (the NPC-portrait dispatcher's own use, unused
-    // here -- always -1, matching paintVisibleObjects' own call).
+    // portrait dispatches (see PaintNpcPortrait below) -- exposed
+    // publicly for that reason, even though VisibleObjectRenderer::
+    // Render is not PaintNpcPortrait's caller. `frameOverride` >= 0
+    // overrides OBJECT_ICON_TABLE's default second-sprite frame (the
+    // NPC-portrait dispatcher's own use; Render's own call always passes
+    // -1).
     static void PaintObjectAtPosition(Backbuffer& bb, const VisibleObjectTextures& textures, int posCode,
                                        int frameOverride);
+
+    // GameCanvas.paintNpcPortrait(): draws shop `shopId`'s (0-8) portrait
+    // at its canned on-screen position by dispatching to
+    // PaintObjectAtPosition with a fixed (posCode, frameOverride) pair
+    // per shop -- the original reuses the generic corridor-object
+    // renderer for this rather than having any NPC-specific sprite/draw
+    // path of its own. No-op for shopId outside 0-8 (defensive; the
+    // original's own switch has no default case either, so an
+    // out-of-range shopId would silently draw nothing there too).
+    static void PaintNpcPortrait(Backbuffer& bb, const VisibleObjectTextures& textures, int shopId);
 };
 
 }  // namespace dawnstar

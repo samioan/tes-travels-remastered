@@ -97,6 +97,40 @@ public:
     // the chest/NPC-visibility refresh calls, same as ResetToHubPosition.
     static void WarpToCampMark(PlayerState& p, const std::vector<GeneratedLevel>& levels);
 
+    // Player.java's npcInFront(): the shop id (5-8 for the named
+    // shopkeepers on levels 3/12/21/30, or Shop.hubShopAt's lookup in
+    // the hub town) of the NPC that a forward step would land on, or
+    // -1. Re-derives the look-ahead tile via ComputeMoveTarget(1,...)
+    // exactly like the original -- including its same real,
+    // faithfully-preserved quirk: since RefreshNpcInSight (below) is
+    // only ever called right after a move has already committed, this
+    // recomputes a move target from the ALREADY-NEW position, which can
+    // in principle cross yet another level boundary and re-trigger
+    // CleanupRoamingMonsterIfPresent. Harmless in practice: that cleanup
+    // is idempotent (guarded by p.roamingSpecialMonsterPresent, already
+    // cleared by the real move's own call if it fired), so calling it
+    // twice for one tick changes nothing -- ported as-is rather than
+    // "fixed" into a single call, matching the original's own shape.
+    //
+    // Shop.SHOP_X/Y[5..8] (overwritten by DungeonGenerator with each
+    // named shopkeeper's real generated position) has no static
+    // equivalent here -- read directly from
+    // GeneratedLevel::specialShopX/Y instead, exactly as
+    // player/visible_objects.cpp's own NPC-tagging already does.
+    static int NpcInFront(PlayerState& p, std::vector<GeneratedLevel>& levels, WorldRegistry& world);
+
+    // Player.java's refreshNpcInSight(): sets p.npcInSight from the tile
+    // directly in front (tile bit 5/32, the "blocked marker" shop-room
+    // tiles carry) via NpcInFront above. SIMPLIFIED: the original also
+    // shows the shop's greeting in the message popup the moment it comes
+    // into sight (showMessage/messagePriority) and prints a console
+    // diagnostic on the "tile says NPC but npcInFront() disagrees" case
+    // -- neither is ported (no message-popup system exists yet, see
+    // docs/PORT_ROADMAP.md's flagged hotbar/message-popup/minimap
+    // entry; no stdout channel is used by any other module either, see
+    // CleanupRoamingMonsterIfPresent's own doc comment above).
+    static void RefreshNpcInSight(PlayerState& p, std::vector<GeneratedLevel>& levels, WorldRegistry& world);
+
 private:
     struct PendingMove {
         int level = 0;

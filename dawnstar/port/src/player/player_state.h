@@ -158,6 +158,16 @@ struct PlayerState {
     // Set once grantStarFrostItem has run (that method isn't ported
     // yet); read by SkillValue's +4 bonus.
     bool starFrostBonusActive = false;
+
+    // --- M28: GameCanvas.npcInSight (see player/player_movement.h's
+    // RefreshNpcInSight). This is a GameCanvas *static* field in the
+    // original, not one of Player's own -- unlike M25's visibleObjects
+    // (a genuine Player field folded in from a `static` declaration),
+    // this is folded in here only because the port has no
+    // GameCanvas-equivalent struct yet (main.cpp owns the tick/paint
+    // loop directly instead). Shop id (0-8) of the NPC directly in
+    // front of the player, or -1.
+    int npcInSight = -1;
 };
 
 }  // namespace dawnstar

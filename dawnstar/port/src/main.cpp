@@ -115,6 +115,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // would be sampled -- one Move() per tick while a key is
                 // held reproduces that pacing rather than moving once
                 // per PeekMessage-idle spin.
+                bool moveAttempted = true;
                 if (KeyPressed(VK_UP)) {
                     dawnstar::PlayerMovement::Move(player, 1, false, levels, world, items);
                 } else if (KeyPressed(VK_DOWN)) {
@@ -123,6 +124,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     dawnstar::PlayerMovement::Move(player, 3, false, levels, world, items);
                 } else if (KeyPressed(VK_LEFT)) {
                     dawnstar::PlayerMovement::Move(player, 4, false, levels, world, items);
+                } else {
+                    moveAttempted = false;
+                }
+
+                // GameCanvas.commitMove()'s own "only when
+                // pendingMoveDir != 0" gate on refreshChestInSight/
+                // refreshNpcInSight (M28: only the latter is ported so
+                // far) -- called unconditionally whenever a move was
+                // requested this tick, regardless of whether it actually
+                // committed (matching the original, which calls these
+                // right after player.move() with no success check).
+                if (moveAttempted) {
+                    dawnstar::PlayerMovement::RefreshNpcInSight(player, levels, world);
                 }
 
                 // GameCanvas.run()'s own per-tick order: movement first,
@@ -135,6 +149,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             dawnstar::FrameRenderer::Render(backbuffer, textures, view, player.tileX, player.tileY, player.facing,
                                              levels[static_cast<size_t>(player.currentLevel - 1)].number);
             dawnstar::VisibleObjectRenderer::Render(backbuffer, visibleObjectTextures, player.visibleObjects);
+            // paintGameView()'s own "if (npcInSight >= 0)" gate, drawn
+            // right after paintVisibleObjects and before
+            // paintStatusBars -- M28.
+            if (player.npcInSight >= 0) {
+                dawnstar::VisibleObjectRenderer::PaintNpcPortrait(backbuffer, visibleObjectTextures,
+                                                                    player.npcInSight);
+            }
             dawnstar::HudRenderer::PaintStatusBars(backbuffer, player, charData);
             window.Present(backbuffer);
         });

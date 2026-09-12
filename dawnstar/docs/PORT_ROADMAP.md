@@ -1272,21 +1272,95 @@ milestone rather than just read-through.
       removed and superseded by this milestone's test); the real
       windowed app re-verified via screen capture.
 
+- [x] **M28 -- NPC-in-sight detection + NPC portraits** (this session).
+      Ports `GameCanvas.refreshNpcInSight()`/`Player.npcInFront()`
+      (`PlayerMovement::RefreshNpcInSight`/`NpcInFront`,
+      `player/player_movement.h`/`.cpp`) and `GameCanvas.
+      paintNpcPortrait()` (`VisibleObjectRenderer::PaintNpcPortrait`,
+      `render/visible_object_renderer.h`/`.cpp`) -- the piece M26/M27
+      explicitly deferred, and a genuinely separate mechanism from
+      `visibleObjects` (see M26/M27's own doc comments): `npcInSight` is
+      set from a completely independent tile-bit test one step ahead of
+      the player, not from anything in the 13-slot cache.
+
+      `NpcInFront` re-derives the look-ahead tile via the already-private
+      `ComputeMoveTarget(1, ...)` (M23) -- reusing it directly rather
+      than duplicating its recentering/level-crossing logic a second
+      time -- and checks it against either the hub town's 5 fixed
+      peddler positions (`Shop.SHOP_X/Y[0..4]`, a third independent
+      inlined copy of the same 2 arrays `player/visible_objects.cpp` and
+      `world/dungeon_generator.cpp` already each carry their own copy of
+      -- still no shared `Shop` class exists to consolidate them into)
+      or, for levels 3/12/21/30, the real generated
+      `GeneratedLevel::specialShopX/Y` position (not a static
+      `Shop.SHOP_X/Y[5..8]` -- those get overwritten by
+      `DungeonGenerator` at generation time in the original, so reading
+      the generated field directly is the correct equivalent, exactly
+      matching `player/visible_objects.cpp`'s own NPC-tagging code).
+      `RefreshNpcInSight` is wired into `main.cpp` right after a move is
+      *attempted* each tick (matching `commitMove()`'s own
+      `pendingMoveDir != 0` gate -- called unconditionally whenever a
+      direction key was pressed, regardless of whether the move actually
+      committed), and `PaintNpcPortrait` is painted right after
+      `VisibleObjectRenderer::Render` and before `HudRenderer::
+      PaintStatusBars`, matching `paintGameView()`'s own draw order.
+      SIMPLIFIED: the original's `showMessage`/`messagePriority` popup
+      (shows the shop's greeting the moment it comes into sight) and its
+      "tile says NPC but npcInFront() disagrees" console diagnostic are
+      both skipped -- no message-popup system is ported yet (still on
+      the flagged hotbar/message-popup/minimap list below), and no other
+      module in this port uses a stdout channel for diagnostics either
+      (same precedent as `CleanupRoamingMonsterIfPresent`'s own skipped
+      console message, M23).
+
+      A real, faithfully-preserved quirk, confirmed rather than
+      "fixed": since `RefreshNpcInSight` always runs right after a move
+      has already committed, `NpcInFront`'s own `ComputeMoveTarget(1,
+      ...)` call recomputes a look-ahead from the *already-new*
+      position -- which can in principle cross yet another level
+      boundary and re-trigger `CleanupRoamingMonsterIfPresent` a second
+      time in the same tick. Harmless in practice: that cleanup is
+      idempotent (guarded by `p.roamingSpecialMonsterPresent`, already
+      cleared by the real move's own call if it fired), so this is
+      ported exactly as shaped in the original rather than collapsed
+      into a single call.
+
+      `PaintNpcPortrait` itself is a thin, fully data-driven wrapper: a
+      9-entry `shopId -> (posCode, frameOverride)` table (transcribed
+      directly from `paintNpcPortrait`'s own switch) dispatching straight
+      into M27's `PaintObjectAtPosition` -- the original reuses the
+      generic corridor-object renderer for portraits wholesale, with no
+      NPC-specific sprite/draw path of its own at all.
+
+      Verified via the new `npc_portrait_smoke.exe`: `RefreshNpcInSight`
+      against 3 real integration cases (the hub's shop 0, level 3's
+      named shopkeeper, and a real "nothing ahead" position, using the
+      same `FindApproach`/turn-right-then-left-to-refresh approach M25's
+      own test established), and `PaintNpcPortrait` against 2 hand-derived
+      shopId cases spanning both buckets 0 and 1 (the only two portraits
+      ever use) with `frameOverride` deliberately chosen to differ from
+      `OBJECT_ICON_TABLE`'s own default in each case -- the one behavior
+      M27's own test never exercised (it always passes `frameOverride`
+      -1) -- plus an out-of-range-shopId no-op check. All checks passed.
+      Full clean rebuild zero warnings; all 27 smoke tests pass; the
+      real windowed app re-verified via screen capture.
+
 ## Milestones next
 
-- [ ] **M28 and beyond (not yet planned in detail):** full NPC portraits
-      (`paintNpcPortrait`, DEFERRED by M26/M27 -- needs tracing whatever
-      sets `npcInSight`, a mechanism this port hasn't touched at all yet),
-      alongside the hotbar panel/message popup/minimap M22's own entry
-      already flagged. Monster death-drops
+- [ ] **M29 and beyond (not yet planned in detail):** the hotbar panel/
+      message popup/minimap M22's own entry already flagged (M28's own
+      SIMPLIFIED note above -- the shop-greeting popup specifically --
+      is now blocked on this too). Monster death-drops
       (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`) still has
       no wiring, since `onDeath()` itself is only ever called from
       `GameCanvas`, not from `Player`/`Monster`'s own methods --
       genuinely blocked on the screen-wiring milestone below, not
       something a registry-only milestone can close. And finally
       `ESGame`'s own screen-wiring loop (character creation, menus,
-      dialogue, shops) tying it all together in place of M20's fixed
-      stand-in character. Each gets its own milestone once the shape of
-      "how much fits in one slice" is clearer -- following
+      dialogue, shops -- the full `Shop.dialogue()` dispatcher traced
+      while scoping M28 is still unported, only its `npcstrings.dat`
+      text itself loads so far, M8) tying it all together in place of
+      M20's fixed stand-in character. Each gets its own milestone once
+      the shape of "how much fits in one slice" is clearer -- following
       `shadowkey-decomp`'s pattern of not over-planning milestones far
       in advance of actually reaching them.

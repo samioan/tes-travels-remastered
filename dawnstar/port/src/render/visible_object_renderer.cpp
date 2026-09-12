@@ -368,4 +368,14 @@ void VisibleObjectRenderer::Render(Backbuffer& bb, const VisibleObjectTextures& 
     }
 }
 
+void VisibleObjectRenderer::PaintNpcPortrait(Backbuffer& bb, const VisibleObjectTextures& textures, int shopId) {
+    // paintNpcPortrait's own switch(shopId), transcribed directly:
+    // shopId -> (posCode, frameOverride).
+    static constexpr int kPosCode[9] = {1, 4, 7, 6, 8, 9, 10, 2, 3};
+    static constexpr int kFrameOverride[9] = {2, 1, 0, 2, 1, 0, 2, 0, 2};
+    if (shopId < 0 || shopId > 8) return;
+    PaintObjectAtPosition(bb, textures, kPosCode[static_cast<size_t>(shopId)],
+                           kFrameOverride[static_cast<size_t>(shopId)]);
+}
+
 }  // namespace dawnstar

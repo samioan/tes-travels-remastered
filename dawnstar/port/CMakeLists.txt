@@ -44,9 +44,11 @@ add_library(dawnstar_world STATIC
 target_include_directories(dawnstar_world PUBLIC src)
 target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 
-# M9/M10/M21/M26: corridor rendering + the HUD status-bar overlay + the
-# far/mid/close monster-chest-dropped-item-NPC sprite renderer -- see
-# docs/PORT_ROADMAP.md, src/render/, src/world/dungeon_view.h.
+# M9/M10/M21/M26/M27/M28: corridor rendering + the HUD status-bar
+# overlay + the far/mid/close monster-chest-dropped-item-NPC sprite
+# renderer (now also the closest slot's monster sprite/stairs icon and
+# NPC portraits) -- see docs/PORT_ROADMAP.md, src/render/,
+# src/world/dungeon_view.h.
 add_library(dawnstar_render STATIC
   src/render/corridor_render_plan.cpp
   src/render/frame_renderer.cpp
@@ -55,13 +57,13 @@ add_library(dawnstar_render STATIC
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player)
 
-# M11/M12/M13/M14/M16/M17/M23/M25: player character creation + full save
-# format + movement (now also touching the live world registry for
-# dropped-item auto-loot/roaming-monster cleanup) + combat/skill stat
-# math + inventory/equip management + self-targeted spellcasting + the
-# lightweight summary save format + the 13-slot visibleObjects cache
-# (data model only -- no sprite drawing yet) -- see docs/PORT_ROADMAP.md
-# and src/player/.
+# M11/M12/M13/M14/M16/M17/M23/M25/M28: player character creation + full
+# save format + movement (now also touching the live world registry for
+# dropped-item auto-loot/roaming-monster cleanup, and detecting an NPC
+# directly in front) + combat/skill stat math + inventory/equip
+# management + self-targeted spellcasting + the lightweight summary save
+# format + the 13-slot visibleObjects cache (data model only -- no
+# sprite drawing yet) -- see docs/PORT_ROADMAP.md and src/player/.
 add_library(dawnstar_player STATIC
   src/player/player_creation.cpp
   src/player/player_save.cpp
@@ -219,3 +221,7 @@ target_link_libraries(visible_object_renderer_smoke PRIVATE dawnstar_render)
 # src/tests/m27_object_at_position_smoke.cpp.
 add_executable(object_at_position_smoke src/tests/m27_object_at_position_smoke.cpp)
 target_link_libraries(object_at_position_smoke PRIVATE dawnstar_render)
+
+# M28 milestone smoke test -- see src/tests/m28_npc_portrait_smoke.cpp.
+add_executable(npc_portrait_smoke src/tests/m28_npc_portrait_smoke.cpp)
+target_link_libraries(npc_portrait_smoke PRIVATE dawnstar_render)
