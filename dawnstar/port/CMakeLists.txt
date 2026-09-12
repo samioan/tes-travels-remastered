@@ -52,10 +52,12 @@ add_library(dawnstar_render STATIC
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player)
 
-# M11/M12/M13/M14/M16/M17: player character creation + full save format +
-# movement + combat/skill stat math + inventory/equip management +
-# self-targeted spellcasting + the lightweight summary save format --
-# see docs/PORT_ROADMAP.md and src/player/.
+# M11/M12/M13/M14/M16/M17/M23: player character creation + full save
+# format + movement (now also touching the live world registry for
+# dropped-item auto-loot/roaming-monster cleanup) + combat/skill stat
+# math + inventory/equip management + self-targeted spellcasting + the
+# lightweight summary save format -- see docs/PORT_ROADMAP.md and
+# src/player/.
 add_library(dawnstar_player STATIC
   src/player/player_creation.cpp
   src/player/player_save.cpp
@@ -65,7 +67,7 @@ add_library(dawnstar_player STATIC
   src/player/player_spellcasting.cpp
 )
 target_include_directories(dawnstar_player PUBLIC src)
-target_link_libraries(dawnstar_player PUBLIC dawnstar_assets dawnstar_world)
+target_link_libraries(dawnstar_player PUBLIC dawnstar_assets dawnstar_world dawnstar_dungeon)
 
 # M15: monster runtime state/AI/combat-support (everything except
 # tick()/attack()/castOnMonster(), which need both Player and Monster --
@@ -82,7 +84,7 @@ add_library(dawnstar_combat STATIC
   src/combat/combat_resolution.cpp
 )
 target_include_directories(dawnstar_combat PUBLIC src)
-target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster)
+target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster dawnstar_dungeon)
 
 # M22: the live per-level monster/chest/dropped-item registry (needs
 # both World and Monster) -- see docs/PORT_ROADMAP.md and src/dungeon/.
@@ -187,3 +189,8 @@ target_link_libraries(hud_renderer_smoke PRIVATE dawnstar_render)
 # M22 milestone smoke test -- see src/tests/m22_dungeon_runtime_smoke.cpp.
 add_executable(dungeon_runtime_smoke src/tests/m22_dungeon_runtime_smoke.cpp)
 target_link_libraries(dungeon_runtime_smoke PRIVATE dawnstar_dungeon)
+
+# M23 milestone smoke test -- see
+# src/tests/m23_movement_registry_wiring_smoke.cpp.
+add_executable(movement_registry_wiring_smoke src/tests/m23_movement_registry_wiring_smoke.cpp)
+target_link_libraries(movement_registry_wiring_smoke PRIVATE dawnstar_player)

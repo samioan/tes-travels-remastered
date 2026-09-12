@@ -1,5 +1,6 @@
 #include "player/player_movement.h"
 
+#include "player/player_inventory.h"
 #include "world/dungeon_view.h"
 
 namespace dawnstar {
@@ -12,14 +13,32 @@ int FatigueCostMultiplier(const PlayerState& p) { return (p.ailmentMask & 1) == 
 
 }  // namespace
 
+void PlayerMovement::CleanupRoamingMonsterIfPresent(PlayerState& p, std::vector<GeneratedLevel>& levels,
+                                                     WorldRegistry& world) {
+    if (!p.roamingSpecialMonsterPresent) return;
+
+    GeneratedLevel& level = levels[static_cast<size_t>(p.currentLevel - 1)];
+    for (const auto& [key, record] : world.monsters[static_cast<size_t>(p.currentLevel - 1)]) {
+        MonsterState m = MonsterRuntime::FromBytes(record);
+        if (m.monsterType == 41) {
+            p.roamingSpecialMonsterPresent = false;
+            DungeonRuntime::RemoveMonster(level, world, m.x, m.y);
+            break;
+        }
+    }
+    // "Remove roaming gehen failed" console message: not ported, see
+    // header doc comment.
+}
+
 bool PlayerMovement::IsWalkable(uint8_t tileBits) {
     if ((tileBits & 1) != 0) return false;
     if ((tileBits & 32) != 0) return false;
     return (tileBits & 2) == 0;
 }
 
-PlayerMovement::PendingMove PlayerMovement::ComputeMoveTarget(const PlayerState& p, int direction,
-                                                                const std::vector<GeneratedLevel>& levels) {
+PlayerMovement::PendingMove PlayerMovement::ComputeMoveTarget(PlayerState& p, int direction,
+                                                                std::vector<GeneratedLevel>& levels,
+                                                                WorldRegistry& world) {
     PendingMove pm;
 
     if (direction == 1 || direction == 2) {
@@ -84,8 +103,9 @@ PlayerMovement::PendingMove PlayerMovement::ComputeMoveTarget(const PlayerState&
             pm.level = p.currentLevel;
         }
 
-        // "remove roaming gehen on level change" cleanup: SKIPPED, see
-        // class comment -- no live per-level monster registry yet.
+        if (pm.levelChanged) {
+            CleanupRoamingMonsterIfPresent(p, levels, world);
+        }
     } else if (direction == 3) {
         pm.level = p.currentLevel;
         pm.levelChanged = false;
@@ -106,11 +126,11 @@ PlayerMovement::PendingMove PlayerMovement::ComputeMoveTarget(const PlayerState&
 }
 
 bool PlayerMovement::CommitMove(PlayerState& p, int direction, std::vector<GeneratedLevel>& levels,
-                                 bool& outLevelChanged) {
+                                 WorldRegistry& world, const ItemDatabase& items, bool& outLevelChanged) {
     if (p.coreStats[6] <= 0) return false;
     if (direction == 0) return false;
 
-    PendingMove pm = ComputeMoveTarget(p, direction, levels);
+    PendingMove pm = ComputeMoveTarget(p, direction, levels, world);
     outLevelChanged = pm.levelChanged;
     if (pm.level <= 0) return false;
 
@@ -134,19 +154,47 @@ bool PlayerMovement::CommitMove(PlayerState& p, int direction, std::vector<Gener
         p.coreStats[6] = newFatigue < 0 ? int16_t{0} : newFatigue;
     }
 
-    // dropped-item auto-loot: SKIPPED, see class comment.
+    bool hasDroppedItems = (tile & 4) != 0;
+    if (hasDroppedItems && (direction == 1 || direction == 2)) {
+        bool allLooted = true;
+        auto droppedItems =
+            DungeonRuntime::DroppedItemsAt(world, static_cast<int>(pm.level - 1), p.tileX, p.tileY);
+        for (const auto& record : droppedItems) {
+            int itemId = record[2];
+            int packed = (record[3] << 8) + record[4];
+            int charge = record[5];
+            bool looted = PlayerInventory::AddItem(p, itemId, packed, charge);
+            if (looted) {
+                DungeonRuntime::RemoveDroppedItem(target, world, record);
+                if ((record[6] & 2) == 0) {
+                    int itemIdx = itemId - 1;
+                    if (items.category[static_cast<size_t>(itemIdx)] == 11) {
+                        p.giftPointsFound = static_cast<int16_t>(p.giftPointsFound + items.subtype[static_cast<size_t>(itemIdx)]);
+                    }
+                }
+            } else {
+                allLooted = false;
+            }
+        }
+
+        if (allLooted) {
+            DungeonRuntime::ClearDroppedItemFlag(target, p.tileX, p.tileY);
+        }
+    }
 
     if ((tile & 8) == 0 || (direction != 1 && direction != 2)) {
         RefreshCorridorView(p, levels);
+    } else {
+        MarkCampAndReturnToTown(p, false, levels, world);
     }
-    // else: instant-lethal tile -> markCampAndReturnToTown(false):
-    // SKIPPED, see class comment. Position/facing above still commit.
 
     return true;
 }
 
-void PlayerMovement::ResetToHubPosition(PlayerState& p, bool altSpawn, const std::vector<GeneratedLevel>& levels) {
-    // roaming-special-monster cleanup: SKIPPED, see class comment.
+void PlayerMovement::ResetToHubPosition(PlayerState& p, bool altSpawn, std::vector<GeneratedLevel>& levels,
+                                         WorldRegistry& world) {
+    CleanupRoamingMonsterIfPresent(p, levels, world);
+
     if (!altSpawn) {
         p.currentLevel = 1;
         p.tileX = 9;
@@ -163,7 +211,8 @@ void PlayerMovement::ResetToHubPosition(PlayerState& p, bool altSpawn, const std
     // chest/NPC-visibility refresh: SKIPPED, see class comment.
 }
 
-void PlayerMovement::MarkCampAndReturnToTown(PlayerState& p, bool skipMark, const std::vector<GeneratedLevel>& levels) {
+void PlayerMovement::MarkCampAndReturnToTown(PlayerState& p, bool skipMark, std::vector<GeneratedLevel>& levels,
+                                              WorldRegistry& world) {
     if (!skipMark) {
         p.campLevel = static_cast<int8_t>(p.currentLevel);
         p.campX = static_cast<int8_t>(p.tileX);
@@ -171,7 +220,7 @@ void PlayerMovement::MarkCampAndReturnToTown(PlayerState& p, bool skipMark, cons
         p.campFacing = static_cast<int8_t>(p.facing);
     }
 
-    ResetToHubPosition(p, true, levels);
+    ResetToHubPosition(p, true, levels, world);
     p.suppressStrafeAdjust = true;
 }
 
@@ -197,7 +246,8 @@ void PlayerMovement::RefreshCorridorView(PlayerState& p, const std::vector<Gener
     }
 }
 
-bool PlayerMovement::Move(PlayerState& p, int direction, bool strafe, std::vector<GeneratedLevel>& levels) {
+bool PlayerMovement::Move(PlayerState& p, int direction, bool strafe, std::vector<GeneratedLevel>& levels,
+                           WorldRegistry& world, const ItemDatabase& items) {
     if (p.coreStats[6] <= 0) return false;
 
     bool moved = false;
@@ -205,23 +255,23 @@ bool PlayerMovement::Move(PlayerState& p, int direction, bool strafe, std::vecto
     bool savedLevelChanged = false;
 
     if (strafe && direction == 4) {
-        CommitMove(p, 4, levels, levelChanged);
-        moved = CommitMove(p, 1, levels, levelChanged);
+        CommitMove(p, 4, levels, world, items, levelChanged);
+        moved = CommitMove(p, 1, levels, world, items, levelChanged);
         if (!p.suppressStrafeAdjust) {
             savedLevelChanged = levelChanged;
-            moved = CommitMove(p, 3, levels, levelChanged);
+            moved = CommitMove(p, 3, levels, world, items, levelChanged);
             levelChanged = savedLevelChanged;
         }
     } else if (strafe && direction == 3) {
-        CommitMove(p, 3, levels, levelChanged);
-        moved = CommitMove(p, 1, levels, levelChanged);
+        CommitMove(p, 3, levels, world, items, levelChanged);
+        moved = CommitMove(p, 1, levels, world, items, levelChanged);
         if (!p.suppressStrafeAdjust) {
             savedLevelChanged = levelChanged;
-            moved = CommitMove(p, 4, levels, levelChanged);
+            moved = CommitMove(p, 4, levels, world, items, levelChanged);
             levelChanged = savedLevelChanged;
         }
     } else {
-        moved = CommitMove(p, direction, levels, levelChanged);
+        moved = CommitMove(p, direction, levels, world, items, levelChanged);
     }
 
     p.suppressStrafeAdjust = false;

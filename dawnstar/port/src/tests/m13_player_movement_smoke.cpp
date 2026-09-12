@@ -26,6 +26,7 @@
 #include "assets/dungeon_geometry.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "dungeon/dungeon_runtime.h"
 #include "player/player_movement.h"
 #include "player/player_state.h"
 #include "world/dungeon_generator.h"
@@ -120,6 +121,7 @@ int main(int argc, char** argv) {
                                                                                             items, monsters));
         }
         std::printf("generated %zu levels\n", levels.size());
+        dawnstar::WorldRegistry world(levels.size());
 
         // --- isWalkable ---
         Check(PlayerMovement::IsWalkable(0) == true, "isWalkable(0) should be walkable");
@@ -142,7 +144,7 @@ int main(int argc, char** argv) {
 
             int expected[5] = {1, 2, 3, 4, 1};
             for (int i = 0; i < 4; i++) {
-                bool moved = PlayerMovement::Move(p, 3, false, levels);
+                bool moved = PlayerMovement::Move(p, 3, false, levels, world, items);
                 Check(moved, "turn right should always succeed with fatigue available");
                 Check(p.facing == expected[i + 1], "turn right facing sequence");
                 Check(p.tileX == 9 && p.tileY == 9, "turning must not move position");
@@ -152,7 +154,7 @@ int main(int argc, char** argv) {
             p.facing = 1;
             int expectedLeft[5] = {1, 4, 3, 2, 1};
             for (int i = 0; i < 4; i++) {
-                PlayerMovement::Move(p, 4, false, levels);
+                PlayerMovement::Move(p, 4, false, levels, world, items);
                 Check(p.facing == expectedLeft[i + 1], "turn left facing sequence");
             }
         }
@@ -166,7 +168,7 @@ int main(int argc, char** argv) {
             p.facing = 1;
             p.coreStats[6] = 0;
             for (int dir = 1; dir <= 4; dir++) {
-                bool moved = PlayerMovement::Move(p, dir, false, levels);
+                bool moved = PlayerMovement::Move(p, dir, false, levels, world, items);
                 Check(!moved, "zero fatigue must block every direction");
                 Check(p.tileX == 9 && p.tileY == 9 && p.facing == 1, "zero-fatigue attempt must not change state");
             }
@@ -185,7 +187,7 @@ int main(int argc, char** argv) {
             p.coreStats[6] = 50;
 
             bool northWalkable = PlayerMovement::IsWalkable(levels[0].tiles[static_cast<size_t>(x)][static_cast<size_t>(y - 1)]);
-            bool moved = PlayerMovement::Move(p, 1, false, levels);
+            bool moved = PlayerMovement::Move(p, 1, false, levels, world, items);
             if (northWalkable) {
                 Check(moved, "forward step onto a walkable tile should succeed");
                 Check(p.tileX == x && p.tileY == y - 1, "forward step should move north (tileY-1)");
@@ -214,7 +216,7 @@ int main(int argc, char** argv) {
                 p.tileY = y;
                 p.facing = 1;
                 p.coreStats[6] = 50;
-                PlayerMovement::Move(p, dir, true, levels);
+                PlayerMovement::Move(p, dir, true, levels, world, items);
                 Check(p.facing == 1, "strafing must restore the original facing (turns are never wall-blocked)");
                 Check(p.currentLevel == 1, "strafing on an interior tile must not change level");
             }
@@ -259,7 +261,7 @@ int main(int argc, char** argv) {
                 expectedX >= 0 && expectedX < target.width && expectedY >= 0 && expectedY < target.height &&
                 PlayerMovement::IsWalkable(target.tiles[static_cast<size_t>(expectedX)][static_cast<size_t>(expectedY)]);
 
-            bool moved = PlayerMovement::Move(p, 1, false, levels);
+            bool moved = PlayerMovement::Move(p, 1, false, levels, world, items);
             std::printf("  hub edge dir=%d exit=(%d,%d) -> level %d expected=(%d,%d) targetWalkable=%d moved=%d\n", dir,
                         x, y, expectedNeighbor, expectedX, expectedY, targetWalkable, moved);
 

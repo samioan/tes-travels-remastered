@@ -17,6 +17,7 @@
 #include "assets/img_archive.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
 #include "platform/win32/window.h"
@@ -74,6 +75,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::FrameTextures textures = dawnstar::FrameTextures::Load(imageArchive);
 
         std::vector<dawnstar::GeneratedLevel> levels = BuildWorld(geometry, items, monsters);
+        // M22/M23's live per-level monster/chest/dropped-item registry
+        // -- empty until something (currently nothing; monster spawning
+        // isn't wired into this windowed app yet) populates it, but
+        // Move() reads/writes it every step regardless.
+        dawnstar::WorldRegistry world(levels.size());
 
         // ESGame.r's real seed (System.currentTimeMillis()) was never
         // meant to be reproducible either -- see player/player_creation.h's
@@ -94,13 +100,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // held reproduces that pacing rather than moving once
                 // per PeekMessage-idle spin.
                 if (KeyPressed(VK_UP)) {
-                    dawnstar::PlayerMovement::Move(player, 1, false, levels);
+                    dawnstar::PlayerMovement::Move(player, 1, false, levels, world, items);
                 } else if (KeyPressed(VK_DOWN)) {
-                    dawnstar::PlayerMovement::Move(player, 2, false, levels);
+                    dawnstar::PlayerMovement::Move(player, 2, false, levels, world, items);
                 } else if (KeyPressed(VK_RIGHT)) {
-                    dawnstar::PlayerMovement::Move(player, 3, false, levels);
+                    dawnstar::PlayerMovement::Move(player, 3, false, levels, world, items);
                 } else if (KeyPressed(VK_LEFT)) {
-                    dawnstar::PlayerMovement::Move(player, 4, false, levels);
+                    dawnstar::PlayerMovement::Move(player, 4, false, levels, world, items);
                 }
             }
 

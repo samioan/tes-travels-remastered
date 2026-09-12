@@ -17,6 +17,7 @@
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
 #include "combat/combat_resolution.h"
+#include "dungeon/dungeon_runtime.h"
 #include "monster/monster_runtime.h"
 #include "player/player_creation.h"
 #include "player/player_inventory.h"
@@ -68,6 +69,7 @@ int main(int argc, char** argv) {
                                                                               monsters));
         }
         std::printf("generated %zu levels\n", levels.size());
+        dawnstar::WorldRegistry world(levels.size());
 
         // Confirm the 87-99 gift-item ids Player.java's useItem() switch
         // hardcodes really are category-13 in the real item table.
@@ -87,7 +89,7 @@ int main(int argc, char** argv) {
             p.tileX = 7;
             p.tileY = 11;
             p.facing = 3;
-            PlayerMovement::MarkCampAndReturnToTown(p, false, levels);
+            PlayerMovement::MarkCampAndReturnToTown(p, false, levels, world);
 
             Check(PlayerMovement::HasCampMark(p), "markCampAndReturnToTown should set a camp mark");
             Check(p.campLevel == 5 && p.campX == 7 && p.campY == 11 && p.campFacing == 3,
@@ -109,10 +111,10 @@ int main(int argc, char** argv) {
             p.currentLevel = 3;
             p.tileX = 2;
             p.tileY = 2;
-            PlayerMovement::ResetToHubPosition(p, false, levels);
+            PlayerMovement::ResetToHubPosition(p, false, levels, world);
             Check(p.currentLevel == 1 && p.tileX == 9 && p.tileY == 9 && p.facing == 1,
                   "resetToHubPosition(false) should use the normal (9,9,facing1) spawn");
-            PlayerMovement::ResetToHubPosition(p, true, levels);
+            PlayerMovement::ResetToHubPosition(p, true, levels, world);
             Check(p.currentLevel == 1 && p.tileX == 13 && p.tileY == 6 && p.facing == 4,
                   "resetToHubPosition(true) should use the alt (13,6,facing4) spawn");
         }
@@ -142,7 +144,7 @@ int main(int argc, char** argv) {
             auto useNewItem = [&](PlayerState& p, int itemId) {
                 PlayerInventory::AddItem(p, itemId, 0, 0);
                 int slot = p.inventoryCount - 1;
-                CombatResolution::UseItem(p, slot, nullptr, items, monsters, levels, useRng);
+                CombatResolution::UseItem(p, slot, nullptr, items, monsters, levels, world, useRng);
             };
 
             {  // 88: cureRandomAilment, RNG-free single-ailment case.
@@ -219,7 +221,7 @@ int main(int argc, char** argv) {
             p.tileY = 8;
             p.facing = 2;
             PlayerInventory::AddItem(p, 87, 0, 0);
-            CombatResolution::UseItem(p, p.inventoryCount - 1, nullptr, items, monsters, levels, useRng);
+            CombatResolution::UseItem(p, p.inventoryCount - 1, nullptr, items, monsters, levels, world, useRng);
             Check(p.campLevel == 6 && p.campX == 4 && p.campY == 8 && p.campFacing == 2,
                   "item 87 away from town should bookmark the pre-use position");
             Check(p.currentLevel == 1 && p.tileX == 13 && p.tileY == 6,
@@ -231,7 +233,7 @@ int main(int argc, char** argv) {
             p.tileY = 1;
             p.facing = 1;
             PlayerInventory::AddItem(p, 87, 0, 0);
-            CombatResolution::UseItem(p, p.inventoryCount - 1, nullptr, items, monsters, levels, useRng);
+            CombatResolution::UseItem(p, p.inventoryCount - 1, nullptr, items, monsters, levels, world, useRng);
             Check(p.currentLevel == 6 && p.tileX == 4 && p.tileY == 8 && p.facing == 2,
                   "item 87 in town with a camp mark should warp to the bookmarked position instead");
         }
@@ -265,14 +267,14 @@ int main(int argc, char** argv) {
             if (killableType > 0) {
                 MonsterState target = MonsterRuntime::Spawn(10, killableType, 1, monsters);
                 PlayerInventory::AddItem(p, 99, 0, 0);
-                CombatResolution::UseItem(p, p.inventoryCount - 1, &target, items, monsters, levels, useRng);
+                CombatResolution::UseItem(p, p.inventoryCount - 1, &target, items, monsters, levels, world, useRng);
                 Check(static_cast<uint8_t>(target.hp) == 0, "item 99 should zero hp for a type within its threshold");
             }
             if (immuneType > 0) {
                 MonsterState target = MonsterRuntime::Spawn(11, immuneType, 1, monsters);
                 int startingHp = static_cast<uint8_t>(target.hp);
                 PlayerInventory::AddItem(p, 99, 0, 0);
-                CombatResolution::UseItem(p, p.inventoryCount - 1, &target, items, monsters, levels, useRng);
+                CombatResolution::UseItem(p, p.inventoryCount - 1, &target, items, monsters, levels, world, useRng);
                 Check(static_cast<uint8_t>(target.hp) == static_cast<uint8_t>(startingHp),
                       "item 99 should leave hp untouched for a type above its threshold");
             }
@@ -282,7 +284,7 @@ int main(int argc, char** argv) {
             // per-branch body, not around the whole case).
             int beforeCount = p.inventoryCount;
             PlayerInventory::AddItem(p, 97, 0, 0);
-            CombatResolution::UseItem(p, p.inventoryCount - 1, nullptr, items, monsters, levels, useRng);
+            CombatResolution::UseItem(p, p.inventoryCount - 1, nullptr, items, monsters, levels, world, useRng);
             Check(p.inventoryCount == beforeCount, "item 97 with a null target should still consume the item");
         }
 

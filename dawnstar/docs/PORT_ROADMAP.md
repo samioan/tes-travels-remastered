@@ -926,21 +926,75 @@ milestone rather than just read-through.
       deliberately-planted stale bit and re-derive every real bit from
       the registries alone. All checks passed.
 
+- [x] **M23 -- wiring `DungeonRuntime` into `PlayerMovement`'s
+      dropped-item auto-loot, instant-lethal-tile camp trigger, and
+      roaming-monster cleanup** (this session). Closed three of
+      M13/M18's own documented "no live registry"/"no camp system yet"
+      simplifications, now that M22's registry and M18's camp system
+      both exist:
+      - `CommitMove`'s dropped-item auto-loot-on-arrival now really
+        runs: every record `DungeonRuntime::DroppedItemsAt` finds on the
+        arrival tile is offered to `PlayerInventory::AddItem`, looted
+        records are removed via `RemoveDroppedItem` (awarding
+        `giftPointsFound` for category-11 items whose record flags say
+        so), and the tile's presence bit only clears via
+        `ClearDroppedItemFlag` once every record there was actually
+        picked up -- an inventory-full item genuinely stays on the
+        floor, exactly like the original.
+      - `CommitMove`'s instant-lethal-tile (bit 8) case now really calls
+        `MarkCampAndReturnToTown(false)` (M18) instead of only
+        committing position/facing -- the one piece M18 itself couldn't
+        close yet, since `CommitMove` hadn't been touched since M13.
+      - `ComputeMoveTarget`'s "remove roaming gehen on level change"
+        cleanup, and the identical block `Player.java`'s
+        `resetToHubPosition` itself also runs, now really search the
+        LEAVING level's live monster registry for a type-41 monster and
+        remove it via the new `DungeonRuntime::RemoveMonster`
+        (`ESGame.removeMonster`'s port) -- factored into one shared
+        private `CleanupRoamingMonsterIfPresent` helper since both call
+        sites are the exact same block traced from the source.
+
+      This made `PlayerMovement`/`CombatResolution` the third/fourth
+      modules needing two of the existing sibling modules at once (here
+      player/combat + the new `dungeon/`), so `dawnstar_player` and
+      `dawnstar_combat` both picked up a dependency on `dawnstar_dungeon`
+      -- no cycle results, since neither `dawnstar_world` nor
+      `dawnstar_monster` depends back on `dawnstar_player`.
+      `CombatResolution::UseItem`'s item-87 handling (already calling
+      `MarkCampAndReturnToTown` since M18) needed a `WorldRegistry&`
+      parameter added through it for the same reason.
+
+      Verified via the new `movement_registry_wiring_smoke.exe` (no JVM
+      ground truth, same reason as M6/M9/M11/M13-M22) against the real
+      37-level world: full-loot and inventory-full dropped-item
+      pickup (including the gift-points branch); the lethal-tile trigger
+      landing at the correct alt-spawn point with the correct camp-mark
+      bookmark; the roaming-monster cleanup actually removing the
+      registered type-41 monster and clearing the flag on a real level
+      crossing, and confirming a plain turn (no level change) touches
+      neither. One test-assumption bug caught and fixed along the way:
+      an initial assertion expected `suppressStrafeAdjust` to still read
+      `true` after `Move()` returned from the lethal-tile trigger --
+      wrong, since `Move()` itself (matching `Player.move()`)
+      unconditionally resets that flag to `false` before returning
+      regardless of what `CommitMove` did inside; the flag is only ever
+      observable as `true` mid-strafe-sequence within the same call.
+
 ## Milestones next
 
-- [ ] **M23 and beyond (not yet planned in detail):** actually wiring
-      `DungeonRuntime` into `PlayerMovement`/`MonsterRuntime`/
-      `CombatResolution`'s still-standing "no live registry"
-      simplifications (dropped-item auto-loot on arrival, monster
-      death-drops, roaming-monster cleanup on level change) --
-      each needs its own call-site-level design, not just the registry
-      M22 provided; the hotbar panel/message popup/object-monster-
-      chest-NPC sprites/minimap in the real windowed app (the rest of
-      `GameCanvas.paintGameView()`'s calls, now that the status bars are
-      wired up and a live registry exists to actually populate them
-      from); and finally `ESGame`'s own screen-wiring loop (character
-      creation, menus, dialogue, shops) tying it all together in place
-      of M20's fixed stand-in character. Each gets its own milestone
-      once the shape of "how much fits in one slice" is clearer --
-      following `shadowkey-decomp`'s pattern of not over-planning
-      milestones far in advance of actually reaching them.
+- [ ] **M24 and beyond (not yet planned in detail):** monster
+      death-drops (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`)
+      still has no wiring, since `onDeath()` itself is only ever called
+      from `GameCanvas`, not from `Player`/`Monster`'s own methods --
+      genuinely blocked on the screen-wiring milestone below, not
+      something a registry-only milestone can close; the hotbar panel/
+      message popup/object-monster-chest-NPC sprites/minimap in the real
+      windowed app (the rest of `GameCanvas.paintGameView()`'s calls,
+      now that the status bars are wired up and a live registry exists
+      to actually populate them from); and finally `ESGame`'s own
+      screen-wiring loop (character creation, menus, dialogue, shops)
+      tying it all together in place of M20's fixed stand-in character.
+      Each gets its own milestone once the shape of "how much fits in
+      one slice" is clearer -- following `shadowkey-decomp`'s pattern of
+      not over-planning milestones far in advance of actually reaching
+      them.

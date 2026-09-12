@@ -6,6 +6,7 @@
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
 #include "assets/spell_database.h"
+#include "dungeon/dungeon_runtime.h"
 #include "monster/monster_state.h"
 #include "player/player_state.h"
 #include "util/java_random.h"
@@ -76,15 +77,17 @@ public:
     // whatever target they have, or nullptr). Every other item id (87-96)
     // is Player-only: 87 (warp-to-camp-or-mark) delegates to
     // player/player_movement.h's HasCampMark/WarpToCampMark/
-    // MarkCampAndReturnToTown (hence the `levels` parameter), 88 to
-    // player/player_spellcasting.h's CureRandomAilment (hence
-    // `globalRng`). Every used item is consumed (removed from its slot)
-    // afterward except 96 ("Safe Camping"), which the original
-    // deliberately leaves in the inventory -- ported via the same
-    // `consume` flag the original uses. SIMPLIFIED: like the other
-    // combat entry points, skips target.store().
+    // MarkCampAndReturnToTown (hence the `levels`/`world` parameters --
+    // M23 gave MarkCampAndReturnToTown a live-registry dependency of its
+    // own, for its roaming-monster cleanup), 88 to player/
+    // player_spellcasting.h's CureRandomAilment (hence `globalRng`).
+    // Every used item is consumed (removed from its slot) afterward
+    // except 96 ("Safe Camping"), which the original deliberately leaves
+    // in the inventory -- ported via the same `consume` flag the
+    // original uses. SIMPLIFIED: like the other combat entry points,
+    // skips target.store().
     static void UseItem(PlayerState& player, int slot, MonsterState* target, const ItemDatabase& items,
-                         const MonsterDatabase& monsterDb, std::vector<GeneratedLevel>& levels,
+                         const MonsterDatabase& monsterDb, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
                          JavaRandom& globalRng);
 };
 

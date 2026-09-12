@@ -55,6 +55,16 @@ bool DungeonRuntime::TrySpawnMonsterNear(std::vector<GeneratedLevel>& levels, Wo
     return false;
 }
 
+void DungeonRuntime::RemoveMonster(GeneratedLevel& level, WorldRegistry& world, int x, int y) {
+    auto& monsters = world.monsters[static_cast<size_t>(level.number - 1)];
+    auto it = monsters.find(PackPosKey(x, y));
+    if (it == monsters.end()) return;
+
+    monsters.erase(it);
+    level.tiles[static_cast<size_t>(x)][static_cast<size_t>(y)] =
+        static_cast<uint8_t>(level.tiles[static_cast<size_t>(x)][static_cast<size_t>(y)] & ~static_cast<uint8_t>(2));
+}
+
 void DungeonRuntime::AddDroppedItem(GeneratedLevel& level, WorldRegistry& world,
                                      const std::array<uint8_t, 7>& record) {
     int x = record[0];

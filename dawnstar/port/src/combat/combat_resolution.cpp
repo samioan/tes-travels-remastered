@@ -350,7 +350,7 @@ void CombatResolution::CastOnMonster(PlayerState& player, MonsterState& target, 
 
 void CombatResolution::UseItem(PlayerState& player, int slot, MonsterState* target, const ItemDatabase& items,
                                 const MonsterDatabase& monsterDb, std::vector<GeneratedLevel>& levels,
-                                JavaRandom& globalRng) {
+                                WorldRegistry& world, JavaRandom& globalRng) {
     int itemId = std::abs(static_cast<int>(player.inventoryItemIds[slot]));
     int8_t category = items.category[static_cast<size_t>(itemId - 1)];
     if (category != 13) return;
@@ -362,7 +362,7 @@ void CombatResolution::UseItem(PlayerState& player, int slot, MonsterState* targ
                 PlayerMovement::WarpToCampMark(player, levels);
                 break;
             }
-            PlayerMovement::MarkCampAndReturnToTown(player, false, levels);
+            PlayerMovement::MarkCampAndReturnToTown(player, false, levels, world);
             break;
         case 88:
             PlayerSpellcasting::CureRandomAilment(player, globalRng);

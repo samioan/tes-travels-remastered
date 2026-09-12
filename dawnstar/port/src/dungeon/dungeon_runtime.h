@@ -107,6 +107,11 @@ public:
                                      int y, int forcedTypeOrSentinel, JavaRandom& rng, const MonsterDatabase& monsterDb,
                                      int16_t& spawnIdCounter);
 
+    // ESGame.removeMonster(level,x,y): removes whatever monster record
+    // is registered at (x,y), if any, clearing its tile's monster
+    // presence bit (2) only when a record was actually found there.
+    static void RemoveMonster(GeneratedLevel& level, WorldRegistry& world, int x, int y);
+
     // Dungeon.addDroppedItem(record): registers a 7-byte dropped-item
     // record and sets its tile's dropped-item presence bit (4).
     static void AddDroppedItem(GeneratedLevel& level, WorldRegistry& world, const std::array<uint8_t, 7>& record);
