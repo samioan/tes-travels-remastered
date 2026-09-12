@@ -328,13 +328,42 @@ milestone rather than just read-through.
       writes an uncompressed BMP (no encoder dependency needed) for
       direct viewing.
 
+- [x] **M11 -- player character creation** (this session). `PlayerState`
+      (`port/src/player/player_state.h`) and `PlayerCreation`
+      (`port/src/player/player_creation.h`/`.cpp`) port the real
+      character-creation pipeline out of `Player.java`:
+      `applyClassTemplate()` (attributes/skills/gold/traitor-index roll/
+      starting known-spell mask) fused with `resetState(false)`'s
+      character-creation path (hub-town spawn position, then
+      `grantStartingItems()` -> `addInventoryItem()`/`equipItem()`) --
+      the real game calls these from two separate UI steps
+      (class-select, then confirm), fused here since this port doesn't
+      model the UI screens between them, only the resulting character
+      data. Also added `ItemDatabase::IsEquippable()`/`EquipSlotOf()`
+      (M2's data-only struct's second round of added logic methods, same
+      pattern as M6's `RollLoot`/`RandomGiftItemOfSubtype`).
+
+      Verified against real `CharacterData`/`ItemDatabase` for all 7
+      classes via `player_creation_smoke.exe`: gold always 50, hub-town
+      spawn position, attributes/skills copied exactly from
+      `classTemplates`, starting items granted and auto-equipped into
+      the correct equip slots. The strongest confirmation, though, is
+      thematic coherence across *all* the systems this milestone and M4
+      touch together: Sorcerer/High Elf starts with 3 known spells and
+      light armor (the classic pure-caster pairing), Knight/Redguard
+      starts with heavy armor and no spells, Battlemage/Breton is a
+      balanced hybrid with real starting spells -- exactly the
+      archetypes their names promise, which only happens if the M4
+      class/race fix, `CharacterData`'s template columns, and this
+      milestone's equip/spell-mask logic are all simultaneously correct.
+
 ## Milestones next
 
-- [ ] **M11 and beyond (not yet planned in detail):** the rest of
-      `Player`'s runtime instance state (stats/inventory/equipment/
-      combat) and the save format; object/monster/chest/NPC sprites and
-      the HUD/minimap (`GameCanvas.paintGameView()`'s other calls, now
-      that the base corridor view renders); and finally `ESGame`'s own
+- [ ] **M12 and beyond (not yet planned in detail):** the rest of
+      `Player`'s runtime instance state (movement/combat/spellcasting)
+      and the save format; object/monster/chest/NPC sprites and the
+      HUD/minimap (`GameCanvas.paintGameView()`'s other calls, now that
+      the base corridor view renders); and finally `ESGame`'s own
       screen-wiring loop tying it all together. Each gets its own
       milestone once the shape of "how much fits in one slice" is clearer
       -- following `shadowkey-decomp`'s pattern of not over-planning

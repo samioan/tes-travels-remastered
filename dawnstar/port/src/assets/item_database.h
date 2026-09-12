@@ -31,6 +31,11 @@ struct ItemDatabase {
 
     int ItemCount() const { return static_cast<int>(name.size()); }
 
+    // Item.java's isEquippable()/equipSlotOf() -- itemId is 1-based,
+    // matching Item.java's own index0(itemId) = itemId - 1 convention.
+    bool IsEquippable(int itemId) const { return equipSlot[itemId - 1] != -1; }
+    int EquipSlotOf(int itemId) const { return equipSlot[itemId - 1]; }
+
     // Item.java's randomGiftItemOfSubtype()/rollLoot() -- the two loot-
     // roll methods DungeonGenerator's placeChests() calls. Kept as
     // methods on the data they roll against, same as the Java source.
