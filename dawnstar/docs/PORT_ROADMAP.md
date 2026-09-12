@@ -406,15 +406,61 @@ milestone rather than just read-through.
       hand-computable integer expression, not something that needs a JVM
       to trace.
 
+- [x] **M13 -- player movement** (this session). `PlayerMovement`
+      (`port/src/player/player_movement.h`/`.cpp`) ports `Player.java`'s
+      `computeMoveTarget()`/`commitMove()`/`move()`/`isWalkable()`:
+      forward/backward stepping, in-place turning (with the fallthrough
+      `case 1: delta=1; case 2: ...` Java switch faithfully reproduced),
+      strafing (turn/step/turn-back), and the cross-level boundary
+      stitching that walks off one `GeneratedLevel`'s edge onto its
+      `geomin.dat` neighbor -- including the coordinate recentering
+      needed when crossing between the 19x19 hub town and a 35x35
+      standard level. `levels` (mirroring `ESGame.dungeons[]`) is passed
+      in rather than owned, matching M11/M12's style of taking real data
+      by reference. `GeneratedLevel` grew a `visited` flag and
+      `PlayerState` grew `prevTileX/Y`, `corridorView`, and
+      `suppressStrafeAdjust` -- all directly touched by this milestone's
+      ported code (see their doc comments for why each is there before
+      any consumer of them exists).
+
+      Three real behavioral gaps deferred, each documented in
+      `player_movement.h`'s class comment rather than silently dropped:
+      dropped-item auto-loot on arrival, the instant-lethal-tile
+      camp-and-return-to-town trigger, and the "remove roaming gehen on
+      level change" cleanup -- all three need runtime systems
+      (dropped-item registry, camp/town-return, live monster instances)
+      this port doesn't have yet. Also noted: `computeMoveTarget`'s own
+      neighbor-level lookup is unguarded against a `<=0` neighbor in the
+      original (would throw in Java, relying on the implicit level-design
+      invariant that no walkable tile ever borders a "no neighbor" edge)
+      -- this port guards it defensively since C++ has no equivalent
+      safety net for an out-of-bounds vector index.
+
+      Verified via `player_movement_smoke.exe` against the real generated
+      37-level world (M6's `DungeonGenerator` + M9's `DungeonView`): all 8
+      documented tile-bit combinations checked against `isWalkable()`
+      individually; turning wraps 1↔4 correctly and never moves or costs
+      fatigue; fatigue<=0 blocks every direction including turns; a
+      successful forward step costs exactly 1×`fatigueCostMultiplier()`
+      fatigue and records `prevTileX/Y`, a blocked one costs nothing;
+      strafing always restores the original facing (turns are never
+      wall-blocked); and, strongest of all, **all 4 of the hub town's
+      real border exits** (found by scanning its actual tile data rather
+      than assumed) were walked through into their real
+      `geomin.dat`-declared neighbor levels (2, 11, 20, 29) with the
+      hub↔standard-level recentering math checked against an
+      independently hand-traced copy of `computeMoveTarget`'s formula,
+      matching exactly. All checks passed.
+
 ## Milestones next
 
-- [ ] **M13 and beyond (not yet planned in detail):** the rest of
-      `Player`'s runtime instance state (movement/combat/spellcasting) and
-      the lightweight "character summary" save format M12 deferred;
-      object/monster/chest/NPC sprites and the HUD/minimap
-      (`GameCanvas.paintGameView()`'s other calls, now that the base
-      corridor view renders); and finally `ESGame`'s own screen-wiring
-      loop tying it all together. Each gets its own milestone once the
-      shape of "how much fits in one slice" is clearer -- following
-      `shadowkey-decomp`'s pattern of not over-planning milestones far in
-      advance of actually reaching them.
+- [ ] **M14 and beyond (not yet planned in detail):** `Player`'s combat
+      and spellcasting, and the lightweight "character summary" save
+      format M12 deferred; object/monster/chest/NPC sprites and the
+      HUD/minimap (`GameCanvas.paintGameView()`'s other calls, now that
+      the base corridor view renders and the player can actually move
+      through it); and finally `ESGame`'s own screen-wiring loop tying it
+      all together. Each gets its own milestone once the shape of "how
+      much fits in one slice" is clearer -- following `shadowkey-decomp`'s
+      pattern of not over-planning milestones far in advance of actually
+      reaching them.

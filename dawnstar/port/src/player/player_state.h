@@ -101,6 +101,25 @@ struct PlayerState {
     // Shop's rumor-reveal-step-shown markers; see Player.java's own
     // field comment for the rest).
     std::array<bool, 96> eventFlags{};
+
+    // --- M13: fields movement (player_movement.h) touches, not part of
+    // the save format (Player.java doesn't (de)serialize any of these --
+    // they're either scratch or trivially re-derived on load).
+
+    // Previous tile, for the "just arrived here" chest/item auto-trigger
+    // check -- set by every successful move, but not yet read anywhere
+    // in this port (that check itself is deferred, see
+    // player_movement.h's class comment).
+    int8_t prevTileX = 0;
+    int8_t prevTileY = 0;
+    // Corridor tile-occlusion view grid (9 wide x 5 deep), populated by
+    // PlayerMovement's RefreshCorridorView -- read by the first-person
+    // corridor renderer (M9/M10) and, eventually, the minimap.
+    std::array<std::array<uint8_t, 5>, 9> corridorView{};
+    // One-shot flag set after a camp-mark/warp/death-reset (none ported
+    // yet, so always false in practice), consumed by the next Move()
+    // call to skip its strafe turn-back step.
+    bool suppressStrafeAdjust = false;
 };
 
 }  // namespace dawnstar

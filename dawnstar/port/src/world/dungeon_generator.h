@@ -84,6 +84,11 @@ struct GeneratedLevel {
     // qualified as the special room -- see PopulateLevel's comment).
     int specialShopX = -1;
     int specialShopY = -1;
+
+    // Dungeon.java's `visited` -- set true by PlayerMovement::CommitMove
+    // on arrival (M13, see player/player_movement.h). Not touched by
+    // generation itself; starts false like a freshly-generated level.
+    bool visited = false;
 };
 
 class DungeonGenerator {

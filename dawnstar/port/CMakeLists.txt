@@ -52,14 +52,15 @@ add_library(dawnstar_render STATIC
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world)
 
-# M11/M12: player character creation + full save format -- see
-# docs/PORT_ROADMAP.md and src/player/.
+# M11/M12/M13: player character creation + full save format + movement
+# -- see docs/PORT_ROADMAP.md and src/player/.
 add_library(dawnstar_player STATIC
   src/player/player_creation.cpp
   src/player/player_save.cpp
+  src/player/player_movement.cpp
 )
 target_include_directories(dawnstar_player PUBLIC src)
-target_link_libraries(dawnstar_player PUBLIC dawnstar_assets)
+target_link_libraries(dawnstar_player PUBLIC dawnstar_assets dawnstar_world)
 
 # M1: real tick loop + backbuffer + present -- see docs/PORT_ROADMAP.md and
 # src/engine/, src/graphics/, src/platform/win32/.
@@ -118,3 +119,7 @@ target_link_libraries(player_creation_smoke PRIVATE dawnstar_player)
 # M12 milestone smoke test -- see src/tests/m12_player_save_smoke.cpp.
 add_executable(player_save_smoke src/tests/m12_player_save_smoke.cpp)
 target_link_libraries(player_save_smoke PRIVATE dawnstar_player)
+
+# M13 milestone smoke test -- see src/tests/m13_player_movement_smoke.cpp.
+add_executable(player_movement_smoke src/tests/m13_player_movement_smoke.cpp)
+target_link_libraries(player_movement_smoke PRIVATE dawnstar_player)

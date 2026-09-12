@@ -1,0 +1,190 @@
+#include "player/player_movement.h"
+
+#include "world/dungeon_view.h"
+
+namespace dawnstar {
+
+namespace {
+
+// Player.java's fatigueCostMultiplier(): 3x while "Frost Limbs"
+// (ailment bit 0) is active, else 1x.
+int FatigueCostMultiplier(const PlayerState& p) { return (p.ailmentMask & 1) == 1 ? 3 : 1; }
+
+}  // namespace
+
+bool PlayerMovement::IsWalkable(uint8_t tileBits) {
+    if ((tileBits & 1) != 0) return false;
+    if ((tileBits & 32) != 0) return false;
+    return (tileBits & 2) == 0;
+}
+
+PlayerMovement::PendingMove PlayerMovement::ComputeMoveTarget(const PlayerState& p, int direction,
+                                                                const std::vector<GeneratedLevel>& levels) {
+    PendingMove pm;
+
+    if (direction == 1 || direction == 2) {
+        int delta = direction == 1 ? 1 : -1;
+        pm.facing = p.facing;
+        pm.tileX = p.tileX;
+        pm.tileY = p.tileY;
+
+        if (p.facing == 1) {
+            pm.tileY = p.tileY - delta;
+        } else if (p.facing == 3) {
+            pm.tileY = p.tileY + delta;
+        } else if (p.facing == 2) {
+            pm.tileX = p.tileX + delta;
+        } else if (p.facing == 4) {
+            pm.tileX = p.tileX - delta;
+        }
+
+        const GeneratedLevel& level = levels[static_cast<size_t>(p.currentLevel - 1)];
+        if (pm.tileX < 0) {
+            pm.levelChanged = true;
+            pm.level = level.neighborWest;
+            if (pm.level > 0) {
+                const GeneratedLevel& target = levels[static_cast<size_t>(pm.level - 1)];
+                pm.tileX = target.width - 1;
+                if (!(pm.level != 1 && p.currentLevel != 1)) {
+                    pm.tileY = pm.tileY + (target.height - level.height) / 2;
+                }
+            }
+        } else if (pm.tileX >= level.width) {
+            pm.levelChanged = true;
+            pm.level = level.neighborEast;
+            if (pm.level > 0) {
+                const GeneratedLevel& target = levels[static_cast<size_t>(pm.level - 1)];
+                pm.tileX = 0;
+                if (!(pm.level != 1 && p.currentLevel != 1)) {
+                    pm.tileY = pm.tileY + (target.height - level.height) / 2;
+                }
+            }
+        } else if (pm.tileY < 0) {
+            pm.levelChanged = true;
+            pm.level = level.neighborNorth;
+            if (pm.level > 0) {
+                const GeneratedLevel& target = levels[static_cast<size_t>(pm.level - 1)];
+                if (!(pm.level != 1 && p.currentLevel != 1)) {
+                    pm.tileX = pm.tileX + (target.width - level.width) / 2;
+                }
+                pm.tileY = target.height - 1;
+            }
+        } else if (pm.tileY >= level.height) {
+            pm.levelChanged = true;
+            pm.level = level.neighborSouth;
+            if (pm.level > 0) {
+                const GeneratedLevel& target = levels[static_cast<size_t>(pm.level - 1)];
+                if (!(pm.level != 1 && p.currentLevel != 1)) {
+                    pm.tileX = pm.tileX + (target.width - level.width) / 2;
+                }
+                pm.tileY = 0;
+            }
+        } else {
+            pm.levelChanged = false;
+            pm.level = p.currentLevel;
+        }
+
+        // "remove roaming gehen on level change" cleanup: SKIPPED, see
+        // class comment -- no live per-level monster registry yet.
+    } else if (direction == 3) {
+        pm.level = p.currentLevel;
+        pm.levelChanged = false;
+        pm.facing = p.facing + 1;
+        if (pm.facing > 4) pm.facing = 1;
+        pm.tileX = p.tileX;
+        pm.tileY = p.tileY;
+    } else if (direction == 4) {
+        pm.level = p.currentLevel;
+        pm.levelChanged = false;
+        pm.facing = p.facing - 1;
+        if (pm.facing < 1) pm.facing = 4;
+        pm.tileX = p.tileX;
+        pm.tileY = p.tileY;
+    }
+
+    return pm;
+}
+
+bool PlayerMovement::CommitMove(PlayerState& p, int direction, std::vector<GeneratedLevel>& levels,
+                                 bool& outLevelChanged) {
+    if (p.coreStats[6] <= 0) return false;
+    if (direction == 0) return false;
+
+    PendingMove pm = ComputeMoveTarget(p, direction, levels);
+    outLevelChanged = pm.levelChanged;
+    if (pm.level <= 0) return false;
+
+    GeneratedLevel& target = levels[static_cast<size_t>(pm.level - 1)];
+    // (every level in `levels` is always "populated" -- see class comment)
+    uint8_t tile = target.tiles[static_cast<size_t>(pm.tileX)][static_cast<size_t>(pm.tileY)];
+    if (!IsWalkable(tile)) return false;
+
+    p.currentLevel = pm.level;
+    p.prevTileX = static_cast<int8_t>(p.tileX);
+    p.prevTileY = static_cast<int8_t>(p.tileY);
+    p.tileX = pm.tileX;
+    p.tileY = pm.tileY;
+    p.facing = pm.facing;
+    target.visited = true;
+
+    if (direction == 1 || direction == 2) {
+        // Shop.showDeathGreeting reset: SKIPPED, Shop not ported yet.
+        int cost = 1 * FatigueCostMultiplier(p);
+        int16_t newFatigue = static_cast<int16_t>(p.coreStats[6] - cost);
+        p.coreStats[6] = newFatigue < 0 ? int16_t{0} : newFatigue;
+    }
+
+    // dropped-item auto-loot: SKIPPED, see class comment.
+
+    if ((tile & 8) == 0 || (direction != 1 && direction != 2)) {
+        RefreshCorridorView(p, levels);
+    }
+    // else: instant-lethal tile -> markCampAndReturnToTown(false):
+    // SKIPPED, see class comment. Position/facing above still commit.
+
+    return true;
+}
+
+void PlayerMovement::RefreshCorridorView(PlayerState& p, const std::vector<GeneratedLevel>& levels) {
+    DungeonView view(levels[static_cast<size_t>(p.currentLevel - 1)]);
+    uint8_t out[9][5];
+    view.SampleCorridorView(p.tileX, p.tileY, p.facing, out);
+    for (int i = 0; i < 9; i++) {
+        for (int j = 0; j < 5; j++) {
+            p.corridorView[static_cast<size_t>(i)][static_cast<size_t>(j)] = out[i][j];
+        }
+    }
+}
+
+bool PlayerMovement::Move(PlayerState& p, int direction, bool strafe, std::vector<GeneratedLevel>& levels) {
+    if (p.coreStats[6] <= 0) return false;
+
+    bool moved = false;
+    bool levelChanged = false;
+    bool savedLevelChanged = false;
+
+    if (strafe && direction == 4) {
+        CommitMove(p, 4, levels, levelChanged);
+        moved = CommitMove(p, 1, levels, levelChanged);
+        if (!p.suppressStrafeAdjust) {
+            savedLevelChanged = levelChanged;
+            moved = CommitMove(p, 3, levels, levelChanged);
+            levelChanged = savedLevelChanged;
+        }
+    } else if (strafe && direction == 3) {
+        CommitMove(p, 3, levels, levelChanged);
+        moved = CommitMove(p, 1, levels, levelChanged);
+        if (!p.suppressStrafeAdjust) {
+            savedLevelChanged = levelChanged;
+            moved = CommitMove(p, 4, levels, levelChanged);
+            levelChanged = savedLevelChanged;
+        }
+    } else {
+        moved = CommitMove(p, direction, levels, levelChanged);
+    }
+
+    p.suppressStrafeAdjust = false;
+    return moved;
+}
+
+}  // namespace dawnstar
