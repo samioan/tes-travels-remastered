@@ -1051,15 +1051,84 @@ milestone rather than just read-through.
       new one) pass; the real windowed `dawnstar_port.exe` re-verified
       via screen capture to still render correctly.
 
+- [x] **M25 -- the 13-slot `visibleObjects` cache (data model only)**
+      (this session). `VisibleObjects` (`player/visible_objects.h`/
+      `.cpp`) ports `Player.java`'s `tickVisibleObjects()`/
+      `refreshVisibleObjects()`/`placeVisibleObject()`/`markLooted()` --
+      the system `GameCanvas.paintVisibleObjects()` paints from directly.
+      Deliberately the DATA-MODEL half only, mirroring the M9/M10 split
+      (M9 = corridor wall-segment *selection*, M10 = actually drawing
+      it): this milestone produces a correctly-populated
+      `PlayerState::visibleObjects` every tick, with no pixel drawn
+      anywhere. A new `VisibleSlot`/`VisibleSlotKind` tagged-enum struct
+      (`player_state.h`) replaces Java's `EMPTY_SLOT`/`WALL_BLOCKED_SLOT`/
+      `OCCLUDED_SLOT` Integer-reference-identity sentinels, and
+      `visibleObjects` itself moved from a Java `static` field into
+      `PlayerState` (harmless single-player simplification, same
+      treatment every other Java-`static`-but-really-per-player field in
+      this port already gets). Wired into `main.cpp`'s tick loop right
+      after movement, matching `GameCanvas.run()`'s own per-tick order.
+      Needed the hub town's 5 fixed peddler positions
+      (`Shop.SHOP_X`/`SHOP_Y[0..4]`) as plain constant data -- no full
+      `Shop` class exists in this port yet (M8's `ShopDialogue` only
+      holds the dialogue text), so these are hardcoded directly in
+      `visible_objects.cpp` rather than standing up a whole Shop module
+      for 10 bytes of position data.
+
+      **A real, surprising finding, confirmed by grepping every read
+      site of `Monster.flag` (`rec[6]`) across `../../../src/`:** the
+      only place that ever sets it true is `markLooted`, called
+      immediately after ANY monster is newly placed into a visible slot
+      -- every tick it stays in view -- and nothing ever sets it back to
+      false. So despite the name, and despite this port's own earlier
+      `MonsterState::flag` doc comment ("collected/looted marker") and
+      `Dungeon.java`'s own "unconfirmed exact meaning" note, it does NOT
+      track combat or loot state at all: it tracks "has the player ever
+      seen this monster", and because Java's `rec` there is the literal
+      same array reference sitting in both the slot and the registry
+      (mutate-in-place aliasing), the very same tick that notices a
+      monster also flags-and-renders it, forever after --
+      `GameCanvas`'s `rec[6] != 0` rendering gate is therefore true for
+      essentially every monster that has ever been on screen, not just
+      "attacking" ones. Ported exactly (`VisibleObjects::MarkLooted`
+      writes the flag back into the live registry, matching
+      `Monster.store()`), not reinterpreted. SIMPLIFIED for dropped
+      items only: Java's `rec` there is likewise the same array
+      reference the registry's `Vector` holds, so `markLooted`'s bit-set
+      incidentally reaches the registry too; this port's registry holds
+      independent copies, so it doesn't -- confirmed by the same grep
+      that nothing else ever reads that particular bit, so the
+      divergence has no observable effect.
+
+      Verified via the new `visible_objects_smoke.exe` (no JVM ground
+      truth, same reason as M6/M9/M11/M13-M24): `refreshVisibleObjects`'s
+      occlusion cascade checked against 4 independently hand-traced
+      cases (a full-wipe wall directly ahead; two direct, single-target
+      occlusions; and a deep chained cascade where an earlier slot's
+      occlusion enables a later slot's own check to cascade further --
+      all re-derived from Java's exact sequential re-read order, not
+      consulted from the port's own implementation) -- all matched
+      exactly. Integration-tested against the real 37-level generated
+      world (M6/M24) and a real character (M11): a real pre-placed
+      monster approached from a genuinely walkable adjacent tile lands in
+      the closest slot and its "seen" flag round-trips into the live
+      registry; the hub town's shop-0 peddler and level 3's named
+      shopkeeper (via `GeneratedLevel::specialShopX/Y`) both resolve to
+      the correct `npcShopIndex`. All checks passed. Full clean rebuild
+      zero warnings; all 23 smoke tests pass; the real windowed app
+      re-verified via screen capture (unchanged visually, as expected --
+      no sprite drawing yet).
+
 ## Milestones next
 
-- [ ] **M25 and beyond (not yet planned in detail):** now that the live
-      registry actually holds the world's real pre-placed monsters/
-      chests (M24), the natural next slice is rendering them --
-      object/monster/chest/NPC sprites in the real windowed corridor
-      view (the rest of `GameCanvas.paintGameView()`'s calls, alongside
-      the hotbar panel/message popup/minimap M22's own entry already
-      flagged). Monster death-drops
+- [ ] **M26 and beyond (not yet planned in detail):** M25's data model is
+      ready for the actual sprite drawing --
+      `GameCanvas.paintVisibleObjects()`'s icon/position tables
+      (`OBJECT_DRAW_TABLE`/`OBJECT_ICON_TABLE`/`OBJECT_EXTRA_FLAGS`,
+      `drawMonsterMid`/`Far`, `drawFarLootIcon`/`Mid`/`CenterLootIcon`,
+      `paintObjectAtPosition`'s NPC-portrait/stairs-icon dispatch) plus
+      their sprite sheets, alongside the hotbar panel/message popup/
+      minimap M22's own entry already flagged. Monster death-drops
       (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`) still has
       no wiring, since `onDeath()` itself is only ever called from
       `GameCanvas`, not from `Player`/`Monster`'s own methods --

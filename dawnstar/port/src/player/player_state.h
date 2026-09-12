@@ -5,6 +5,30 @@
 
 namespace dawnstar {
 
+// Renamed-source counterpart of Player.java's visibleObjects slot
+// markers (EMPTY_SLOT/WALL_BLOCKED_SLOT/OCCLUDED_SLOT are distinguished
+// there by Integer reference identity; a tagged enum is the natural C++
+// equivalent). See player/visible_objects.h (M25) for the system that
+// populates this.
+enum class VisibleSlotKind : uint8_t { Empty, WallBlocked, Occluded, Monster, Chest, DroppedItem, Npc };
+
+// One of Player.visibleObjects' 13 slots. Only one of the three record
+// fields is meaningful, selected by `kind` (Monster/Chest/DroppedItem);
+// `npcShopIndex` is meaningful only for kind==Npc.
+struct VisibleSlot {
+    VisibleSlotKind kind = VisibleSlotKind::Empty;
+    std::array<uint8_t, 28> monsterRecord{};
+    std::array<uint8_t, 8> chestRecord{};
+    std::array<uint8_t, 7> droppedItemRecord{};
+    // Shop.SHOP_X/Y's own index (0-4 = the hub town's 5 fixed peddlers,
+    // 5-8 = the single named shopkeeper on levels 3/12/21/30) -- matches
+    // GameCanvas.paintNpcPortrait's own switch(shopId). No dialogue/
+    // quest-state Shop class is ported yet (M8's ShopDialogue only holds
+    // the dialogue text) -- this is only the minimal position/id data
+    // placeVisibleObject itself needs.
+    int npcShopIndex = -1;
+};
+
 // Renamed-source counterpart of ../../../src/Player.java's runtime
 // instance state: what character creation (player_creation.h) touches
 // (stats, attributes, skills, starting inventory/equipment, starting
@@ -120,6 +144,13 @@ struct PlayerState {
     // yet, so always false in practice), consumed by the next Move()
     // call to skip its strafe turn-back step.
     bool suppressStrafeAdjust = false;
+
+    // --- M25: Player.visibleObjects (see player/visible_objects.h).
+    // Java declares this `static` (shared/global -- a MIDP-era
+    // single-player-only design choice); folded into PlayerState here
+    // like every other per-player field in this port rather than kept
+    // as a global, since there's only ever one player either way.
+    std::array<VisibleSlot, 13> visibleObjects{};
 
     // --- M14: touched by PlayerCombatStats::GainSkillExp. Consumed
     // elsewhere by ESGame's level-up UI, not ported yet.

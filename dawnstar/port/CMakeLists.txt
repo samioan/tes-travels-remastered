@@ -52,12 +52,13 @@ add_library(dawnstar_render STATIC
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player)
 
-# M11/M12/M13/M14/M16/M17/M23: player character creation + full save
+# M11/M12/M13/M14/M16/M17/M23/M25: player character creation + full save
 # format + movement (now also touching the live world registry for
 # dropped-item auto-loot/roaming-monster cleanup) + combat/skill stat
 # math + inventory/equip management + self-targeted spellcasting + the
-# lightweight summary save format -- see docs/PORT_ROADMAP.md and
-# src/player/.
+# lightweight summary save format + the 13-slot visibleObjects cache
+# (data model only -- no sprite drawing yet) -- see docs/PORT_ROADMAP.md
+# and src/player/.
 add_library(dawnstar_player STATIC
   src/player/player_creation.cpp
   src/player/player_save.cpp
@@ -65,6 +66,7 @@ add_library(dawnstar_player STATIC
   src/player/player_combat_stats.cpp
   src/player/player_inventory.cpp
   src/player/player_spellcasting.cpp
+  src/player/visible_objects.cpp
 )
 target_include_directories(dawnstar_player PUBLIC src)
 target_link_libraries(dawnstar_player PUBLIC dawnstar_assets dawnstar_world dawnstar_dungeon)
@@ -200,3 +202,7 @@ target_link_libraries(movement_registry_wiring_smoke PRIVATE dawnstar_player)
 # src/tests/m24_registered_spawns_smoke.cpp.
 add_executable(registered_spawns_smoke src/tests/m24_registered_spawns_smoke.cpp)
 target_link_libraries(registered_spawns_smoke PRIVATE dawnstar_dungeon)
+
+# M25 milestone smoke test -- see src/tests/m25_visible_objects_smoke.cpp.
+add_executable(visible_objects_smoke src/tests/m25_visible_objects_smoke.cpp)
+target_link_libraries(visible_objects_smoke PRIVATE dawnstar_player)

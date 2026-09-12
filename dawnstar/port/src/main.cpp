@@ -24,6 +24,7 @@
 #include "player/player_creation.h"
 #include "player/player_movement.h"
 #include "player/player_state.h"
+#include "player/visible_objects.h"
 #include "render/frame_renderer.h"
 #include "render/hud_renderer.h"
 #include "util/java_random.h"
@@ -118,6 +119,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 } else if (KeyPressed(VK_LEFT)) {
                     dawnstar::PlayerMovement::Move(player, 4, false, levels, world, items);
                 }
+
+                // GameCanvas.run()'s own per-tick order: movement first,
+                // then Player.tickVisibleObjects() (M25) -- unconditional
+                // every tick, not just on a movement tick.
+                dawnstar::VisibleObjects::Tick(player, levels, world);
             }
 
             dawnstar::DungeonView view(levels, player.currentLevel - 1);
