@@ -870,21 +870,77 @@ milestone rather than just read-through.
       rendered correctly (full red/green/blue on a fresh character) in
       their real position, over the real corridor view from M20.
 
+- [x] **M22 -- the live per-level monster/chest/dropped-item registry**
+      (this session). `DungeonRuntime` (a new `src/dungeon/` module,
+      `dungeon_runtime.h`/`.cpp`) ports `Dungeon.java`'s live state:
+      `ESGame.monsters`/`chests`/`droppedItems`, the Hashtable/Vector
+      registries `player_movement.h`/`monster_runtime.h`/
+      `combat_resolution.h`'s class comments have been flagging as
+      missing since M13/M15/M18. A `WorldRegistry` struct holds one
+      registry set per level (position-keyed 28-byte monster records
+      and 8-byte chest records, plus an unordered 7-byte dropped-item
+      list), and `DungeonRuntime` ports `populateRandomMonsters`/
+      `trySpawnMonsterNear`/`addDroppedItem`/`removeChest`/
+      `removeDroppedItem`/`clearDroppedItemFlag`/`droppedItemsAt`/
+      `refreshTileFlags` against it. This is the third module needing
+      two of the existing sibling modules at once (world's
+      `GeneratedLevel`/`DungeonView` and monster's `MonsterRuntime`),
+      so it followed `combat/`'s established pattern: its own directory,
+      depending on both, with neither depending back.
+
+      Deliberately NOT wired into `PlayerMovement`/`MonsterRuntime`/
+      `CombatResolution`'s own existing "no live registry" simplifications
+      in this milestone -- `Move()`/`Chase()`/`OnDeath()`/`UseItem()` live
+      in modules that can't depend on `dawnstar_dungeon` without cycling
+      back into it. Traced `Monster.onDeath()`'s own call site to confirm
+      it's only ever invoked from `GameCanvas`, never from `Player`/
+      `Monster`'s own methods -- so that wiring genuinely belongs to a
+      future `GameCanvas`/`ESGame` screen-wiring milestone, not this one.
+
+      Two real quirks confirmed against the source rather than assumed:
+      `trySpawnMonsterNear`'s `forcedTypeOrSentinel` parameter only
+      literally forces a type for the special values 41/42 (the roaming
+      monster's own ids) -- any OTHER "forced" value is actually used as
+      a REPLACEMENT DIFFICULTY TIER for a random weighted roll, traced
+      through `Monster.spawn()`'s real parameter order. And
+      `removeDroppedItem`'s guard clears the registry entry but never
+      the tile's own dropped-item presence bit (a separate
+      `clearDroppedItemFlag` call does that) -- ported as two genuinely
+      independent operations, not merged into one "remove" convenience.
+      SIMPLIFIED: `removeDroppedItem`'s original `Vector.removeElement()`
+      matches by Java reference identity (the exact same `byte[]`
+      instance); this port matches by content equality instead, since a
+      value type has no pointer-identity equivalent -- indistinguishable
+      from the original unless two genuinely distinct dropped items ever
+      have bit-for-bit identical records at once.
+
+      Verified via the new `dungeon_runtime_smoke.exe` (no JVM ground
+      truth, same reason as M6/M9/M11/M13-M21) against the real 37-level
+      world: `populateRandomMonsters` checked for exact count, real
+      walkable placement, and registry-key/stored-position agreement;
+      forcing type 41 checked to bypass the roll; the tier-substitution
+      quirk checked by independently reproducing the exact roll a fresh,
+      identically-seeded RNG should produce; dropped-item add/remove/
+      query and the presence-bit-survives-removal quirk; chest removal's
+      wall-tile guard; and `refreshTileFlags` checked to both clear a
+      deliberately-planted stale bit and re-derive every real bit from
+      the registries alone. All checks passed.
+
 ## Milestones next
 
-- [ ] **M22 and beyond (not yet planned in detail):** the live per-level
-      monster/chest/dropped-item registry (`Dungeon.java`'s
-      `ESGame.monsters`/`chests`/`droppedItems` Hashtables/Vector) that
-      `dropInventoryItem`, `Monster.onDeath`'s drop, the "curse of
-      hunger" monster spawn, and the roaming-monster-cleanup-on-level-
-      change simplification are all still waiting on (see
-      `player_movement.h`/`monster_runtime.h`/`combat_resolution.h`'s
-      class comments); the hotbar panel/message popup/object-monster-
+- [ ] **M23 and beyond (not yet planned in detail):** actually wiring
+      `DungeonRuntime` into `PlayerMovement`/`MonsterRuntime`/
+      `CombatResolution`'s still-standing "no live registry"
+      simplifications (dropped-item auto-loot on arrival, monster
+      death-drops, roaming-monster cleanup on level change) --
+      each needs its own call-site-level design, not just the registry
+      M22 provided; the hotbar panel/message popup/object-monster-
       chest-NPC sprites/minimap in the real windowed app (the rest of
       `GameCanvas.paintGameView()`'s calls, now that the status bars are
-      wired up too); and finally `ESGame`'s own screen-wiring loop
-      (character creation, menus, dialogue, shops) tying it all
-      together in place of M20's fixed stand-in character. Each gets
-      its own milestone once the shape of "how much fits in one slice"
-      is clearer -- following `shadowkey-decomp`'s pattern of not over-
-      planning milestones far in advance of actually reaching them.
+      wired up and a live registry exists to actually populate them
+      from); and finally `ESGame`'s own screen-wiring loop (character
+      creation, menus, dialogue, shops) tying it all together in place
+      of M20's fixed stand-in character. Each gets its own milestone
+      once the shape of "how much fits in one slice" is clearer --
+      following `shadowkey-decomp`'s pattern of not over-planning
+      milestones far in advance of actually reaching them.

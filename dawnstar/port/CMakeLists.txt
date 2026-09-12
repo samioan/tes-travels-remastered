@@ -84,6 +84,14 @@ add_library(dawnstar_combat STATIC
 target_include_directories(dawnstar_combat PUBLIC src)
 target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster)
 
+# M22: the live per-level monster/chest/dropped-item registry (needs
+# both World and Monster) -- see docs/PORT_ROADMAP.md and src/dungeon/.
+add_library(dawnstar_dungeon STATIC
+  src/dungeon/dungeon_runtime.cpp
+)
+target_include_directories(dawnstar_dungeon PUBLIC src)
+target_link_libraries(dawnstar_dungeon PUBLIC dawnstar_world dawnstar_monster)
+
 # M1/M20: real tick loop + backbuffer + present, now wired to the real
 # asset/world/player/render pipeline -- see docs/PORT_ROADMAP.md and
 # src/engine/, src/graphics/, src/platform/win32/, src/main.cpp.
@@ -175,3 +183,7 @@ target_link_libraries(dungeon_view_smoke PRIVATE dawnstar_world)
 # M21 milestone smoke test -- see src/tests/m21_hud_renderer_smoke.cpp.
 add_executable(hud_renderer_smoke src/tests/m21_hud_renderer_smoke.cpp)
 target_link_libraries(hud_renderer_smoke PRIVATE dawnstar_render)
+
+# M22 milestone smoke test -- see src/tests/m22_dungeon_runtime_smoke.cpp.
+add_executable(dungeon_runtime_smoke src/tests/m22_dungeon_runtime_smoke.cpp)
+target_link_libraries(dungeon_runtime_smoke PRIVATE dawnstar_dungeon)
