@@ -5,13 +5,13 @@
 
 namespace dawnstar {
 
-// Renamed-source counterpart of a slice of ../../../src/Player.java's
-// runtime instance state -- just what character creation
-// (player_creation.h) touches: stats, attributes, skills, starting
-// inventory/equipment, starting known spells, and hub-town position.
-// Not the whole class -- movement, combat, spellcasting, dialogue, and
-// the save format are all separate, later milestones (see
-// docs/PORT_ROADMAP.md).
+// Renamed-source counterpart of ../../../src/Player.java's runtime
+// instance state: what character creation (player_creation.h) touches
+// (stats, attributes, skills, starting inventory/equipment, starting
+// known spells, hub-town position) plus the rest of the "full" save
+// format's fields (player_save.h, M12). Not the whole class --
+// movement, combat, spellcasting, and dialogue are all separate, later
+// milestones (see docs/PORT_ROADMAP.md).
 struct PlayerState {
     std::string name;
     int classIndex = 0;
@@ -54,6 +54,53 @@ struct PlayerState {
     int tileX = 9;
     int tileY = 9;
     int facing = 1;
+
+    // --- M12: the rest of the "full" save-format's fields (see
+    // player_save.h). Not touched by character creation -- all left at
+    // Player.java's own field-declaration defaults, matching a freshly
+    // `new Player(ESGame)`'d instance before resetState/grantStartingItems.
+
+    // Accumulated from auto-collected category-11 ("gift") dropped items.
+    int16_t giftPointsFound = 0;
+    // Rumor-reveal-step counter for Shop's mystery-subplot hint feed.
+    int16_t rumorRevealStep = 0;
+    // 8-bit active-ailment mask.
+    int8_t ailmentMask = 0;
+    int16_t trollThirstTimer = 0;
+    int16_t glacierCurseTimer = 0;
+    int16_t terrifiedTimer = 0;
+    // Read/written but never observed being used meaningfully.
+    bool unconfirmedZ = false;
+    // Camp/warp bookmark (level, x, y, facing).
+    int8_t campLevel = 0;
+    int8_t campX = 0;
+    int8_t campY = 0;
+    int8_t campFacing = 0;
+    // Generic spell/effect duration timers, -1=until cured, -2=until a
+    // condition check rather than a countdown.
+    std::array<int8_t, 25> effectDurations{};
+    // Current combat target's spawnId.
+    int16_t combatTargetSpawnId = 0;
+    // Scratch magnitude for the effectDurations[17] buff.
+    int16_t tempArmorBonus = 0;
+    // "Increase Harm"/"Increase Armor"/"Safe Camping" buffs.
+    bool increaseHarmBuff = false;
+    bool increaseArmorBuff = false;
+    bool safeCampingBuff = false;
+    // Counts (capped at 3) how many times the player has asked the
+    // actual traitor's shop about a topic; packed into the save format
+    // alongside traitorIndex (see player_save.cpp's ToBytes/FromBytes --
+    // this packing has a faithfully-preserved original-game bug).
+    int8_t traitorSuspicionCount = 0;
+    // Set once the type-41 "roaming" special monster has been dealt with.
+    bool specialEncounterResolved = false;
+    // True while the type-41 "roaming" special monster is believed alive
+    // on the current level.
+    bool roamingSpecialMonsterPresent = false;
+    // General-purpose one-time event/dialogue flags (indices 90-95 are
+    // Shop's rumor-reveal-step-shown markers; see Player.java's own
+    // field comment for the rest).
+    std::array<bool, 96> eventFlags{};
 };
 
 }  // namespace dawnstar

@@ -357,14 +357,64 @@ milestone rather than just read-through.
       class/race fix, `CharacterData`'s template columns, and this
       milestone's equip/spell-mask logic are all simultaneously correct.
 
+- [x] **M12 -- player save format** (this session). `PlayerSave`
+      (`port/src/player/player_save.h`/`.cpp`) ports `Player.java`'s
+      `toBytes(true)`/`fromBytes(data, true)` -- the "full" in-progress
+      save format actually used by save/load (the game's the lightweight
+      `toBytes(false)`/`fromBytes(data, false)` "character summary"
+      format, most likely a high-score/leaderboard record per
+      `Player.java`'s own comment, is deferred: round-tripping it
+      meaningfully needs the `applyClassTemplate`+`resetState`
+      reconstruction path `fromBytes(..., false)` leans on, which this
+      milestone doesn't otherwise need). `PlayerState` grew the rest of
+      the full save format's fields (camp bookmark, ailment/effect
+      timers, event flags, combat/buff scratch state). Added
+      `assets/binary_writer.h`, a `BinaryReader`-mirroring big-endian
+      writer (same ASCII-only `writeUTF` simplification `BinaryReader`
+      already documents).
+
+      **A real original-game bug, found and faithfully preserved:**
+      `toBytes(true)`'s `traitorIndex`/`traitorSuspicionCount` packing
+      line reads `packed = (byte)(this.traitorIndex << 2 +
+      this.traitorSuspicionCount)`. Java's `+` binds tighter than `<<`,
+      so this parses as `traitorIndex << (2 + traitorSuspicionCount)`,
+      *not* the `(traitorIndex << 2) + traitorSuspicionCount` the
+      read-back side (`traitorSuspicionCount = packed % 4; traitorIndex =
+      (packed >> 2) % 4`) clearly assumes -- a "2 bits each" scheme the
+      write side doesn't actually implement. This is a genuine
+      operator-precedence bug in the original decompiled source (not a
+      decompiler/rename artifact), and it's already lossy on real
+      hardware: e.g. `(traitorIndex=2, traitorSuspicionCount=1)` writes
+      packed byte 16, which reads back as `(traitorIndex=0,
+      traitorSuspicionCount=0)`. Ported as-is rather than "fixed" --
+      `player_save.cpp`'s `ToBytes`/`FromBytes` reproduce the exact same
+      shift/mask arithmetic, including the `specialEncounterResolved`/
+      `roamingSpecialMonsterPresent` flag bits (16/32) landing in the same
+      byte and being able to collide with the shift's output.
+
+      Verified via `player_save_smoke.exe`: builds a real character (M11)
+      for each of the 7 classes, fills in every full-save-only field with
+      varied non-default values, round-trips through `ToBytes`/`FromBytes`,
+      and asserts exact field-by-field equality for everything *except*
+      the traitor-packing group -- which is instead checked against an
+      independently hand-traced copy of the exact (buggy) Java formula,
+      including the concrete `(2,1)->(0,0)` corruption example above and a
+      boundary case (`traitorSuspicionCount==0`) where the bug happens not
+      to manifest. All checks passed. Tier-1-strength verification (like
+      M5's `java.util.Random`) despite `ESGame`'s stub-jar execution block
+      still applying -- the packing formula is a small, fully
+      hand-computable integer expression, not something that needs a JVM
+      to trace.
+
 ## Milestones next
 
-- [ ] **M12 and beyond (not yet planned in detail):** the rest of
-      `Player`'s runtime instance state (movement/combat/spellcasting)
-      and the save format; object/monster/chest/NPC sprites and the
-      HUD/minimap (`GameCanvas.paintGameView()`'s other calls, now that
-      the base corridor view renders); and finally `ESGame`'s own
-      screen-wiring loop tying it all together. Each gets its own
-      milestone once the shape of "how much fits in one slice" is clearer
-      -- following `shadowkey-decomp`'s pattern of not over-planning
-      milestones far in advance of actually reaching them.
+- [ ] **M13 and beyond (not yet planned in detail):** the rest of
+      `Player`'s runtime instance state (movement/combat/spellcasting) and
+      the lightweight "character summary" save format M12 deferred;
+      object/monster/chest/NPC sprites and the HUD/minimap
+      (`GameCanvas.paintGameView()`'s other calls, now that the base
+      corridor view renders); and finally `ESGame`'s own screen-wiring
+      loop tying it all together. Each gets its own milestone once the
+      shape of "how much fits in one slice" is clearer -- following
+      `shadowkey-decomp`'s pattern of not over-planning milestones far in
+      advance of actually reaching them.
