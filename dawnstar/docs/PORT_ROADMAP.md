@@ -980,21 +980,94 @@ milestone rather than just read-through.
       regardless of what `CommitMove` did inside; the flag is only ever
       observable as `true` mid-strafe-sequence within the same call.
 
+- [x] **M24 -- populate the live registry from world generation itself**
+      (this session). Since M6, `GeneratedLevel::monsters`/`::chests`
+      (`world/dungeon_generator.h`) have held the room-monster/chest
+      spawns `DungeonGenerator::PopulateLevel`/`PlaceChests` compute as
+      plain output data -- a deliberate placeholder, since no live
+      registry existed yet to put them in. In the original,
+      `DungeonGenerator.populateLevel`'s room-monster loop and
+      `placeChests` register directly into `ESGame.monsters[]`/
+      `chests[]` (`Monster.spawn(...).store()`, `ESGame.chests[...]
+      .put(...)`) as part of generation itself -- so until this
+      milestone, M22's `WorldRegistry` stayed permanently empty in the
+      real windowed app: nothing had ever actually put the world's own
+      pre-placed monsters/chests into it, only whatever a future
+      screen-wiring milestone might dynamically add later. New
+      `DungeonRuntime::RegisterGeneratedSpawns(level, world)`
+      (`dungeon/dungeon_runtime.h`/`.cpp`) closes that gap: called once
+      per level right after generation (`main.cpp`'s `BuildWorld`, which
+      now takes the `WorldRegistry&` it builds), it converts each
+      `GeneratedMonsterSpawn` into a full 28-byte `Monster.toBytes()`
+      record (`MonsterRuntime::ToBytes`) and each `GeneratedChestSpawn`
+      into the real 8-byte chest record layout, keyed by position exactly
+      like every other registry entry. Tile bits are left untouched here
+      -- `DungeonGenerator` already sets them (bit 2/16) while building
+      `level.tiles` itself, so this only adds the missing registry side.
+      Couldn't live inside `DungeonGenerator` itself: `dawnstar_world` is
+      a dependency *of* `dawnstar_dungeon`, so the reverse would cycle --
+      same constraint M22's own entry already documents.
+
+      Needed `GeneratedMonsterSpawn` to grow a `spawnId` field (mirroring
+      `GeneratedChestSpawn`'s existing one) since nothing had assigned
+      room-monsters an id before. Both remain per-level-local counters
+      (1..N) rather than the original's single global counter shared
+      across all 37 levels generated in one pass (`Monster
+      .nextSpawnIdCounter`/`Item.nextSpawnId` respectively) -- unchanged
+      from `GeneratedChestSpawn`'s own already-documented reasoning:
+      `WorldRegistry` keys everything by position, never by spawnId, so
+      this has no observable effect on registry correctness, only on the
+      id's own numeric value.
+
+      **A real doc bug caught and fixed along the way, unrelated to any
+      code change:** `WorldRegistry`'s own class comment (written in
+      M22) claimed chest record byte 2 is "always 0 despite the
+      'guaranteed gift' comment" -- checking `DungeonGenerator.java`'s
+      `placeChests` directly (needed to get this milestone's byte-packing
+      right) shows byte 2 is written as `first ? 1 : 0` and never
+      touched again, so it's actually 1 for the guaranteed-gift chest,
+      not always 0. Grepping all of `../src/` confirms byte 2 is
+      write-only -- nothing ever reads it back -- so the *practical*
+      conclusion ("this byte has no observable effect") was right, but
+      the stated reason was wrong. Corrected in place.
+
+      Verified via the new `registered_spawns_smoke.exe` (no JVM ground
+      truth, same reason as M6/M9/M11/M13-M23) against the real 37-level
+      world: the hub town (no room-monster/chest generation at all)
+      registers nothing; every one of the 36 standard levels' registered
+      monster/chest counts match their generated counts exactly, every
+      generated spawn's registry entry round-trips back to the exact
+      same type/hp/position/spawnId (monsters) or
+      position/guaranteedGift/tier/itemId/spawnId bytes (chests,
+      including the extended-itemId high-byte branch, actually exercised
+      by 17 of the 180 real generated chests) with the presence tile bit
+      already set from generation; exactly one guaranteed-gift chest per
+      level; and, as an integration check going beyond M22's own test
+      (which only ever exercised dynamically-spawned monsters),
+      `DungeonRuntime::RemoveMonster` correctly removes a monster this
+      milestone registered from real world generation, not one
+      `DungeonRuntime` itself created. All checks passed. Full clean
+      rebuild stayed at zero warnings; all 22 smoke tests (including the
+      new one) pass; the real windowed `dawnstar_port.exe` re-verified
+      via screen capture to still render correctly.
+
 ## Milestones next
 
-- [ ] **M24 and beyond (not yet planned in detail):** monster
-      death-drops (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`)
-      still has no wiring, since `onDeath()` itself is only ever called
-      from `GameCanvas`, not from `Player`/`Monster`'s own methods --
+- [ ] **M25 and beyond (not yet planned in detail):** now that the live
+      registry actually holds the world's real pre-placed monsters/
+      chests (M24), the natural next slice is rendering them --
+      object/monster/chest/NPC sprites in the real windowed corridor
+      view (the rest of `GameCanvas.paintGameView()`'s calls, alongside
+      the hotbar panel/message popup/minimap M22's own entry already
+      flagged). Monster death-drops
+      (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`) still has
+      no wiring, since `onDeath()` itself is only ever called from
+      `GameCanvas`, not from `Player`/`Monster`'s own methods --
       genuinely blocked on the screen-wiring milestone below, not
-      something a registry-only milestone can close; the hotbar panel/
-      message popup/object-monster-chest-NPC sprites/minimap in the real
-      windowed app (the rest of `GameCanvas.paintGameView()`'s calls,
-      now that the status bars are wired up and a live registry exists
-      to actually populate them from); and finally `ESGame`'s own
-      screen-wiring loop (character creation, menus, dialogue, shops)
-      tying it all together in place of M20's fixed stand-in character.
-      Each gets its own milestone once the shape of "how much fits in
-      one slice" is clearer -- following `shadowkey-decomp`'s pattern of
-      not over-planning milestones far in advance of actually reaching
-      them.
+      something a registry-only milestone can close. And finally
+      `ESGame`'s own screen-wiring loop (character creation, menus,
+      dialogue, shops) tying it all together in place of M20's fixed
+      stand-in character. Each gets its own milestone once the shape of
+      "how much fits in one slice" is clearer -- following
+      `shadowkey-decomp`'s pattern of not over-planning milestones far
+      in advance of actually reaching them.

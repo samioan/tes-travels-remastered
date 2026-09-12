@@ -34,10 +34,18 @@ namespace {
 
 // Mirrors every M13 test's own world-building loop: one GeneratedLevel
 // per real geomin.dat row, hub town (level 1) hand-carved, every other
-// level procedurally generated -- see world/dungeon_generator.h.
+// level procedurally generated -- see world/dungeon_generator.h. M24
+// additionally registers each level's pre-placed monster/chest spawns
+// into the live `world` registry right after generating it -- the
+// port's substitute for DungeonGenerator.java's populateLevel/
+// placeChests directly calling Monster.store()/ESGame.chests[...].put()
+// as part of generation itself (see dungeon/dungeon_runtime.h's
+// RegisterGeneratedSpawns doc comment for why that can't happen inside
+// DungeonGenerator itself here).
 std::vector<dawnstar::GeneratedLevel> BuildWorld(const dawnstar::DungeonGeometry& geometry,
                                                   const dawnstar::ItemDatabase& items,
-                                                  const dawnstar::MonsterDatabase& monsters) {
+                                                  const dawnstar::MonsterDatabase& monsters,
+                                                  dawnstar::WorldRegistry& world) {
     std::vector<dawnstar::GeneratedLevel> levels;
     levels.reserve(geometry.rows.size());
     for (size_t i = 0; i < geometry.rows.size(); i++) {
@@ -46,6 +54,7 @@ std::vector<dawnstar::GeneratedLevel> BuildWorld(const dawnstar::DungeonGeometry
                               ? dawnstar::DungeonGenerator::BuildHubLevel(geometry.rows[0])
                               : dawnstar::DungeonGenerator::PopulateLevel(levelNumber, geometry.rows[i], items,
                                                                            monsters));
+        dawnstar::DungeonRuntime::RegisterGeneratedSpawns(levels.back(), world);
     }
     return levels;
 }
@@ -74,12 +83,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::ImgArchive imageArchive(root + "/imgfiles.lmp");
         dawnstar::FrameTextures textures = dawnstar::FrameTextures::Load(imageArchive);
 
-        std::vector<dawnstar::GeneratedLevel> levels = BuildWorld(geometry, items, monsters);
-        // M22/M23's live per-level monster/chest/dropped-item registry
-        // -- empty until something (currently nothing; monster spawning
-        // isn't wired into this windowed app yet) populates it, but
-        // Move() reads/writes it every step regardless.
-        dawnstar::WorldRegistry world(levels.size());
+        // M22/M23's live per-level monster/chest/dropped-item registry.
+        // M24 populates it with every level's pre-placed monster/chest
+        // spawns as part of BuildWorld below; dropped items only ever
+        // enter it dynamically (loot drops, monster death -- the latter
+        // still unwired, see docs/PORT_ROADMAP.md's M22 entry).
+        dawnstar::WorldRegistry world(geometry.rows.size());
+        std::vector<dawnstar::GeneratedLevel> levels = BuildWorld(geometry, items, monsters, world);
 
         // ESGame.r's real seed (System.currentTimeMillis()) was never
         // meant to be reproducible either -- see player/player_creation.h's

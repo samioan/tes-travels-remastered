@@ -411,6 +411,7 @@ GeneratedLevel DungeonGenerator::PopulateLevel(int levelNumber, const DungeonGeo
         spawn.y = room.doorY;
         spawn.monsterType = monsterType;
         spawn.hp = monsters.Stat(monsterType, 14);
+        spawn.spawnId = i + 1;
         level.tiles[spawn.x][spawn.y] |= 2;
         level.monsters.push_back(spawn);
     }

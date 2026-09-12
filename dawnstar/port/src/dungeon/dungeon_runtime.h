@@ -50,10 +50,14 @@ struct WorldRegistry {
     std::vector<std::unordered_map<int, std::array<uint8_t, 28>>> monsters;
     // ESGame.chests[]: position-keyed 8-byte chest records (see
     // world/dungeon_generator.h's GeneratedChestSpawn and
-    // DungeonGenerator.java's placeChests -- chest[0]/[1]=x/y,
-    // [2]=always 0 despite the "guaranteed gift" comment (a real,
-    // separately-documented placeChests bug -- see that header),
-    // [3]=packed random-flavor-bits|tier, [4]=itemId low byte,
+    // DungeonGenerator.java's placeChests -- chest[0]/[1]=x/y, [2]=1 for
+    // the guaranteed-gift chest / 0 otherwise (write-only -- grepping
+    // ../../../src/ confirms nothing ever reads chest[2] back, so this
+    // is real but observably inert data, corrected here from an earlier,
+    // inaccurate "always 0" note), [3]=tier only (placeChests also rolls
+    // a 2-bit random "flavor" into this byte's top bits, but no
+    // confirmed read site exists for those either -- see
+    // GeneratedChestSpawn's own doc comment), [4]=itemId low byte,
     // [5]/[6]=spawnId high/low byte, [7]=itemId high byte (only
     // meaningful when [4]==86)).
     std::vector<std::unordered_map<int, std::array<uint8_t, 8>>> chests;
@@ -72,6 +76,23 @@ struct WorldRegistry {
 
 class DungeonRuntime {
 public:
+    // Registers a level's already-generated pre-placed monster/chest
+    // spawns (world/dungeon_generator.h's GeneratedLevel::monsters/
+    // ::chests -- DungeonGenerator.populateLevel's room-monster loop and
+    // placeChests, which in the original directly call
+    // Monster.spawn(...).store() / ESGame.chests[...].put(...) as part
+    // of generation itself) into the live WorldRegistry. A separate
+    // step here rather than folded into generation itself, since
+    // dawnstar_world (where DungeonGenerator lives) can't depend on
+    // dawnstar_dungeon -- this module already depends on dawnstar_world,
+    // so the reverse would cycle. Intended to be called once per level
+    // right after generation (see main.cpp's BuildWorld) -- the port's
+    // substitute for the original's same-pass registration. Tile bits
+    // are NOT touched here: DungeonGenerator already sets them (bit 2
+    // per monster, bit 16 per chest) while building `level.tiles`
+    // itself, so redoing that here would be pure duplication.
+    static void RegisterGeneratedSpawns(GeneratedLevel& level, WorldRegistry& world);
+
     // Dungeon.populateRandomMonsters(count): spawns `count` random
     // monsters at random walkable positions on `levels[levelIndex]`,
     // registering each into `world`. Retries with a freshly-rolled

@@ -36,6 +36,15 @@ struct GeneratedMonsterSpawn {
     int y = 0;
     int monsterType = 0;
     int hp = 0;
+    // Monster.spawn()'s nextSpawnId() counter -- like
+    // GeneratedChestSpawn::spawnId below, this is a per-level-local
+    // counter (1..room count) rather than the original's single
+    // Monster.nextSpawnIdCounter shared across all 37 levels generated
+    // in one pass. Same "fine for now, nothing reads it observably"
+    // reasoning as that field's own doc comment: dungeon/dungeon_runtime.h's
+    // WorldRegistry keys monsters by POSITION, not spawnId, so this
+    // can't affect registry correctness either.
+    int spawnId = 0;
 };
 
 // A chest placed in one of the level's 5 highest-(random-)weighted

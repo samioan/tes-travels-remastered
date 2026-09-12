@@ -2,6 +2,38 @@
 
 namespace dawnstar {
 
+void DungeonRuntime::RegisterGeneratedSpawns(GeneratedLevel& level, WorldRegistry& world) {
+    auto& monsterMap = world.monsters[static_cast<size_t>(level.number - 1)];
+    for (const GeneratedMonsterSpawn& spawn : level.monsters) {
+        MonsterState m;
+        m.spawnId = static_cast<int16_t>(spawn.spawnId);
+        m.monsterType = static_cast<int8_t>(spawn.monsterType);
+        m.hp = static_cast<int8_t>(spawn.hp);
+        m.x = static_cast<int8_t>(spawn.x);
+        m.y = static_cast<int8_t>(spawn.y);
+        m.dungeonLevel = static_cast<int8_t>(level.number);
+        monsterMap[PackPosKey(spawn.x, spawn.y)] = MonsterRuntime::ToBytes(m);
+    }
+
+    auto& chestMap = world.chests[static_cast<size_t>(level.number - 1)];
+    for (const GeneratedChestSpawn& chest : level.chests) {
+        std::array<uint8_t, 8> record{};
+        record[0] = static_cast<uint8_t>(chest.x);
+        record[1] = static_cast<uint8_t>(chest.y);
+        record[2] = chest.guaranteedGift ? 1 : 0;
+        record[3] = static_cast<uint8_t>(level.tier);
+        uint8_t low = static_cast<uint8_t>(chest.itemId & 0xFF);
+        uint8_t high = 0;
+        if (low == 86) high = static_cast<uint8_t>((chest.itemId >> 8) & 0xFF);
+        record[4] = low;
+        record[7] = high;
+        uint16_t spawnId = static_cast<uint16_t>(chest.spawnId);
+        record[5] = static_cast<uint8_t>((spawnId >> 8) & 0xFF);
+        record[6] = static_cast<uint8_t>(spawnId & 0xFF);
+        chestMap[PackPosKey(chest.x, chest.y)] = record;
+    }
+}
+
 void DungeonRuntime::PopulateRandomMonsters(std::vector<GeneratedLevel>& levels, WorldRegistry& world, int levelIndex,
                                              int count, JavaRandom& rng, const MonsterDatabase& monsterDb,
                                              int16_t& spawnIdCounter) {

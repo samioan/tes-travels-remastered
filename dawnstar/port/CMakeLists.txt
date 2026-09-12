@@ -86,8 +86,9 @@ add_library(dawnstar_combat STATIC
 target_include_directories(dawnstar_combat PUBLIC src)
 target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster dawnstar_dungeon)
 
-# M22: the live per-level monster/chest/dropped-item registry (needs
-# both World and Monster) -- see docs/PORT_ROADMAP.md and src/dungeon/.
+# M22/M24: the live per-level monster/chest/dropped-item registry (needs
+# both World and Monster), now also populated from world generation
+# itself -- see docs/PORT_ROADMAP.md and src/dungeon/.
 add_library(dawnstar_dungeon STATIC
   src/dungeon/dungeon_runtime.cpp
 )
@@ -194,3 +195,8 @@ target_link_libraries(dungeon_runtime_smoke PRIVATE dawnstar_dungeon)
 # src/tests/m23_movement_registry_wiring_smoke.cpp.
 add_executable(movement_registry_wiring_smoke src/tests/m23_movement_registry_wiring_smoke.cpp)
 target_link_libraries(movement_registry_wiring_smoke PRIVATE dawnstar_player)
+
+# M24 milestone smoke test -- see
+# src/tests/m24_registered_spawns_smoke.cpp.
+add_executable(registered_spawns_smoke src/tests/m24_registered_spawns_smoke.cpp)
+target_link_libraries(registered_spawns_smoke PRIVATE dawnstar_dungeon)
