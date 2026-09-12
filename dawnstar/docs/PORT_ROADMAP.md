@@ -1199,18 +1199,89 @@ milestone rather than just read-through.
       the real windowed app re-verified via screen capture, including
       after walking a real border crossing into a generated level.
 
+- [x] **M27 -- the closest slot's monster sprite + the stairs icon**
+      (this session). `VisibleObjectRenderer::PaintObjectAtPosition`
+      (`render/visible_object_renderer.h`/`.cpp`) ports
+      `GameCanvas.paintObjectAtPosition()`: the `OBJECT_DRAW_TABLE`/
+      `OBJECT_ICON_TABLE`/`OBJECT_EXTRA_FLAGS` static tables (a per-bucket
+      base sprite + optional second sprite + up to 4 extra decorations,
+      each an (dx, dy, icon) triple) and `drawSpriteFrame`'s multi-frame
+      horizontal-strip slicing -- which turned out to need no new
+      `Backbuffer` method at all: `Blit`'s existing column-clip range is
+      exactly `g.setClip(x, y, frameWidth, frameHeight)`'s mechanism here
+      (no Y-clipping needed, since these sheets are only ever
+      horizontally- not vertically-tiled, so a frame's height always
+      equals the sheet's own). Wired into `VisibleObjectRenderer::Render`'s
+      closest slot (1), replacing M26's stub there -- gated on the same
+      `rec[6]!=0` "seen" flag every other monster slot already uses.
+      Still DEFERRED (see the header's own updated class comment): full
+      NPC portraits, actually keyed by a completely separate `npcInSight`
+      mechanism this port hasn't traced at all, not by `visibleObjects`.
+
+      **Two real findings, confirmed against the source rather than
+      assumed:**
+      1. `OBJECT_DRAW_TABLE`'s first two columns of every row look
+         exactly like a "posCode range" label (row index 2 opens `{11,
+         25, ...}`, row index 3 opens `{26, 40, ...}`) -- but grepping
+         every read site shows those two columns are NEVER actually
+         read by any code; only `positionBucketFor`'s own independent
+         range checks decide which row applies. And the labels are
+         wrong for the row they sit on besides: row index 2 (which
+         `positionBucketFor` actually assigns to types 26-40) opens with
+         "11, 25", and row index 3 (types 11-25) opens with "26, 40" --
+         the middle two rows' own label values are swapped relative to
+         how they're actually dispatched to. Since nothing ever reads
+         them, this can't be a functional bug -- just confusing dead
+         data, preserved verbatim rather than reordered or "corrected".
+      2. Monster types 41/42 -- confirmed via `MonsterDatabase` against
+         the real extracted data to be genuine named creatures
+         ("Gehenoth"/"Gehenoth Thriceborn", with their own stats like
+         any other type, not some kind of stairway sentinel) -- render
+         the STAIRS ICON instead of any monster sprite at all when nearby
+         and closest. Traced exactly rather than assumed a mislabeling:
+         `paintStairsIcon` is only ever called from this one branch,
+         gated on nothing but the closest monster's TYPE being 41 or 42.
+         So in the original game, standing right next to this specific
+         rare monster renders a staircase icon in its place -- ported
+         faithfully as this real, striking behavior, not "fixed" into
+         drawing a creature sprite instead.
+
+      Also confirmed (not merely assumed from the flags table's shape):
+      `OBJECT_EXTRA_FLAGS`'s 4th "extra decoration" column is `false`
+      for every one of its 41 rows -- the 4th extra slot two of the four
+      `OBJECT_DRAW_TABLE` rows allocate space for is never actually
+      triggered by any real monster type in the whole game. And neither
+      table has an entry for type 42 at all (only 41 rows, covering
+      types 1-41) -- harmless, since type 41/42 both dispatch to the
+      stairs-icon branch before either table is ever indexed.
+
+      Verified via the new `object_at_position_smoke.exe` against the
+      real extracted textures (M7/M10/M26's own "look at the actual
+      decoded pixels" standard): one posCode from each of the 4 sprite
+      buckets (including a non-zero-frame case for both the base and
+      second sprite, and an all-extras-false case confirming nothing
+      extra is drawn), a case exercising 2 of the 4 possible extra
+      decorations together, and both monster types 41 and 42 confirmed
+      to draw the stairs icon's up/down frame respectively -- every
+      expected draw independently hand-derived from the tables' own
+      values (not read back from the port's implementation) and checked
+      against the sprite's own first opaque pixel within the correct
+      frame slice at the exact expected screen offset. All checks
+      passed. Full clean rebuild zero warnings; all 25 smoke tests pass
+      (M26's own now-obsolete "closest-slot monster is deferred" check
+      removed and superseded by this milestone's test); the real
+      windowed app re-verified via screen capture.
+
 ## Milestones next
 
-- [ ] **M27 and beyond (not yet planned in detail):** the closest slot's
-      monster case, full NPC portraits, and the stairs icon (all
-      DEFERRED by M26, see its own entry above) -- `paintObjectAtPosition`'s
-      `OBJECT_DRAW_TABLE`/`OBJECT_ICON_TABLE`/`OBJECT_EXTRA_FLAGS` tables
-      and `drawSpriteFrame`'s multi-frame slicing, plus tracing whatever
-      sets `npcInSight` for real portraits -- alongside the hotbar panel/
-      message popup/minimap M22's own entry already flagged. Monster
-      death-drops (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`)
-      still has no wiring, since `onDeath()` itself is only ever called
-      from `GameCanvas`, not from `Player`/`Monster`'s own methods --
+- [ ] **M28 and beyond (not yet planned in detail):** full NPC portraits
+      (`paintNpcPortrait`, DEFERRED by M26/M27 -- needs tracing whatever
+      sets `npcInSight`, a mechanism this port hasn't touched at all yet),
+      alongside the hotbar panel/message popup/minimap M22's own entry
+      already flagged. Monster death-drops
+      (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`) still has
+      no wiring, since `onDeath()` itself is only ever called from
+      `GameCanvas`, not from `Player`/`Monster`'s own methods --
       genuinely blocked on the screen-wiring milestone below, not
       something a registry-only milestone can close. And finally
       `ESGame`'s own screen-wiring loop (character creation, menus,

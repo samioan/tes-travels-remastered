@@ -214,3 +214,8 @@ target_link_libraries(visible_objects_smoke PRIVATE dawnstar_player)
 # src/tests/m26_visible_object_renderer_smoke.cpp.
 add_executable(visible_object_renderer_smoke src/tests/m26_visible_object_renderer_smoke.cpp)
 target_link_libraries(visible_object_renderer_smoke PRIVATE dawnstar_render)
+
+# M27 milestone smoke test -- see
+# src/tests/m27_object_at_position_smoke.cpp.
+add_executable(object_at_position_smoke src/tests/m27_object_at_position_smoke.cpp)
+target_link_libraries(object_at_position_smoke PRIVATE dawnstar_render)

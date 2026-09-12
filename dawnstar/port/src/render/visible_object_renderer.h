@@ -37,27 +37,30 @@ struct VisibleObjectTextures {
 // Renamed-source counterpart of GameCanvas.paintVisibleObjects() --
 // paints PlayerState::visibleObjects' 13 slots (player/visible_objects.h,
 // M25) as sprites: far (slots 8-12) and mid (4-6) distance monster/
-// chest/dropped-item icons, plus the closest slot's (1) chest/dropped-
-// item icon.
+// chest/dropped-item icons (M26), plus the closest slot's (1) chest/
+// dropped-item icon (M26) AND its monster case (M27, via
+// paintObjectAtPosition -- see PaintObjectAtPosition's own doc comment).
 //
-// DEFERRED to a later milestone: the closest slot's MONSTER case
-// (GameCanvas.paintObjectAtPosition(), which needs the big
-// OBJECT_DRAW_TABLE/OBJECT_ICON_TABLE/OBJECT_EXTRA_FLAGS static tables
-// and drawSpriteFrame()'s multi-frame sprite-sheet slicing -- none of
-// which this milestone's far/mid/loot icons need, since those are all
-// single-frame plain image blits) and, by extension, the stairs icon
-// (paintStairsIcon, only ever reached through that same code path for a
-// posCode of 41/42) and full NPC portraits (paintNpcPortrait, which is
-// actually keyed by a completely separate `npcInSight` mechanism this
-// port hasn't traced/ported at all yet, not by visibleObjects). NPCs
-// DO already render correctly at far/mid range here, though -- as a
-// generic monster-shaped silhouette icon, exactly like the original
-// (see the .cpp's own doc comment on the real, asymmetric icon-choice
-// quirk this preserves).
+// STILL DEFERRED: full NPC portraits (paintNpcPortrait, actually keyed
+// by a completely separate `npcInSight` mechanism this port hasn't
+// traced/ported at all yet, not by visibleObjects). NPCs DO already
+// render correctly at far/mid range (M26) as a generic monster-shaped
+// silhouette icon, exactly like the original.
 class VisibleObjectRenderer {
 public:
     static void Render(Backbuffer& bb, const VisibleObjectTextures& textures,
                         const std::array<VisibleSlot, 13>& slots);
+
+    // GameCanvas.paintObjectAtPosition(): the closest-slot monster
+    // renderer, also (separately) reused by the original for all 9 NPC
+    // portrait dispatches (paintNpcPortrait -- not ported here, see the
+    // class comment above) -- exposed publicly for that reason, even
+    // though VisibleObjectRenderer::Render is currently its only real
+    // caller. `frameOverride` >= 0 overrides OBJECT_ICON_TABLE's default
+    // second-sprite frame (the NPC-portrait dispatcher's own use, unused
+    // here -- always -1, matching paintVisibleObjects' own call).
+    static void PaintObjectAtPosition(Backbuffer& bb, const VisibleObjectTextures& textures, int posCode,
+                                       int frameOverride);
 };
 
 }  // namespace dawnstar

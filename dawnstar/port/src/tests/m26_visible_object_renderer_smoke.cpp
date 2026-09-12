@@ -206,18 +206,8 @@ int main(int argc, char** argv) {
             CheckBlitAt(bb, 60, 124, textures.itemBagSprites[0], "closest dropped item (slot 1)");
         }
 
-        // --- closest slot (1): a monster -- DEFERRED (needs
-        // paintObjectAtPosition's OBJECT_DRAW_TABLE machinery, a later
-        // milestone) -- should draw nothing at all yet ---
-        {
-            std::array<VisibleSlot, 13> slots{};
-            slots[1].kind = VisibleSlotKind::Monster;
-            slots[1].monsterRecord[2] = 3;
-            slots[1].monsterRecord[6] = 1;
-            Backbuffer bb = RenderIsolated(textures, slots);
-            Check(RegionAllBackground(bb, 0, 0, Backbuffer::kWidth, Backbuffer::kHeight, 0),
-                  "the closest slot's monster case is deferred -- should draw nothing yet");
-        }
+        // The closest slot's monster case (paintObjectAtPosition) is
+        // ported in M27 -- see m27_object_at_position_smoke.cpp.
 
         if (g_ok) {
             std::printf("all visible-object rendering checks passed\n");
