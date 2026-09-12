@@ -144,6 +144,22 @@ public:
     static const std::array<uint8_t, 8>* ChestInFront(PlayerState& p, std::vector<GeneratedLevel>& levels,
                                                         WorldRegistry& world);
 
+    // Player.java's nearestAttackableMonster(): the registered monster
+    // record at the tile a forward step would land on, or nullptr --
+    // same ComputeMoveTarget(1,...) re-derivation (and the same real,
+    // harmless double-cleanup quirk) as ChestInFront/NpcInFront above.
+    // SIMPLIFIED, but not lossy: the original decodes a NEW Monster
+    // object from the record on every call (a value snapshot it then
+    // holds as GameCanvas.targetMonster across a tick); this port's
+    // WorldRegistry stores the raw bytes directly, so there's no
+    // separate "live Monster object" layer to snapshot -- this just
+    // returns a pointer straight into the live record, and M32's
+    // main.cpp orchestration decodes/mutates/re-encodes it as needed.
+    // Non-const (unlike ChestInFront's own return) since combat needs to
+    // write the mutated record back in place.
+    static std::array<uint8_t, 28>* MonsterInFront(PlayerState& p, std::vector<GeneratedLevel>& levels,
+                                                     WorldRegistry& world);
+
 private:
     struct PendingMove {
         int level = 0;

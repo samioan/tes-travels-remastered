@@ -187,6 +187,18 @@ struct PlayerState {
     // so it has to be persisted here rather than kept as a purely local
     // per-tick value.
     bool chestInSight = false;
+
+    // --- M32: GameCanvas.monsterTargeted. Same GameCanvas-static-
+    // folded-in reasoning as chestInSight/npcInSight above -- needed
+    // every frame by HotbarRenderer::ComputeHotbarContext (M31 had
+    // this as a plain parameter, always passed false, since nothing set
+    // it yet; M32's attack-action wiring is what finally sets it for
+    // real). GameCanvas.targetMonster itself (the actual decoded
+    // monster this refers to) is NOT folded in here -- it's re-derived
+    // fresh via PlayerMovement::MonsterInFront whenever main.cpp's own
+    // attack/death-resolution code needs it (see main.cpp's own doc
+    // comment on why that's equivalent, not just simpler).
+    bool monsterTargeted = false;
 };
 
 }  // namespace dawnstar

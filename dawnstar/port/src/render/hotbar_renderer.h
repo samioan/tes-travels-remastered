@@ -33,12 +33,13 @@ struct HotbarTextures {
 // matching the original's own two-pass drawChar calls exactly) and
 // their 4 icons, all at 4 fixed positions.
 //
-// NOT ported here or anywhere yet: GameCanvas.paintActionFlashes()
-// (monsterHitFlash/spellHitFlash/selfSpellFlash -- also drawHotbarIcon-
-// based, but driven entirely by the still-unwired attack/spellcast
-// combat flow) and the actual keyPressed() dispatch that reads
-// hotbarContext back (attackRequested/interactRequested/campRequested --
-// same reason). See docs/PORT_ROADMAP.md's M31 entry.
+// GameCanvas.paintActionFlashes()'s monsterHitFlash case is also ported
+// here (as PaintActionFlashIcon below), M32 -- its spellHitFlash/
+// selfSpellFlash siblings remain unported pending the spellcasting-
+// wiring milestone. The actual keyPressed() dispatch that reads
+// hotbarContext back for camp/interact/cast/cycle/options
+// (campRequested/interactRequested/etc.) is also still not ported --
+// same reason (no camp/shop/spell-select/options UI exists yet).
 class HotbarRenderer {
 public:
     // GameCanvas.computeHotbarContext(): 0 = exploring, 1 = a monster is
@@ -61,6 +62,14 @@ public:
     // ever returns 0/1/2) draws just the panel background, matching the
     // original's own if/else-if chain with no final else.
     static void Paint(Backbuffer& bb, const HotbarTextures& textures, int context);
+
+    // GameCanvas.paintActionFlashes()'s own reuse of drawHotbarIcon()
+    // for its one-shot combat-flash icons -- exposed publicly (unlike
+    // Paint's own 4 fixed per-context placements above) since these use
+    // per-event RANDOM offsets the original picks at the call site, not
+    // a fixed table (see main.cpp's own M32 wiring for the only
+    // reachable case, monsterHitFlash -- iconIdx 6).
+    static void PaintActionFlashIcon(Backbuffer& bb, const HotbarTextures& textures, int iconIdx, int x, int y);
 };
 
 }  // namespace dawnstar

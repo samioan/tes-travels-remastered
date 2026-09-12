@@ -99,13 +99,17 @@ add_library(dawnstar_monster STATIC
 target_include_directories(dawnstar_monster PUBLIC src)
 target_link_libraries(dawnstar_monster PUBLIC dawnstar_assets dawnstar_world)
 
-# M15/M16: the combat entry points needing both Player and Monster --
-# see docs/PORT_ROADMAP.md and src/combat/.
+# M15/M16/M32: the combat entry points needing both Player and Monster,
+# plus (M32) the attack-action/death-resolution tick orchestration,
+# which additionally needs dawnstar_render (render/message_popup.h) --
+# see docs/PORT_ROADMAP.md and src/combat/. No cycle: dawnstar_render
+# doesn't depend back on dawnstar_combat.
 add_library(dawnstar_combat STATIC
   src/combat/combat_resolution.cpp
+  src/combat/combat_tick.cpp
 )
 target_include_directories(dawnstar_combat PUBLIC src)
-target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster dawnstar_dungeon)
+target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster dawnstar_dungeon dawnstar_render)
 
 # M22/M24: the live per-level monster/chest/dropped-item registry (needs
 # both World and Monster), now also populated from world generation
@@ -118,13 +122,16 @@ target_link_libraries(dawnstar_dungeon PUBLIC dawnstar_world dawnstar_monster)
 
 # M1/M20: real tick loop + backbuffer + present, now wired to the real
 # asset/world/player/render pipeline -- see docs/PORT_ROADMAP.md and
-# src/engine/, src/graphics/, src/platform/win32/, src/main.cpp.
+# src/engine/, src/graphics/, src/platform/win32/, src/main.cpp. M32
+# adds dawnstar_combat: the attack action needs CombatResolution::
+# PlayerAttack/MonsterRuntime::OnDeath directly from main.cpp's own
+# tick-dispatch orchestration.
 add_executable(dawnstar_port WIN32
   src/main.cpp
   src/platform/win32/window.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
-target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render)
+target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat)
 if(WIN32)
   target_compile_definitions(dawnstar_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_link_libraries(dawnstar_port PRIVATE user32 gdi32)
@@ -251,3 +258,7 @@ target_link_libraries(message_popup_smoke PRIVATE dawnstar_render)
 # M31 milestone smoke test -- see src/tests/m31_hotbar_renderer_smoke.cpp.
 add_executable(hotbar_renderer_smoke src/tests/m31_hotbar_renderer_smoke.cpp)
 target_link_libraries(hotbar_renderer_smoke PRIVATE dawnstar_render)
+
+# M32 milestone smoke test -- see src/tests/m32_combat_tick_smoke.cpp.
+add_executable(combat_tick_smoke src/tests/m32_combat_tick_smoke.cpp)
+target_link_libraries(combat_tick_smoke PRIVATE dawnstar_combat)

@@ -47,6 +47,11 @@ void DrawHotbarDigit(Backbuffer& bb, char c, int x, int y) {
 
 }  // namespace
 
+void HotbarRenderer::PaintActionFlashIcon(Backbuffer& bb, const HotbarTextures& textures, int iconIdx, int x,
+                                            int y) {
+    DrawHotbarIcon(bb, textures, iconIdx, x, y);
+}
+
 void HotbarRenderer::Paint(Backbuffer& bb, const HotbarTextures& textures, int context) {
     bb.Blit(0, 156, textures.panel);
 

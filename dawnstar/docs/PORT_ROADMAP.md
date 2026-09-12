@@ -1615,23 +1615,110 @@ milestone rather than just read-through.
       prompts, with the expected single-icon swap between the two
       contexts' last slot -- before the diagnostic was removed.
 
+- [x] **M32 -- monster targeting + the attack action + death/loot
+      wiring** (this session). The first of `dispatchTickActions()`'s
+      8-way priority-ordered action dispatch to actually get wired into
+      the live tick loop (camp/interact/cast/cycle/options remain
+      unwired -- each needs UI this port doesn't have yet: camp state,
+      shop dialogue, a spell-selection overlay, an options menu).
+      Attack outranks movement per tick, matching the original's own
+      ordering, gated on a new `'A'` key mapped the same "poll the held
+      key every tick, rely on the original's own internal cooldown to
+      throttle it" way movement already established (rather than
+      reproducing `keyPressed()`'s discrete per-keydown event
+      semantics) -- and, like the original's own `key == 49` handler,
+      only actually live while `hotbarContext == 1` (a monster
+      targeted), computed once per tick from the PREVIOUS tick's
+      `player.monsterTargeted`/`chestInSight`/`npcInSight`, exactly
+      matching the original's own real timing (`hotbarContext` is a
+      field `paintHotbar()` last wrote, not something `keyPressed()`
+      recomputes inline).
+
+      New `PlayerMovement::MonsterInFront` (`player/player_movement.h`/
+      `.cpp`) mirrors `ChestInFront`/`NpcInFront`'s own
+      `ComputeMoveTarget(1,...)` reuse for `Player.
+      nearestAttackableMonster()` -- SIMPLIFIED but not lossy: since
+      this port's `WorldRegistry` stores raw monster bytes directly
+      (no separate "live `Monster` object" layer the original's own
+      `GameCanvas.targetMonster` snapshots), it returns a pointer
+      straight into the live record instead.
+
+      New `combat/combat_tick.h`/`.cpp` (`CombatTick`, its own module
+      for the same reason `combat/combat_resolution.h` is one: it needs
+      BOTH `dawnstar_combat` and `dawnstar_render`, which don't depend
+      on each other) ports `processAttack()`/`refreshTargetMonster()`/
+      `resolveMonsterDeath()`. A genuinely equivalent (not merely
+      simpler) consolidation: rather than caching a `targetMonster`
+      across the tick boundary the way the original's own separate
+      `refreshTargetMonster()` call does, `ProcessAttack` re-derives the
+      front monster FRESH via `MonsterInFront` every time -- exactly
+      equivalent because attack and movement are mutually exclusive per
+      tick, so the player's front tile can't have changed since the
+      last refresh whenever an attack fires. `RefreshAndResolveTargetMonster`
+      combines `refreshTargetMonster()` + `resolveMonsterDeath()` into
+      one call since the original always calls them back-to-back anyway.
+
+      Monster death finally wires the loot-drop path this project has
+      flagged as blocked since M15/M18/M22: `MonsterRuntime::OnDeath`'s
+      `DeathDrop` is registered via `DungeonRuntime::AddDroppedItem` on
+      the monster's OWN level (`target.dungeonLevel`) -- but
+      `DungeonRuntime::RemoveMonster` is called on the PLAYER's current
+      level, a real, faithfully-preserved oddity traced straight from
+      `GameCanvas.resolveMonsterDeath()`'s own `ESGame.removeMonster(
+      this.player.currentLevel, ...)` call (not `target.dungeonLevel`),
+      which can silently search the wrong level's registry at a doorway
+      tile -- harmless in practice, preserved rather than "fixed".
+      Monster type 41's death still clears
+      `specialEncounterResolved`/`roamingSpecialMonsterPresent`; type
+      42's skips the loot roll entirely (its real end-of-game-UI
+      transition isn't ported -- no menu system exists yet) but still
+      runs every other cleanup step, matching the original's own
+      fallthrough. The ailment-4 kill-heal bonus and the "Creature is
+      dead!" popup are both wired too.
+
+      `player.monsterTargeted` (folded into `PlayerState`, same
+      reasoning as `chestInSight`/`npcInSight`) finally makes
+      `HotbarRenderer::ComputeHotbarContext`'s context-1 (combat) branch
+      live -- M31's own hotbar work was built and tested against a
+      hardcoded `false` for exactly this. `paintActionFlashes()`'s
+      `monsterHitFlash` case is also ported now (`HotbarRenderer::
+      PaintActionFlashIcon`, reusing `drawHotbarIcon`'s own logic with
+      caller-supplied random offsets via `LingoRandomInt`) --
+      `spellHitFlash`/`selfSpellFlash` remain unported pending the
+      spellcasting-wiring milestone.
+
+      Verified via the new `combat_tick_smoke.exe` against the real
+      37-level generated world: `MonsterInFront` against a real
+      pre-placed monster spawn; `ProcessAttack`'s cooldown gating and
+      its hp-invariant (`hit == (hpAfter < hpBefore)`, which holds
+      regardless of the probabilistic hit roll's actual outcome --
+      deliberately NOT forced to a specific result, since the
+      underlying roll math was already verified in M14/M15/M16); and
+      `RefreshAndResolveTargetMonster`'s full death-resolution path
+      (registry removal, tile-bit clearing, the ailment-4 heal formula,
+      the death popup, and both special monster-type branches). All
+      checks passed. Full clean rebuild zero warnings; all 32 smoke
+      tests pass. Also drove the real windowed pipeline end-to-end via
+      a temporary diagnostic (a real generated level's real pre-placed
+      monster, attacked with real combat math until it actually died)
+      and rendered two real frames -- one mid-fight (context 1, the
+      combat hotbar, correctly showing while `monsterTargeted`) and one
+      right after the kill (context 0 again, with a real "CREATURE IS
+      DEAD!" popup) -- before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M32 and beyond (not yet planned in detail):** every remaining
-      `showMessage()` call site beyond the 3 M30 wired up stays
-      unreachable until attack/spellcast/camp/menu actions are
-      themselves wired into the live tick loop. Monster death-drops
-      (`Monster.onDeath()` -> `DungeonRuntime::
-      AddDroppedItem`) still has no wiring, since `onDeath()` itself is
-      only ever called from `GameCanvas`, not from `Player`/`Monster`'s
-      own methods -- genuinely blocked on the screen-wiring milestone
-      below, not something a registry-only milestone can close. And
-      finally `ESGame`'s own screen-wiring loop (character creation,
-      menus, dialogue, shops -- the full `Shop.dialogue()` dispatcher
-      traced while scoping M28 is still unported, only its
-      `npcstrings.dat` text itself loads so far, M8) tying it all
-      together in place of M20's fixed stand-in character. Each gets
-      its own milestone once the shape of "how much fits in one slice"
-      is clearer -- following `shadowkey-decomp`'s pattern of not
-      over-planning milestones far in advance of actually reaching
-      them.
+- [ ] **M33 and beyond (not yet planned in detail):** every remaining
+      `showMessage()` call site beyond the 3 M30 wired up (plus M32's
+      "Creature is dead!") stays unreachable until spellcast/camp/menu
+      actions are themselves wired into the live tick loop --
+      `spellHitFlash`/`selfSpellFlash` likewise wait on spellcasting's
+      own wiring. And finally `ESGame`'s own screen-wiring loop
+      (character creation, menus, dialogue, shops -- the full `Shop.
+      dialogue()` dispatcher traced while scoping M28 is still
+      unported, only its `npcstrings.dat` text itself loads so far, M8)
+      tying it all together in place of M20's fixed stand-in character.
+      Each gets its own milestone once the shape of "how much fits in
+      one slice" is clearer -- following `shadowkey-decomp`'s pattern
+      of not over-planning milestones far in advance of actually
+      reaching them.
