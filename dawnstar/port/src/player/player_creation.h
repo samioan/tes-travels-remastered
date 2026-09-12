@@ -25,6 +25,14 @@ public:
     static PlayerState CreateCharacter(int characterClass, const std::string& name,
                                        const CharacterData& charData, const ItemDatabase& items,
                                        JavaRandom& globalRng);
+
+    // Player.java's private computeStartingSpellMask() -- exposed
+    // publicly so player/player_save.h's ToBytesSummary can call it
+    // against a live (already-created) character, exactly as
+    // Player.java's toBytes(false) does. See player_creation.cpp's doc
+    // comment on the definition for the mutation-as-a-side-effect
+    // consequence of that.
+    static uint32_t ComputeStartingSpellMask(PlayerState& p, const CharacterData& charData);
 };
 
 }  // namespace dawnstar

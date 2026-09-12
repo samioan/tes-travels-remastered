@@ -17,11 +17,40 @@ void RecalcMaxStats(PlayerState& p) {
     p.coreStats[7] = static_cast<int16_t>(p.attributes[0] + p.attributes[4] + p.attributes[6] + p.attributes[10]);
 }
 
-// Player.java's computeStartingSpellMask(): for 5 specific skill slots
-// (mapped to bit positions 0/5/10/15/20, i.e. spell ids 1/6/11/16/21), a
-// nonzero class-template threshold grants that tier's first spell. Also
-// sets selectedSpellId to the first one granted.
-uint32_t ComputeStartingSpellMask(PlayerState& p, const CharacterData& charData) {
+// Player.java's grantStartingItems(): grants classIndex's starting item
+// pair and auto-equips each one. addInventoryItem()/equipItem() (which
+// GrantStartingItems used to carry small private copies of here) now
+// live in player/player_inventory.h, shared with player/
+// player_spellcasting.h's castOnSelf.
+void GrantStartingItems(PlayerState& p, const ItemDatabase& items) {
+    // Item.nextSpawnId() is a pure counter with no bearing on generation
+    // correctness -- same simplification DungeonGenerator's chest
+    // placement made (see world/dungeon_generator.cpp): a fixed
+    // placeholder rather than the real cross-character-creation running
+    // total, since nothing reads it yet.
+    int spawnId = 1;
+    const int(&startingItems)[2] = kStartingItems[p.classIndex];
+
+    for (int itemId : startingItems) {
+        PlayerInventory::AddItem(p, itemId, spawnId, 0);
+        int slot = p.inventoryCount - 1;
+        PlayerInventory::Equip(p, items, slot, true);
+    }
+}
+
+}  // namespace
+
+// Player.java's private computeStartingSpellMask(): for 5 specific
+// skill slots (mapped to bit positions 0/5/10/15/20, i.e. spell ids
+// 1/6/11/16/21), a nonzero class-template threshold grants that tier's
+// first spell. Also sets p.selectedSpellId to the first one granted --
+// a real side effect on `p` itself, not a pure query. Exposed as a
+// public method (rather than kept file-private, like GrantStartingItems
+// above) because player/player_save.h's ToBytesSummary calls this
+// against a LIVE character being saved, exactly as Player.java's
+// toBytes(false) does via this.computeStartingSpellMask() -- see that
+// method's doc comment for the surprising consequence.
+uint32_t PlayerCreation::ComputeStartingSpellMask(PlayerState& p, const CharacterData& charData) {
     uint32_t mask = 0;
     int col = 13;
     bool first = true;
@@ -63,29 +92,6 @@ uint32_t ComputeStartingSpellMask(PlayerState& p, const CharacterData& charData)
 
     return mask;
 }
-
-// Player.java's grantStartingItems(): grants classIndex's starting item
-// pair and auto-equips each one. addInventoryItem()/equipItem() (which
-// GrantStartingItems used to carry small private copies of here) now
-// live in player/player_inventory.h, shared with player/
-// player_spellcasting.h's castOnSelf.
-void GrantStartingItems(PlayerState& p, const ItemDatabase& items) {
-    // Item.nextSpawnId() is a pure counter with no bearing on generation
-    // correctness -- same simplification DungeonGenerator's chest
-    // placement made (see world/dungeon_generator.cpp): a fixed
-    // placeholder rather than the real cross-character-creation running
-    // total, since nothing reads it yet.
-    int spawnId = 1;
-    const int(&startingItems)[2] = kStartingItems[p.classIndex];
-
-    for (int itemId : startingItems) {
-        PlayerInventory::AddItem(p, itemId, spawnId, 0);
-        int slot = p.inventoryCount - 1;
-        PlayerInventory::Equip(p, items, slot, true);
-    }
-}
-
-}  // namespace
 
 PlayerState PlayerCreation::CreateCharacter(int characterClass, const std::string& name,
                                             const CharacterData& charData, const ItemDatabase& items,
@@ -129,7 +135,7 @@ PlayerState PlayerCreation::CreateCharacter(int characterClass, const std::strin
     p.equippedItems.fill(0);
     p.inventoryCount = 0;
 
-    p.knownSpellsMask = ComputeStartingSpellMask(p, charData);
+    p.knownSpellsMask = PlayerCreation::ComputeStartingSpellMask(p, charData);
 
     // --- Player.resetState(false) [character-creation path] ---
     // (ailment/effect/camp-state resets omitted: PlayerState doesn't

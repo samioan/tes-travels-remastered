@@ -1,9 +1,11 @@
 #include "player/player_save.h"
 
+#include <array>
 #include <sstream>
 
 #include "assets/binary_reader.h"
 #include "assets/binary_writer.h"
+#include "player/player_creation.h"
 
 namespace dawnstar {
 
@@ -179,6 +181,77 @@ PlayerState PlayerSave::FromBytes(const std::vector<uint8_t>& data) {
         p.eventFlags[flagIdx++] = (b & 0x02) != 0;
         p.eventFlags[flagIdx++] = (b & 0x01) != 0;
     }
+
+    return p;
+}
+
+std::vector<uint8_t> PlayerSave::ToBytesSummary(PlayerState& p, const CharacterData& charData) {
+    std::vector<uint8_t> bytes;
+    BinaryWriter out(bytes);
+
+    out.WriteUTF(p.name);
+    out.WriteS16(static_cast<int16_t>(p.classIndex));
+    out.WriteS16(static_cast<int16_t>(p.raceIndex));
+
+    // Player.java's normalizeForSummary(): current=max for HP/Magicka/
+    // Fatigue, coreStats[8] zeroed -- applied to a COPY, unlike
+    // computeStartingSpellMask() below.
+    std::array<int16_t, 10> summary = p.coreStats;
+    summary[2] = summary[3];
+    summary[4] = summary[5];
+    summary[6] = summary[7];
+    summary[8] = 0;
+    for (int i = 0; i < 10; i++) out.WriteS16(summary[i]);
+
+    out.WriteS32(p.gold);
+    for (int i = 0; i < 16; i++) out.WriteS16(p.attributes[i]);
+
+    out.WriteS16(p.classMagickaFactor);
+    out.WriteS16(p.classUnknownPair[0]);
+    out.WriteS16(p.classUnknownPair[1]);
+
+    for (int i = 0; i < 14; i++) {
+        for (int c = 0; c < 3; c++) out.WriteS16(p.skills[i][c]);
+    }
+
+    // See this method's header doc comment: this mutates p.selectedSpellId
+    // and discards any spells learned beyond the class's starting set.
+    uint32_t mask = PlayerCreation::ComputeStartingSpellMask(p, charData);
+    out.WriteS32(static_cast<int32_t>(mask));
+
+    return bytes;
+}
+
+PlayerState PlayerSave::FromBytesSummary(const std::vector<uint8_t>& data, const CharacterData& charData,
+                                          const ItemDatabase& items, JavaRandom& globalRng) {
+    std::string raw(reinterpret_cast<const char*>(data.data()), data.size());
+    std::istringstream stream(raw);
+    BinaryReader in(stream);
+
+    std::string name = in.ReadUTF();
+    int classIndex = in.ReadS16();
+
+    // Player.java's applyClassTemplate(classIndex)+resetState(false):
+    // rolls a fresh traitorIndex, grants starting items, and places the
+    // character at the hub spawn -- none of which the summary format
+    // itself carries.
+    PlayerState p = PlayerCreation::CreateCharacter(classIndex, name, charData, items, globalRng);
+
+    p.raceIndex = in.ReadS16();
+    for (int i = 0; i < 10; i++) p.coreStats[i] = in.ReadS16();
+
+    p.gold = in.ReadS32();
+    for (int i = 0; i < 16; i++) p.attributes[i] = in.ReadS16();
+
+    p.classMagickaFactor = in.ReadS16();
+    p.classUnknownPair[0] = in.ReadS16();
+    p.classUnknownPair[1] = in.ReadS16();
+
+    for (int i = 0; i < 14; i++) {
+        for (int c = 0; c < 3; c++) p.skills[i][c] = in.ReadS16();
+    }
+
+    p.knownSpellsMask = static_cast<uint32_t>(in.ReadS32());
 
     return p;
 }

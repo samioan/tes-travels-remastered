@@ -52,9 +52,10 @@ add_library(dawnstar_render STATIC
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world)
 
-# M11/M12/M13/M14/M16: player character creation + full save format +
+# M11/M12/M13/M14/M16/M17: player character creation + full save format +
 # movement + combat/skill stat math + inventory/equip management +
-# self-targeted spellcasting -- see docs/PORT_ROADMAP.md and src/player/.
+# self-targeted spellcasting + the lightweight summary save format --
+# see docs/PORT_ROADMAP.md and src/player/.
 add_library(dawnstar_player STATIC
   src/player/player_creation.cpp
   src/player/player_save.cpp
@@ -156,3 +157,7 @@ target_link_libraries(monster_combat_smoke PRIVATE dawnstar_combat)
 # M16 milestone smoke test -- see src/tests/m16_spellcasting_smoke.cpp.
 add_executable(spellcasting_smoke src/tests/m16_spellcasting_smoke.cpp)
 target_link_libraries(spellcasting_smoke PRIVATE dawnstar_combat)
+
+# M17 milestone smoke test -- see src/tests/m17_summary_save_smoke.cpp.
+add_executable(summary_save_smoke src/tests/m17_summary_save_smoke.cpp)
+target_link_libraries(summary_save_smoke PRIVATE dawnstar_player)

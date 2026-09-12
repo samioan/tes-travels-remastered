@@ -639,11 +639,74 @@ milestone rather than just read-through.
       class comment says why); `castOnMonster`/`castOnSelf` still skip
       every `target.store()` call, same as M15/M14's `PlayerAttack`.
 
+- [x] **M17 -- the lightweight "character summary" save format** (this
+      session). `PlayerSave::ToBytesSummary`/`FromBytesSummary`
+      (`player/player_save.h`/`.cpp`) port `Player.java`'s
+      `toBytes(false)`/`fromBytes(data,false)`, the format M12
+      deliberately deferred because round-tripping it meaningfully
+      requires re-deriving the class-template reconstruction path
+      (`applyClassTemplate`+`resetState`) `fromBytes(...,false)` leans
+      on. That's no longer a blocker: `fromBytes(...,false)` needs
+      exactly what M11's `PlayerCreation::CreateCharacter` already does
+      (roll a fresh `traitorIndex`, re-grant starting items, place the
+      character at the hub spawn) before layering the serialized
+      summary fields on top, so `FromBytesSummary` just calls it
+      directly. The one new piece of logic needed was
+      `computeStartingSpellMask()`, previously a small private helper
+      inside `player_creation.cpp`'s anonymous namespace -- exposed as
+      `PlayerCreation::ComputeStartingSpellMask` (a public static
+      method) instead of duplicating it a third time (following the
+      same reuse-over-duplication call M16 made for
+      `addInventoryItem`/`equipItem` -> `PlayerInventory`), and
+      `CreateCharacter`'s own call site now goes through the same public
+      method.
+
+      **A real, surprising finding, preserved rather than "fixed":**
+      `toBytes(false)` computes its serialized known-spell mask by
+      calling `this.computeStartingSpellMask()` -- on the LIVE character
+      being saved, not a scratch one. That method has a genuine side
+      effect (it sets `selectedSpellId` to the class's first starting
+      spell, the same mechanism M16's `PlayerSpellcasting` doc comment
+      already flagged). So producing a nominally read-only "character
+      summary" actually **mutates the live character**: it silently
+      resets whatever spell the player currently has selected back to
+      their class's default -- but only for a class that actually has a
+      starting spell; a pure-warrior class (Barbarian/Knight/Rogue, all
+      three confirmed via `summary_save_smoke.exe`) never reaches that
+      assignment at all, since `computeStartingSpellMask`'s `first` flag
+      is only ever consumed inside the `if (bit != -1 && threshold > 0)`
+      branch. The serialized mask itself is *also* just the class's
+      starting spells, silently discarding anything actually learned
+      since character creation -- there is no way to save which spells a
+      character has learned in this format at all.
+
+      Verified via `summary_save_smoke.exe` (no JVM ground truth, same
+      reason as M6/M9/M11/M13/M14/M15/M16): for all 7 classes, a real
+      character (M11's `PlayerCreation`) is advanced away from a fresh
+      spawn (moved off the hub tile, extra gold/skill rank/inventory, a
+      hand-picked non-starting `selectedSpellId`, and a spell learned
+      well outside the class's starting set) and round-tripped through
+      the summary format with a deliberately *different* RNG seed on
+      load than on creation. Checked: every field the format actually
+      carries round-trips exactly (name/classIndex/raceIndex/gold/
+      attributes/classMagickaFactor/classUnknownPair/skills);
+      `normalizeForSummary`'s exact behavior (current HP/Magicka/Fatigue
+      normalized to max, `coreStats[8]` zeroed, `coreStats[9]` left
+      untouched -- checked by setting it to a hand-picked nonzero value
+      beforehand); the known-spell mask on reload matches an
+      independently-recomputed (against a scratch `PlayerState`, so it
+      couldn't be perturbed by the save call's own mutation)
+      class-starting mask, not the live one with the extra spell;
+      inventory/position/`traitorIndex` are all confirmed freshly
+      regenerated rather than carried over; and the `selectedSpellId`
+      mutation-on-save is checked to actually happen for spellcasting
+      classes and to NOT happen for the three classes with no starting
+      spells at all. All checks passed.
+
 ## Milestones next
 
-- [ ] **M17 and beyond (not yet planned in detail):** the lightweight
-      "character summary" save format M12 deferred; the inventory/equip-
-      menu-gating methods `player_inventory.h` didn't need yet
+- [ ] **M18 and beyond (not yet planned in detail):** the inventory/
+      equip-menu-gating methods `player_inventory.h` didn't need yet
       (`dropInventoryItem`, the "gift"/special-consumable `useItem`
       switch); object/monster/chest/NPC sprites and the HUD/minimap
       (`GameCanvas.paintGameView()`'s other calls, now that the base
