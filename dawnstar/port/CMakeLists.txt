@@ -29,6 +29,7 @@ add_library(dawnstar_assets STATIC
   src/assets/img_archive.cpp
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
+  src/assets/monster_image_names.cpp
   src/assets/shop_dialogue.cpp
   src/assets/spell_database.cpp
 )
@@ -43,11 +44,13 @@ add_library(dawnstar_world STATIC
 target_include_directories(dawnstar_world PUBLIC src)
 target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 
-# M9/M10/M21: corridor rendering + the HUD status-bar overlay -- see
+# M9/M10/M21/M26: corridor rendering + the HUD status-bar overlay + the
+# far/mid/close monster-chest-dropped-item-NPC sprite renderer -- see
 # docs/PORT_ROADMAP.md, src/render/, src/world/dungeon_view.h.
 add_library(dawnstar_render STATIC
   src/render/corridor_render_plan.cpp
   src/render/frame_renderer.cpp
+  src/render/visible_object_renderer.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player)
@@ -206,3 +209,8 @@ target_link_libraries(registered_spawns_smoke PRIVATE dawnstar_dungeon)
 # M25 milestone smoke test -- see src/tests/m25_visible_objects_smoke.cpp.
 add_executable(visible_objects_smoke src/tests/m25_visible_objects_smoke.cpp)
 target_link_libraries(visible_objects_smoke PRIVATE dawnstar_player)
+
+# M26 milestone smoke test -- see
+# src/tests/m26_visible_object_renderer_smoke.cpp.
+add_executable(visible_object_renderer_smoke src/tests/m26_visible_object_renderer_smoke.cpp)
+target_link_libraries(visible_object_renderer_smoke PRIVATE dawnstar_render)

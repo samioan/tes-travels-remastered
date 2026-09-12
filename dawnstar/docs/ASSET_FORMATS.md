@@ -133,6 +133,25 @@ decides how they're grouped into help topics.
                                       down so far (not all 17)
 ```
 
+## `monsterfilenamesin.dat` -- CONFIRMED format
+
+```
+<UTF x 5 x 7>   -- row-major, no count prefix (unlike monstersin.dat's
+                   leading u32): PNG filenames for GameCanvas.objectSprites,
+                   grouped by monster-type "bucket" (bucket 0 = types 1-5,
+                   1 = 6-10, 2 = 11-25, 3 = 26-40, 4 = the special
+                   "roaming" types 41/42 plus the stairs icon) --
+                   ESGame.loadMonsterFilenames()/monster_image_index_info.
+                   Not every bucket uses all 7 slots: bucket sizes are
+                   {7,7,6,3,3} (monster_image_index_info's own [start,count]
+                   pairs into the 26-slot objectSprites array), so a
+                   bucket with fewer than 7 real monster types still has
+                   7 filename slots in the file -- the extra slots are
+                   simply never read into objectSprites (ESGame's own
+                   loader loop bounds on monster_image_index_info's count,
+                   not a fixed 7).
+```
+
 ## `geomin.dat` -- CONFIRMED format
 
 ```

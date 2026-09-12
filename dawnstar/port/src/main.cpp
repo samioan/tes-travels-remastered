@@ -17,6 +17,7 @@
 #include "assets/img_archive.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "assets/monster_image_names.h"
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
@@ -27,6 +28,7 @@
 #include "player/visible_objects.h"
 #include "render/frame_renderer.h"
 #include "render/hud_renderer.h"
+#include "render/visible_object_renderer.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
 #include "world/dungeon_view.h"
@@ -83,6 +85,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::DungeonGeometry geometry = dawnstar::DungeonGeometry::Load(archive);
         dawnstar::ImgArchive imageArchive(root + "/imgfiles.lmp");
         dawnstar::FrameTextures textures = dawnstar::FrameTextures::Load(imageArchive);
+        dawnstar::MonsterImageNames monsterImageNames = dawnstar::MonsterImageNames::Load(archive);
+        dawnstar::VisibleObjectTextures visibleObjectTextures =
+            dawnstar::VisibleObjectTextures::Load(imageArchive, monsterImageNames);
 
         // M22/M23's live per-level monster/chest/dropped-item registry.
         // M24 populates it with every level's pre-placed monster/chest
@@ -129,6 +134,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             dawnstar::DungeonView view(levels, player.currentLevel - 1);
             dawnstar::FrameRenderer::Render(backbuffer, textures, view, player.tileX, player.tileY, player.facing,
                                              levels[static_cast<size_t>(player.currentLevel - 1)].number);
+            dawnstar::VisibleObjectRenderer::Render(backbuffer, visibleObjectTextures, player.visibleObjects);
             dawnstar::HudRenderer::PaintStatusBars(backbuffer, player, charData);
             window.Present(backbuffer);
         });

@@ -1119,19 +1119,98 @@ milestone rather than just read-through.
       re-verified via screen capture (unchanged visually, as expected --
       no sprite drawing yet).
 
+- [x] **M26 -- far/mid/close monster-chest-dropped-item-NPC sprite
+      rendering** (this session). `VisibleObjectRenderer`
+      (`render/visible_object_renderer.h`/`.cpp`) ports the bulk of
+      `GameCanvas.paintVisibleObjects()`: far (slots 8-12) and mid (4-6)
+      distance icons for monsters/chests/dropped items/NPCs, plus the
+      closest slot's (1) chest/dropped-item icon -- consuming M25's
+      `PlayerState::visibleObjects` directly, the first module to do so.
+      Needed a genuinely new asset: `monsterfilenamesin.dat` (5x7 grid of
+      PNG filenames, one row per monster-type "bucket" --
+      `assets/monster_image_names.h`/`.cpp`, documented in
+      `docs/ASSET_FORMATS.md`) -- `ESGame`'s own lazy per-level loader
+      (`runImageLoader`, MIDP-memory-constrained, loads only the buckets
+      the current level's monsters actually need) has no PC-memory-
+      constraint equivalent to preserve, so `VisibleObjectTextures::Load`
+      just decodes all 26 `objectSprites` + 3 chest + 3 bag images
+      eagerly up front, the same simplification this port already made
+      for floor/wall textures (M10). Wired into `main.cpp` right after
+      `FrameRenderer::Render`, before the HUD bars -- matching
+      `paintGameView()`'s own call order.
+
+      DEFERRED (see the header's own class comment): the closest slot's
+      MONSTER case (`paintObjectAtPosition`, which needs the large
+      `OBJECT_DRAW_TABLE`/`OBJECT_ICON_TABLE`/`OBJECT_EXTRA_FLAGS` static
+      tables and `drawSpriteFrame`'s multi-frame sprite-sheet slicing --
+      genuinely unlike everything else this milestone drew, which are
+      all single-frame plain image blits) and, by extension, the stairs
+      icon (only ever reached through that same code path) and full NPC
+      portraits (`paintNpcPortrait`, actually keyed by a completely
+      separate `npcInSight` mechanism this port hasn't traced at all,
+      *not* by `visibleObjects`).
+
+      **Two real findings, confirmed against the source rather than
+      assumed:**
+      1. `monsterfilenamesin.dat`'s stored filenames carry a leading `/`
+         (e.g. `/ban_male_body.png`) that `ImgArchive`'s own name lookup
+         doesn't expect -- `ESGame.createImage()` itself strips exactly
+         one leading `/` before looking anything up, a step invisible to
+         every other image lookup in this port (which all come from
+         `ESGame`'s own call-site string literals, never a leading
+         slash). Caught immediately as a real exception on first run
+         (`no such image: /ban_male_body.png`), not silently swallowed;
+         fixed with the same stripping `VisibleObjectTextures::Load` now
+         does before every lookup.
+      2. NPCs placed into a far/mid `visibleObjects` slot render as a
+         generic monster-shaped silhouette icon (never a real portrait),
+         chosen by a genuinely asymmetric condition ported straight from
+         `GameCanvas`'s own tag comparison: far icon 6 (mid 5) only for
+         the hub's `Shop.NAMES[0]`/`NAMES[1]` peddlers and levels 21/30's
+         named shopkeepers ("C"/"D") -- every other real NPC tag (the
+         hub's `NAMES[2..4]` and levels 3/12's "A"/"B") gets far icon 13
+         (mid 12) instead, with no discernible reason for the split.
+         Ported as the real, uneven condition it is rather than "cleaned
+         up" into something symmetric; Java's own dead `"W"` tag branch
+         (never actually placed by `placeVisibleObject`) isn't reachable
+         through this port's data model at all, since `VisibleSlotKind::Npc`
+         only ever gets constructed for a real placed tag.
+
+      Verified via the new `visible_object_renderer_smoke.exe` against
+      the real extracted textures (M7/M10's own "look at the actual
+      decoded pixels" standard, not just "something non-black got
+      drawn"): far/mid/close monster, chest, dropped-item, and both NPC
+      icon-set cases each checked against their sprite's own first
+      opaque pixel at the exact expected screen offset; the `rec[6]!=0`
+      "seen" gate confirmed to actually suppress an unflagged monster;
+      the closest slot's still-deferred monster case confirmed to draw
+      nothing at all yet. Every scenario renders on its own freshly-
+      cleared frame rather than combining several slots at once -- this
+      real asset set's sprites turned out to be far larger than their
+      "icon" names suggest (a mid-distance monster sprite can be 36x96
+      pixels, drawn with zero clipping, matching `drawMonsterMid`'s own
+      plain `drawImage()` exactly), so a mid-distance sprite legitimately
+      overpaints a chunk of the far-distance row behind it -- real,
+      intentional back-to-front layering (paint far things first, then
+      nearer ones on top), not a rendering bug; an early version of this
+      test combined multiple slots in one frame and mistook that real
+      overlap for a defect before this was traced down. All checks
+      passed. Full clean rebuild zero warnings; all 24 smoke tests pass;
+      the real windowed app re-verified via screen capture, including
+      after walking a real border crossing into a generated level.
+
 ## Milestones next
 
-- [ ] **M26 and beyond (not yet planned in detail):** M25's data model is
-      ready for the actual sprite drawing --
-      `GameCanvas.paintVisibleObjects()`'s icon/position tables
-      (`OBJECT_DRAW_TABLE`/`OBJECT_ICON_TABLE`/`OBJECT_EXTRA_FLAGS`,
-      `drawMonsterMid`/`Far`, `drawFarLootIcon`/`Mid`/`CenterLootIcon`,
-      `paintObjectAtPosition`'s NPC-portrait/stairs-icon dispatch) plus
-      their sprite sheets, alongside the hotbar panel/message popup/
-      minimap M22's own entry already flagged. Monster death-drops
-      (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`) still has
-      no wiring, since `onDeath()` itself is only ever called from
-      `GameCanvas`, not from `Player`/`Monster`'s own methods --
+- [ ] **M27 and beyond (not yet planned in detail):** the closest slot's
+      monster case, full NPC portraits, and the stairs icon (all
+      DEFERRED by M26, see its own entry above) -- `paintObjectAtPosition`'s
+      `OBJECT_DRAW_TABLE`/`OBJECT_ICON_TABLE`/`OBJECT_EXTRA_FLAGS` tables
+      and `drawSpriteFrame`'s multi-frame slicing, plus tracing whatever
+      sets `npcInSight` for real portraits -- alongside the hotbar panel/
+      message popup/minimap M22's own entry already flagged. Monster
+      death-drops (`Monster.onDeath()` -> `DungeonRuntime::AddDroppedItem`)
+      still has no wiring, since `onDeath()` itself is only ever called
+      from `GameCanvas`, not from `Player`/`Monster`'s own methods --
       genuinely blocked on the screen-wiring milestone below, not
       something a registry-only milestone can close. And finally
       `ESGame`'s own screen-wiring loop (character creation, menus,
