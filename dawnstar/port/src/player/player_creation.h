@@ -11,7 +11,8 @@ namespace dawnstar {
 // its roaming-special-monster cleanup, a no-op for a freshly-created
 // character anyway since that field starts false] ->
 // resetToHubPosition(false) -> grantStartingItems() (addInventoryItem +
-// auto-equip via equipItem). See docs/PORT_ROADMAP.md's M11 entry.
+// auto-equip via equipItem, both now in player/player_inventory.h). See
+// docs/PORT_ROADMAP.md's M11 entry.
 class PlayerCreation {
 public:
     // `globalRng` models ESGame.r, the shared game-wide RNG the real

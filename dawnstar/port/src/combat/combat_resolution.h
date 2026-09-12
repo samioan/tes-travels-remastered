@@ -4,6 +4,7 @@
 #include "assets/character_data.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "assets/spell_database.h"
 #include "monster/monster_state.h"
 #include "player/player_state.h"
 #include "util/java_random.h"
@@ -44,6 +45,22 @@ public:
     static bool MonsterTick(MonsterState& m, PlayerState& player, const CharacterData& charData,
                              const ItemDatabase& items, const MonsterDatabase& monsterDb, int64_t now,
                              JavaRandom& globalRng);
+
+    // Player.castOnMonster(spellId, target): the third entry point that
+    // needs both Player and Monster (case 14 -- "Blade Focus" or
+    // similar -- literally calls back into PlayerAttack). Same
+    // roll-then-apply shape as PlayerAttack/player/
+    // player_spellcasting.h's CastOnSelf: rolls hit tier off the
+    // caster's spell skill vs the target's evasion/defense stats, spends
+    // Magicka scaled by the outcome, then a big per-spell-id switch of
+    // direct damage (via MonsterRuntime::TakeDamage) and status effects
+    // on `target` (target.scratch[]) or self-buffs
+    // (player.effectDurations[]/tempArmorBonus). SIMPLIFIED: like
+    // PlayerAttack, skips every target.store() call (see
+    // monster/monster_runtime.h's class comment).
+    static void CastOnMonster(PlayerState& player, MonsterState& target, const CharacterData& charData,
+                               const ItemDatabase& items, const MonsterDatabase& monsterDb,
+                               const SpellDatabase& spells, JavaRandom& globalRng);
 };
 
 }  // namespace dawnstar

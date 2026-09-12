@@ -32,6 +32,9 @@ struct SpellDatabase {
     // Spell.java's isOffensive().
     bool IsOffensive(int spellId) const { return ById(spellId).school == 2; }
 
+    // Spell.java's isValidId(): 1-based, matching ById()/byId().
+    bool IsValidId(int spellId) const { return spellId >= 1 && spellId <= Count(); }
+
     static SpellDatabase Load(DatArchive& archive);
 };
 

@@ -558,11 +558,94 @@ milestone rather than just read-through.
       are documented in `monster_runtime.h`'s and `combat_resolution.h`'s
       class comments rather than repeated here.
 
+- [x] **M16 -- Player spellcasting** (this session). `PlayerSpellcasting`
+      (`port/src/player/player_spellcasting.h`) ports `Player.java`'s
+      self-targeted spell system: `spellSkillIndexFor`, `castOnSelf`,
+      `activeAilmentCount`/`cureRandomAilment`, `canLearnSpell`/
+      `learnSpellFromScroll`, and the known-spell bookkeeping
+      (`knownSpellsSummary`/`nthKnownSpellId`/`cycleSelectedSpell`/
+      `spellTooltip`). `castOnMonster` -- the offensive counterpart --
+      went into `CombatResolution` instead (`combat_resolution.h`/`.cpp`)
+      alongside `PlayerAttack`/`MonsterTick`, for the same reason those
+      two live there: it needs both `Player` and `Monster` state (and it
+      can itself call back into `PlayerAttack`, spell 14), so it can't
+      live in `player/` or `monster/` without creating a library cycle.
+      This is the third time this exact three-module split (self-
+      contained player logic / self-contained monster logic / a small
+      shared "needs both" module) has paid for itself, following M14's
+      original split and M15's monster-side mirror of it.
+
+      Along the way, `castOnSelf`'s case-6 branch (learning "cure
+      poison" from a granted scroll) needed `addInventoryItem`/
+      `equipItem`, which previously existed only as small private copies
+      inside `player_creation.cpp` (for `grantStartingItems`). Rather
+      than duplicate them a second time, they were pulled out into a new
+      `PlayerInventory` (`player/player_inventory.h`/`.cpp` --
+      `AddItem`/`Equip`/`UnequipSlot`/`RemoveSlot`/`IsEquipped`/
+      `CanEquipOrUnequip`/`EquipLastPickedUpItem`), and `player_creation.cpp`
+      was refactored to call it too. All of `player_creation_smoke`/
+      `player_save_smoke`/`player_movement_smoke`/`player_combat_stats_smoke`/
+      `monster_combat_smoke` were rerun afterward to confirm the refactor
+      changed nothing observable.
+
+      **Two real findings, both preserved rather than "fixed":**
+      1. `castOnSelf` reads `Spell.byId(spellId).magickaCost` into a
+         local Java calls `power`, and `castOnMonster` reads
+         `Spell.byId(spellId).power` into a local it calls `school` --
+         and then **never uses that local again** in either method.
+         `castOnSelf` actually spends Magicka scaled by `school`
+         (`Spell.power`), and `castOnMonster` spends it scaled by
+         `power` (`Spell.magickaCost`) -- the two methods use the *other*
+         field than the one their same-named local variable's read
+         suggests. Confirmed by grepping both method bodies for the
+         local's name after its declaration line. Not ported (same
+         treatment as M15's unused `Monster.attack()` `type` read),
+         documented inline at both call sites.
+      2. Because of that, and because `castOnSelf`/`castOnMonster` only
+         ever clamp Magicka with `Math.max(coreStats[4], 0)` and never
+         `Math.min(...,maxMagicka)`, a spell whose scaling field's stored
+         byte is >=128 (a negative `int8_t` reading) makes that spend
+         *negative* -- casting it actually **refunds** Magicka above the
+         normal maximum, with no cap. This is real, observable behavior
+         of the original game (confirmed via `m16_spellcasting_smoke`'s
+         integration loop, which found the initial test's "Magicka never
+         exceeds max" assumption false against real spell data and had to
+         be corrected to the real invariant, "Magicka never goes
+         negative" -- same discipline as M15's `isStairwayTile` catch).
+
+      Verified via `spellcasting_smoke.exe` (no JVM ground truth, same
+      reason as M6/M9/M11/M13/M14/M15) against real `SpellDatabase`/
+      `CharacterData`/`ItemDatabase`/`MonsterDatabase` data and real
+      characters/monsters: `SpellSkillIndexFor`'s bucket boundaries
+      hand-traced; `ActiveAilmentCount`/`CureRandomAilment` hand-traced
+      including the RNG-free `active==1` special case and a probe-RNG
+      cross-check for `active>1`; `CanLearnSpell`/`LearnSpellFromScroll`
+      checked against a real category-12 scroll item (category gate,
+      known-spell gate, skill-point gate, and slot-compaction on
+      consumption); `KnownSpellsSummary`/`NthKnownSpellId`/
+      `CycleSelectedSpell`/`SpellTooltip` hand-traced against a
+      hand-picked `knownSpellsMask` (ordering, the "R: " prefix, wrap-
+      around, and the no-spells-known/invalid-selection cases); one
+      spell each for `CastOnSelf`/`CastOnMonster` fully hand-derived
+      (chance clamps, a same-seeded `RollOutcome` probe, and the
+      resulting Magicka/HP/heal-or-damage arithmetic) plus an
+      integration loop over every non-offensive/offensive spell id on a
+      real character (and, for `CastOnMonster`, a real spawned monster),
+      confirming spell 14 genuinely re-enters `PlayerAttack`. All checks
+      passed.
+
+      Simplifications: `Player.dropInventoryItem()`/`addGold()` weren't
+      needed by anything here and remain unported (`PlayerInventory`'s
+      class comment says why); `castOnMonster`/`castOnSelf` still skip
+      every `target.store()` call, same as M15/M14's `PlayerAttack`.
+
 ## Milestones next
 
-- [ ] **M16 and beyond (not yet planned in detail):** `Player`'s
-      spellcasting; the lightweight "character summary" save format M12
-      deferred; object/monster/chest/NPC sprites and the HUD/minimap
+- [ ] **M17 and beyond (not yet planned in detail):** the lightweight
+      "character summary" save format M12 deferred; the inventory/equip-
+      menu-gating methods `player_inventory.h` didn't need yet
+      (`dropInventoryItem`, the "gift"/special-consumable `useItem`
+      switch); object/monster/chest/NPC sprites and the HUD/minimap
       (`GameCanvas.paintGameView()`'s other calls, now that the base
       corridor view renders, the player can move through it, and combat
       resolves); and finally `ESGame`'s own screen-wiring loop tying it

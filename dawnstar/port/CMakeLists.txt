@@ -52,28 +52,30 @@ add_library(dawnstar_render STATIC
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world)
 
-# M11/M12/M13/M14: player character creation + full save format +
-# movement + combat/skill stat math -- see docs/PORT_ROADMAP.md and
-# src/player/.
+# M11/M12/M13/M14/M16: player character creation + full save format +
+# movement + combat/skill stat math + inventory/equip management +
+# self-targeted spellcasting -- see docs/PORT_ROADMAP.md and src/player/.
 add_library(dawnstar_player STATIC
   src/player/player_creation.cpp
   src/player/player_save.cpp
   src/player/player_movement.cpp
   src/player/player_combat_stats.cpp
+  src/player/player_inventory.cpp
+  src/player/player_spellcasting.cpp
 )
 target_include_directories(dawnstar_player PUBLIC src)
 target_link_libraries(dawnstar_player PUBLIC dawnstar_assets dawnstar_world)
 
 # M15: monster runtime state/AI/combat-support (everything except
-# tick()/attack(), which need both Player and Monster -- see
-# src/combat/) -- see docs/PORT_ROADMAP.md and src/monster/.
+# tick()/attack()/castOnMonster(), which need both Player and Monster --
+# see src/combat/) -- see docs/PORT_ROADMAP.md and src/monster/.
 add_library(dawnstar_monster STATIC
   src/monster/monster_runtime.cpp
 )
 target_include_directories(dawnstar_monster PUBLIC src)
 target_link_libraries(dawnstar_monster PUBLIC dawnstar_assets dawnstar_world)
 
-# M15: the two combat entry points needing both Player and Monster --
+# M15/M16: the combat entry points needing both Player and Monster --
 # see docs/PORT_ROADMAP.md and src/combat/.
 add_library(dawnstar_combat STATIC
   src/combat/combat_resolution.cpp
@@ -150,3 +152,7 @@ target_link_libraries(player_combat_stats_smoke PRIVATE dawnstar_player)
 # M15 milestone smoke test -- see src/tests/m15_monster_combat_smoke.cpp.
 add_executable(monster_combat_smoke src/tests/m15_monster_combat_smoke.cpp)
 target_link_libraries(monster_combat_smoke PRIVATE dawnstar_combat)
+
+# M16 milestone smoke test -- see src/tests/m16_spellcasting_smoke.cpp.
+add_executable(spellcasting_smoke src/tests/m16_spellcasting_smoke.cpp)
+target_link_libraries(spellcasting_smoke PRIVATE dawnstar_combat)

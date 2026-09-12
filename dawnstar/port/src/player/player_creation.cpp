@@ -1,5 +1,7 @@
 #include "player/player_creation.h"
 
+#include "player/player_inventory.h"
+
 namespace dawnstar {
 
 namespace {
@@ -62,50 +64,11 @@ uint32_t ComputeStartingSpellMask(PlayerState& p, const CharacterData& charData)
     return mask;
 }
 
-// Player.java's equipItem(slot, autoUnequipConflict=true)'s auto-unequip
-// path: unequipItemInSlot() -- finds whichever slot currently occupies
-// `equipSlot` and unequips it. Never actually exercised by
-// GrantStartingItems below (STARTING_ITEMS' pairs are curated to not
-// conflict), but ported faithfully rather than assumed unreachable.
-void UnequipItemInSlot(PlayerState& p, const ItemDatabase& items, int equipSlot) {
-    for (int slot = 0; slot < p.inventoryCount; slot++) {
-        int itemId = p.inventoryItemIds[slot] < 0 ? -p.inventoryItemIds[slot] : p.inventoryItemIds[slot];
-        if (itemId != 0 && items.EquipSlotOf(itemId) == equipSlot) {
-            p.equippedItems[equipSlot] = 0;
-            p.inventoryItemIds[slot] = static_cast<int8_t>(itemId);  // flip back positive
-        }
-    }
-}
-
-// Player.java's addInventoryItem(itemId, spawnIdOrPacked, charge).
-bool AddInventoryItem(PlayerState& p, int itemId, int spawnIdOrPacked, int charge) {
-    if (p.inventoryCount >= 24) return false;
-    p.inventoryItemIds[p.inventoryCount] = static_cast<int8_t>(itemId);
-    int32_t packed = (spawnIdOrPacked << 16) + static_cast<int8_t>(charge);
-    p.inventoryItemData[p.inventoryCount] = packed;
-    p.inventoryCount++;
-    return true;
-}
-
-// Player.java's equipItem(slot, autoUnequipConflict).
-bool EquipItem(PlayerState& p, const ItemDatabase& items, int slot, bool autoUnequipConflict) {
-    int8_t itemId = p.inventoryItemIds[slot];
-    if (itemId < 0) return false;
-    if (!items.IsEquippable(itemId)) return false;
-
-    int equipSlot = items.EquipSlotOf(itemId);
-    if (p.equippedItems[equipSlot] != 0) {
-        if (!autoUnequipConflict) return false;
-        UnequipItemInSlot(p, items, equipSlot);
-    }
-
-    p.equippedItems[equipSlot] = itemId;
-    p.inventoryItemIds[slot] = static_cast<int8_t>(-itemId);
-    return true;
-}
-
 // Player.java's grantStartingItems(): grants classIndex's starting item
-// pair and auto-equips each one.
+// pair and auto-equips each one. addInventoryItem()/equipItem() (which
+// GrantStartingItems used to carry small private copies of here) now
+// live in player/player_inventory.h, shared with player/
+// player_spellcasting.h's castOnSelf.
 void GrantStartingItems(PlayerState& p, const ItemDatabase& items) {
     // Item.nextSpawnId() is a pure counter with no bearing on generation
     // correctness -- same simplification DungeonGenerator's chest
@@ -116,9 +79,9 @@ void GrantStartingItems(PlayerState& p, const ItemDatabase& items) {
     const int(&startingItems)[2] = kStartingItems[p.classIndex];
 
     for (int itemId : startingItems) {
-        AddInventoryItem(p, itemId, spawnId, 0);
+        PlayerInventory::AddItem(p, itemId, spawnId, 0);
         int slot = p.inventoryCount - 1;
-        EquipItem(p, items, slot, true);
+        PlayerInventory::Equip(p, items, slot, true);
     }
 }
 
