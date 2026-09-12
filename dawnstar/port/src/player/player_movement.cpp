@@ -187,7 +187,7 @@ void PlayerMovement::WarpToCampMark(PlayerState& p, const std::vector<GeneratedL
 }
 
 void PlayerMovement::RefreshCorridorView(PlayerState& p, const std::vector<GeneratedLevel>& levels) {
-    DungeonView view(levels[static_cast<size_t>(p.currentLevel - 1)]);
+    DungeonView view(levels, p.currentLevel - 1);
     uint8_t out[9][5];
     view.SampleCorridorView(p.tileX, p.tileY, p.facing, out);
     for (int i = 0; i < 9; i++) {

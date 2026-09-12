@@ -165,3 +165,7 @@ target_link_libraries(summary_save_smoke PRIVATE dawnstar_player)
 # M18 milestone smoke test -- see src/tests/m18_use_item_smoke.cpp.
 add_executable(use_item_smoke src/tests/m18_use_item_smoke.cpp)
 target_link_libraries(use_item_smoke PRIVATE dawnstar_combat)
+
+# M19 milestone smoke test -- see src/tests/m19_dungeon_view_smoke.cpp.
+add_executable(dungeon_view_smoke src/tests/m19_dungeon_view_smoke.cpp)
+target_link_libraries(dungeon_view_smoke PRIVATE dawnstar_world)

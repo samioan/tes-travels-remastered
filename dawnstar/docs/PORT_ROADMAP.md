@@ -756,15 +756,61 @@ milestone rather than just read-through.
       nullability) to confirm it's still handled safely and the item is
       still consumed. All checks passed.
 
+- [x] **M19 -- `DungeonView`'s real cross-level `tileAt` stitching**
+      (this session). Since M9, `DungeonView` had stood in for
+      `Dungeon.java`'s `tileAt()`/`isWalkable()`/`sampleCorridorView()`
+      with a documented simplification: no multi-level "world" object
+      existed to stitch into, so any out-of-bounds query just returned
+      1 (wall) unconditionally, even at a level edge that really opens
+      into a neighboring level. Every real caller (`PlayerMovement::
+      RefreshCorridorView`, `MonsterRuntime::Move`) already held the
+      full `std::vector<GeneratedLevel>& levels`, so this milestone
+      only had to change how a `DungeonView` is constructed --
+      `DungeonView(levels, levelIndex)` instead of
+      `DungeonView(oneLevel)` -- and give `TileAt()` `Dungeon.java`'s
+      real neighbor-following logic: crossing into `neighborNorth/East/
+      South/West`, the hub town's (19x19) width/height-mismatch
+      recentering when either side of the crossing is level 1, and the
+      "edge marker" (64) sentinel for the exact boundary tile just
+      before a size-mismatched neighbor. `IsWalkable()` itself needed
+      no change -- the original never stitches across levels for that
+      one, only for `tileAt()`/`sampleCorridorView()`.
+
+      `Dungeon.java`'s own `populated` flag (a lazy per-level generation
+      marker `tileAt()` also consults) still has no equivalent here --
+      same already-documented `player_movement.h` simplification that
+      this port always generates every level upfront, so every entry in
+      `levels` is always "populated".
+
+      Verified via the new `dungeon_view_smoke.exe` (no JVM ground
+      truth, same reason as M6/M9/M11/M13-M18) against the real
+      37-level generated world: 64 real standard-to-standard (35x35)
+      border crossings checked against an independent mirrored-tile
+      hand-derivation (no recentering expected there), plus all 4 real
+      hub-town border crossings checked against an independently
+      hand-derived recentering-formula expectation, including the edge-
+      marker sentinel. All checks passed. The three existing rendering/
+      movement smoke tests that construct single-level `DungeonView`s
+      (M9/M10/M13) were updated for the new constructor signature; M9
+      and M10's single-level scenarios needed their synthetic level's
+      neighbor ids zeroed out first (they were never meant to exercise
+      cross-level stitching, and would otherwise index into a `levels`
+      vector that doesn't actually hold their real neighbors).
+
 ## Milestones next
 
-- [ ] **M19 and beyond (not yet planned in detail):** `dropInventoryItem`
-      (needs a live dropped-item registry, the same gap `player_movement.h`
-      and `monster_runtime.h` already carry); object/monster/chest/NPC
-      sprites and the HUD/minimap (`GameCanvas.paintGameView()`'s other
-      calls, now that the base corridor view renders, the player can
-      move through it, and combat resolves); and finally `ESGame`'s own
-      screen-wiring loop tying it all together. Each gets its own
-      milestone once the shape of "how much fits in one slice" is
-      clearer -- following `shadowkey-decomp`'s pattern of not over-
+- [ ] **M20 and beyond (not yet planned in detail):** the live per-level
+      monster/chest/dropped-item registry (`Dungeon.java`'s
+      `ESGame.monsters`/`chests`/`droppedItems` Hashtables/Vector) that
+      `dropInventoryItem`, `Monster.onDeath`'s drop, the "curse of
+      hunger" monster spawn, and the roaming-monster-cleanup-on-level-
+      change simplification are all still waiting on (see
+      `player_movement.h`/`monster_runtime.h`/`combat_resolution.h`'s
+      class comments); object/monster/chest/NPC sprites and the HUD/
+      minimap (`GameCanvas.paintGameView()`'s other calls, now that the
+      base corridor view renders, the player can move through it across
+      real level boundaries, and combat resolves); and finally
+      `ESGame`'s own screen-wiring loop tying it all together. Each gets
+      its own milestone once the shape of "how much fits in one slice"
+      is clearer -- following `shadowkey-decomp`'s pattern of not over-
       planning milestones far in advance of actually reaching them.

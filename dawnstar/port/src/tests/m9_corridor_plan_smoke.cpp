@@ -45,7 +45,14 @@ int main(int argc, char** argv) {
         int levelNumber = argc > 2 ? std::atoi(argv[2]) : 2;
         dawnstar::GeneratedLevel level = dawnstar::DungeonGenerator::PopulateLevel(
             levelNumber, geometry.rows[levelNumber - 1], items, monsters);
-        dawnstar::DungeonView view(level);
+        // This test only ever holds this one level (M19's cross-level
+        // stitching has its own dedicated test), so neutralize its real
+        // neighbor ids -- otherwise DungeonView::TileAt would try to
+        // index a `levels` entry that doesn't exist in this 1-element
+        // vector.
+        level.neighborNorth = level.neighborEast = level.neighborSouth = level.neighborWest = 0;
+        std::vector<dawnstar::GeneratedLevel> levels{level};
+        dawnstar::DungeonView view(levels, 0);
 
         bool ok = true;
         const char* dirNames[5] = {"", "N", "E", "S", "W"};

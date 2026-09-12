@@ -192,7 +192,7 @@ int main(int argc, char** argv) {
                 Check(p.prevTileX == x && p.prevTileY == y, "prevTileX/Y should record the pre-move tile");
                 Check(p.coreStats[6] == 49, "a successful forward step should cost exactly 1 fatigue (no ailment)");
 
-                dawnstar::DungeonView view(levels[0]);
+                dawnstar::DungeonView view(levels, 0);
                 uint8_t selfTile = view.TileAt(p.tileX, p.tileY);
                 Check(p.corridorView[1][0] == selfTile, "corridorView[1][0] should be the tile under the player");
             } else {

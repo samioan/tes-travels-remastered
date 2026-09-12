@@ -208,7 +208,7 @@ bool MonsterRuntime::Move(MonsterState& m, int direction, std::vector<GeneratedL
     }
 
     GeneratedLevel& level = levels[static_cast<size_t>(m.dungeonLevel - 1)];
-    DungeonView view(level);
+    DungeonView view(levels, m.dungeonLevel - 1);
     if (!view.IsWalkable(newX, newY)) return false;
     if (IsStairwayTile(level, newX, newY)) return false;
 
