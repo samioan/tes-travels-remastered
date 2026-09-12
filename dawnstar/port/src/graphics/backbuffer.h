@@ -50,6 +50,59 @@ public:
         }
     }
 
+    // Graphics.fillRoundRect()'s counterpart -- M30's message-popup
+    // background is this port's only real call site. Unlike FillRect/
+    // Blit's own MIDP-precedent-bug preservation, there's no game-data
+    // bug to reproduce here: `arcWidth`/`arcHeight` are plain call-site
+    // constants (GameCanvas's own `g.fillRoundRect(96, 118, 75, 35, 5,
+    // 5)`, no operator-precedence trap involved), so this is a
+    // straightforward reimplementation of the documented MIDP
+    // primitive -- each corner is cut to a quarter-ellipse of
+    // `arcWidth`x`arcHeight`, tested via the standard normalized-
+    // ellipse-distance formula.
+    void FillRoundRect(int x, int y, int w, int h, int arcWidth, int arcHeight, uint16_t rgb565) {
+        if (w <= 0 || h <= 0) return;
+        double rx = arcWidth / 2.0;
+        double ry = arcHeight / 2.0;
+        int x0 = std::max(x, 0);
+        int y0 = std::max(y, 0);
+        int x1 = std::min(x + w, kWidth);
+        int y1 = std::min(y + h, kHeight);
+
+        for (int yy = y0; yy < y1; yy++) {
+            for (int xx = x0; xx < x1; xx++) {
+                double dx = 0.0;
+                double dy = 0.0;
+                bool inCornerBox = false;
+                if (xx < x + rx && yy < y + ry) {
+                    dx = (x + rx) - xx - 0.5;
+                    dy = (y + ry) - yy - 0.5;
+                    inCornerBox = true;
+                } else if (xx >= x + w - rx && yy < y + ry) {
+                    dx = xx - (x + w - rx) + 0.5;
+                    dy = (y + ry) - yy - 0.5;
+                    inCornerBox = true;
+                } else if (xx < x + rx && yy >= y + h - ry) {
+                    dx = (x + rx) - xx - 0.5;
+                    dy = yy - (y + h - ry) + 0.5;
+                    inCornerBox = true;
+                } else if (xx >= x + w - rx && yy >= y + h - ry) {
+                    dx = xx - (x + w - rx) + 0.5;
+                    dy = yy - (y + h - ry) + 0.5;
+                    inCornerBox = true;
+                }
+
+                if (inCornerBox && rx > 0.0 && ry > 0.0) {
+                    double nx = dx / rx;
+                    double ny = dy / ry;
+                    if (nx * nx + ny * ny > 1.0) continue;
+                }
+
+                pixels_[static_cast<size_t>(yy) * kWidth + xx] = rgb565;
+            }
+        }
+    }
+
     const uint16_t* Data() const { return pixels_.data(); }
 
     // Straight opaque-pixel copy of a DecodedImage at (x, y), clipped to

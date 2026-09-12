@@ -8,6 +8,8 @@
 // UI yet, so this always starts a fixed class-0 character.
 #include <windows.h>
 
+#include <array>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -28,6 +30,7 @@
 #include "player/visible_objects.h"
 #include "render/frame_renderer.h"
 #include "render/hud_renderer.h"
+#include "render/message_popup.h"
 #include "render/minimap_renderer.h"
 #include "render/visible_object_renderer.h"
 #include "util/java_random.h"
@@ -35,6 +38,18 @@
 #include "world/dungeon_view.h"
 
 namespace {
+
+// Shop.NAMES -- needed here (not just the SHOP_X/Y position tables
+// player/visible_objects.cpp/world/dungeon_generator.cpp already
+// inline) for M30's NPC-shop-greeting popup text. Still no real Shop
+// class in this port (see player/player_state.h's own npcShopIndex doc
+// comment) -- just the one array's worth of display strings this one
+// new call site needs.
+const char* kShopNames[9] = {
+    "Weapon Peddler", "Heavy Armor Peddler", "Light Armor Peddler", "Jakar's",
+    "Eustacia",       "Alhavara",            "Beatrice",            "Chung",
+    "Delacroix",
+};
 
 // Mirrors every M13 test's own world-building loop: one GeneratedLevel
 // per real geomin.dat row, hub town (level 1) hand-carved, every other
@@ -72,6 +87,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                              L"Dawnstar Port");
     dawnstar::Backbuffer backbuffer;
     dawnstar::MinimapSurface minimap;
+    dawnstar::MessagePopupState messagePopup;
     dawnstar::GameClock clock;
     // GameCanvas.keyPressed()'s `key == 42` handler (minimap zoom
     // toggle) fires once per physical key-down transition, not once per
@@ -137,12 +153,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             zoomKeyWasDown = zoomKeyDown;
 
             if (clock.ConsumeTick()) {
+                // GameCanvas.run()'s own `now = System.
+                // currentTimeMillis()`, sampled once per tick and reused
+                // for every showMessage/timeout check below -- M30.
+                int64_t nowMs = static_cast<int64_t>(GetTickCount64());
+
                 // GameCanvas.run()'s own steady-250ms-tick cadence (see
                 // engine/game_clock.h) is also when the real key state
                 // would be sampled -- one Move() per tick while a key is
                 // held reproduces that pacing rather than moving once
                 // per PeekMessage-idle spin.
                 bool moveAttempted = true;
+                int slotsBefore = player.inventoryCount;
                 if (KeyPressed(VK_UP)) {
                     dawnstar::PlayerMovement::Move(player, 1, false, levels, world, items);
                 } else if (KeyPressed(VK_DOWN)) {
@@ -156,16 +178,49 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 }
 
                 // GameCanvas.commitMove()'s own "only when
-                // pendingMoveDir != 0" gate on refreshChestInSight/
-                // refreshNpcInSight (M28: only the latter is ported so
-                // far) -- called unconditionally whenever a move was
-                // requested this tick, regardless of whether it actually
-                // committed (matching the original, which calls these
-                // right after player.move() with no success check).
+                // pendingMoveDir != 0" gate -- called unconditionally
+                // whenever a move was requested this tick, regardless of
+                // whether it actually committed (matching the original,
+                // which does all of this right after player.move() with
+                // no success check).
                 if (moveAttempted) {
+                    // commitMove()'s own `int pickedUp = player.
+                    // inventoryCount - slotsBefore;` -- diffed the same
+                    // way here as there, rather than threading a count
+                    // out of Move() itself -- M30.
+                    int pickedUp = player.inventoryCount - slotsBefore;
+                    if (pickedUp == 1) {
+                        int slot = player.inventoryCount - 1;
+                        int itemId = std::abs(static_cast<int>(player.inventoryItemIds[slot]));
+                        dawnstar::MessagePopup::Show(
+                            messagePopup, dawnstar::MessagePopup::WrapToTwoLines(items.name[static_cast<size_t>(itemId - 1)]),
+                            -1, nowMs);
+                    } else if (pickedUp > 1) {
+                        dawnstar::MessagePopup::Show(messagePopup, {"Several", "items!"}, -1, nowMs);
+                    }
+
+                    // refreshChestInSight(): ChestInFront's own query
+                    // half lives in PlayerMovement (see its own doc
+                    // comment for why); the showMessage half is here.
+                    const std::array<uint8_t, 8>* chest =
+                        dawnstar::PlayerMovement::ChestInFront(player, levels, world);
+                    if (chest != nullptr) {
+                        dawnstar::MessagePopup::Show(messagePopup, {"Chest", ""}, 1, nowMs);
+                    }
+
+                    // refreshNpcInSight(): same split as
+                    // refreshChestInSight above -- RefreshNpcInSight
+                    // itself only sets player.npcInSight (M28); the
+                    // shop-greeting showMessage call is here.
                     dawnstar::PlayerMovement::RefreshNpcInSight(player, levels, world);
+                    if (player.npcInSight >= 0) {
+                        dawnstar::MessagePopup::Show(
+                            messagePopup, dawnstar::MessagePopup::WrapToTwoLines(kShopNames[player.npcInSight]), 1,
+                            nowMs);
+                    }
+
                     // commitMove()'s own unconditional `this.minimapDirty
-                    // = true;` right after refreshNpcInSight -- M29.
+                    // = true;` -- M29.
                     player.minimapDirty = true;
                 }
 
@@ -179,6 +234,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 if (player.minimapDirty) {
                     dawnstar::MinimapRenderer::Refresh(minimap, player, levels, world);
                 }
+
+                // run()'s own unconditional per-tick auto-hide timeout
+                // check -- M30.
+                dawnstar::MessagePopup::Tick(messagePopup, nowMs);
             }
 
             dawnstar::DungeonView view(levels, player.currentLevel - 1);
@@ -193,7 +252,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                     player.npcInSight);
             }
             dawnstar::HudRenderer::PaintStatusBars(backbuffer, player, charData);
-            // paintGameView()'s own last drawing step -- M29.
+            // paintGameView()'s own paintMessagePopup() call (hotbar
+            // itself is still not ported, see docs/PORT_ROADMAP.md) --
+            // M30.
+            dawnstar::MessagePopup::Paint(backbuffer, messagePopup);
+            // paintGameView()'s own actual LAST drawing step (outside
+            // its own try block, after paintMessagePopup/
+            // paintActionFlashes/paintErrorOverlay -- the latter two
+            // aren't ported) -- M29.
             dawnstar::MinimapRenderer::Composite(backbuffer, minimap, player);
             window.Present(backbuffer);
         });

@@ -1345,8 +1345,6 @@ milestone rather than just read-through.
       Full clean rebuild zero warnings; all 27 smoke tests pass; the
       real windowed app re-verified via screen capture.
 
-## Milestones next
-
 - [x] **M29 -- the minimap** (this session). Ports `GameCanvas.
       sampleSquareView()` (`DungeonRuntime::SampleSquareView`,
       `dungeon/dungeon_runtime.h`/`.cpp`) and `refreshMinimap()`/
@@ -1451,23 +1449,129 @@ milestone rather than just read-through.
       capture in BOTH zoom states (including pressing 'M' live to
       confirm the toggle itself works).
 
+- [x] **M30 -- text rendering + the message popup** (this session).
+      This port's first text-rendering system: a hand-authored
+      monospace pixel font (`BitmapFont`, `graphics/bitmap_font.h`/
+      `.cpp`) and `Backbuffer::FillRoundRect`, used to port
+      `GameCanvas.showMessage()`/`wordWrap()`/`wrapToTwoLines()`/
+      `paintMessagePopup()` plus `run()`'s own per-tick auto-hide
+      timeout (`MessagePopup`, `render/message_popup.h`/`.cpp`) --
+      closing the message-popup half of M22's long-flagged hotbar/
+      message-popup pair (the hotbar itself remains open) and unblocking
+      the shop-greeting popup M28's own SIMPLIFIED note had flagged as
+      waiting on exactly this.
+
+      **A genuine architecture choice, put to the user rather than
+      decided silently**: MIDP's `Font`/`Graphics.drawChar`/
+      `drawString` have no real recoverable asset (a system font is
+      platform/device-dependent, was never bundled game data the way
+      every other visual in this project has been) -- the two live
+      options were a hand-rolled bitmap font baked into the existing
+      `Backbuffer` pipeline (keeping every future text-touching
+      milestone testable via the same pixel-level `Backbuffer`
+      assertions everything else already uses) or drawing text via GDI
+      directly onto the window (less code, but untestable the same way,
+      and a second rendering path alongside the backbuffer blit). Asked
+      the user directly; they chose the bitmap-font route, which is
+      what's built here.
+
+      `BitmapFont` covers only space/`'`/`-`/`!` and A-Z (30 glyphs,
+      4x7 pixels each, monospace) -- confirmed against a temporary
+      diagnostic dump of every real character actually appearing in
+      Item/Monster names and `Shop.NAMES` (not assumed) that this is the
+      complete real alphabet needed. Lowercase is folded to uppercase
+      before drawing rather than separately hand-authoring a second
+      full glyph set purely for cosmetic case-fidelity on an already-
+      invented font -- a real, visible (`"WEAPON PEDDLER"` instead of
+      `"Weapon Peddler"`), but harmless, simplification. The per-
+      character advance (`kAdvance` = 5px) is itself invented (no real
+      SMALL_FONT metric survives), but was deliberately tuned so real
+      content -- Shop.NAMES' own longest entry, "Heavy Armor Peddler" --
+      still wraps to exactly 2 lines through `WrapToTwoLines`'s fixed
+      69px width, rather than gratuitously overflowing a 3rd line (which
+      `WrapToTwoLines` silently discards) that a real device's own
+      unrecoverable metric probably wouldn't have needed either.
+
+      `WordWrap` is `wordWrap()` transcribed directly, substituting
+      `BitmapFont::kAdvance` for every real `Font.charWidth()`/
+      `stringWidth()`/`substringWidth()` call (valid since SMALL_FONT is
+      itself `FACE_MONOSPACE`, so every character really did have one
+      constant width in the original too) -- including its own hard-
+      break inner loop (a real, if rare, "single word longer than the
+      whole popup width" fallback) and the subtle "the final pushed
+      line can carry a trailing space character" behavior the original
+      algorithm produces (verified by hand-tracing a synthetic example
+      step by step, not just trusted from re-reading the algorithm).
+
+      `Show()` folds in the "if (showMessage(...)) { messageShownAt =
+      now; messageVisible = true; }" pattern every one of GameCanvas's
+      own call sites repeats identically right after calling
+      `showMessage()` -- a SIMPLIFIED but exactly behavior-preserving
+      consolidation, confirmed by grep that no real call site ever
+      diverges from that exact follow-up.
+
+      Wired into the three call sites already reachable from this
+      port's live tick loop (the rest of `showMessage()`'s ~15 call
+      sites remain unreachable until attack/spellcast/camp/menu actions
+      themselves get wired, a separate, larger milestone): the found-
+      item message (diffing `player.inventoryCount` before/after
+      `Move()`, exactly mirroring `commitMove()`'s own `slotsBefore`
+      diff rather than threading a count out of `Move()` itself), the
+      chest-in-sight popup (`PlayerMovement::ChestInFront`, a new method
+      mirroring `NpcInFront`'s own `ComputeMoveTarget(1,...)` re-
+      derivation and its same harmless double-cleanup quirk), and the
+      NPC shop-greeting popup (`RefreshNpcInSight` itself still only
+      sets `player.npcInSight`, M28 -- the actual `showMessage()` call
+      for the greeting now happens in `main.cpp`, using a small new
+      `kShopNames` table, since `PlayerMovement`/`dawnstar_player` cannot
+      depend on `render/message_popup.h`/`dawnstar_render` without
+      cycling back through it).
+
+      A design note, not a bug: `MessagePopupState` is deliberately kept
+      as its own struct rather than folded into `PlayerState` as a 4th
+      instance of the `npcInSight`/`minimapDirty`/`minimapZoomedOut`
+      pattern (M28/M29) -- see its own doc comment for why, and for the
+      flagged future cleanup (one dedicated UI-state struct for all of
+      GameCanvas's leftover statics) this isn't yet worth doing on its
+      own.
+
+      Verified via the new `message_popup_smoke.exe`: `BitmapFont`/
+      `FillRoundRect` primitive checks; `WordWrap` against a fully
+      hand-traced synthetic case (exercising the space-boundary,
+      forced-hard-break, and trailing-space-on-the-final-line paths all
+      in one string) plus 2 real `Shop.NAMES` strings (independently
+      re-derived by hand, not read back from `message_popup.cpp`);
+      `Show`/`Tick`'s exact priority-gate and 3000ms timeout arithmetic;
+      and `Paint`'s visible-vs-hidden gating. All checks passed. Full
+      clean rebuild zero warnings; all 29 smoke tests pass. The real
+      windowed app was also driven end-to-end with a temporary
+      diagnostic (a real BFS path to the hub's real shop 0, computed
+      against the real generated level rather than guessed -- live
+      keyboard-injection timing turned out too unreliable for
+      navigation, so the diagnostic called `PlayerMovement::Move`
+      directly instead) and rendered one real frame showing the actual
+      shopkeeper portrait alongside a real "WEAPON PEDDLER" popup,
+      confirming the whole pipeline end-to-end before the diagnostic
+      was removed.
+
 ## Milestones next
 
-- [ ] **M30 and beyond (not yet planned in detail):** the hotbar panel/
-      message-popup pair of M22's own entry (the minimap third is now
-      closed, M29) -- the shop-greeting popup M28's own SIMPLIFIED note
-      flagged is blocked on the message-popup half specifically.
-      Monster death-drops (`Monster.onDeath()` ->
-      `DungeonRuntime::AddDroppedItem`) still has no wiring, since
-      `onDeath()` itself is only ever called from `GameCanvas`, not from
-      `Player`/`Monster`'s own methods -- genuinely blocked on the
-      screen-wiring milestone below, not something a registry-only
-      milestone can close. And finally `ESGame`'s own screen-wiring loop
-      (character creation, menus, dialogue, shops -- the full
-      `Shop.dialogue()` dispatcher traced while scoping M28 is still
-      unported, only its `npcstrings.dat` text itself loads so far, M8)
-      tying it all together in place of M20's fixed stand-in character.
-      Each gets its own milestone once the shape of "how much fits in
-      one slice" is clearer -- following `shadowkey-decomp`'s pattern of
-      not over-planning milestones far in advance of actually reaching
+- [ ] **M31 and beyond (not yet planned in detail):** the hotbar panel,
+      the only piece of M22's original hotbar/message-popup pair still
+      open. Every other `showMessage()` call site beyond the 3 M30
+      wired up remains unreachable until attack/spellcast/camp/menu
+      actions are themselves wired into the live tick loop. Monster
+      death-drops (`Monster.onDeath()` -> `DungeonRuntime::
+      AddDroppedItem`) still has no wiring, since `onDeath()` itself is
+      only ever called from `GameCanvas`, not from `Player`/`Monster`'s
+      own methods -- genuinely blocked on the screen-wiring milestone
+      below, not something a registry-only milestone can close. And
+      finally `ESGame`'s own screen-wiring loop (character creation,
+      menus, dialogue, shops -- the full `Shop.dialogue()` dispatcher
+      traced while scoping M28 is still unported, only its
+      `npcstrings.dat` text itself loads so far, M8) tying it all
+      together in place of M20's fixed stand-in character. Each gets
+      its own milestone once the shape of "how much fits in one slice"
+      is clearer -- following `shadowkey-decomp`'s pattern of not
+      over-planning milestones far in advance of actually reaching
       them.

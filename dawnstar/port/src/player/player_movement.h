@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -130,6 +131,18 @@ public:
     // entry; no stdout channel is used by any other module either, see
     // CleanupRoamingMonsterIfPresent's own doc comment above).
     static void RefreshNpcInSight(PlayerState& p, std::vector<GeneratedLevel>& levels, WorldRegistry& world);
+
+    // Player.java's chestInFront(): the registered chest record at the
+    // tile a forward step would land on, or nullptr -- same
+    // ComputeMoveTarget(1,...) re-derivation (and the same real,
+    // harmless double-cleanup quirk) as NpcInFront above. M30:
+    // GameCanvas.refreshChestInSight()'s own "chest != null" half lives
+    // in main.cpp instead of a RefreshChestInSight method here, since
+    // the other half (showMessage(MSG_CHEST,1)) needs
+    // render/message_popup.h, which dawnstar_player cannot depend on
+    // without cycling back through dawnstar_render.
+    static const std::array<uint8_t, 8>* ChestInFront(PlayerState& p, std::vector<GeneratedLevel>& levels,
+                                                        WorldRegistry& world);
 
 private:
     struct PendingMove {

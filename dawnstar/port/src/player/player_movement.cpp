@@ -326,4 +326,14 @@ void PlayerMovement::RefreshNpcInSight(PlayerState& p, std::vector<GeneratedLeve
     }
 }
 
+const std::array<uint8_t, 8>* PlayerMovement::ChestInFront(PlayerState& p, std::vector<GeneratedLevel>& levels,
+                                                            WorldRegistry& world) {
+    PendingMove pm = ComputeMoveTarget(p, 1, levels, world);
+    if (pm.level <= 0) return nullptr;
+
+    auto& chestMap = world.chests[static_cast<size_t>(pm.level - 1)];
+    auto it = chestMap.find(PackPosKey(pm.tileX, pm.tileY));
+    return it != chestMap.end() ? &it->second : nullptr;
+}
+
 }  // namespace dawnstar
