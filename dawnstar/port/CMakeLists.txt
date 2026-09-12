@@ -84,13 +84,15 @@ add_library(dawnstar_combat STATIC
 target_include_directories(dawnstar_combat PUBLIC src)
 target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster)
 
-# M1: real tick loop + backbuffer + present -- see docs/PORT_ROADMAP.md and
-# src/engine/, src/graphics/, src/platform/win32/.
+# M1/M20: real tick loop + backbuffer + present, now wired to the real
+# asset/world/player/render pipeline -- see docs/PORT_ROADMAP.md and
+# src/engine/, src/graphics/, src/platform/win32/, src/main.cpp.
 add_executable(dawnstar_port WIN32
   src/main.cpp
   src/platform/win32/window.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
+target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render)
 if(WIN32)
   target_compile_definitions(dawnstar_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_link_libraries(dawnstar_port PRIVATE user32 gdi32)

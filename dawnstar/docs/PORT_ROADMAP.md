@@ -797,9 +797,39 @@ milestone rather than just read-through.
       cross-level stitching, and would otherwise index into a `levels`
       vector that doesn't actually hold their real neighbors).
 
+- [x] **M20 -- wire the real pipeline into the actual windowed
+      `dawnstar_port.exe`** (this session). Until now `main.cpp` was
+      still M1's placeholder: a solid-color `Backbuffer::Fill` and an
+      empty tick, with every real milestone (M2-M19) only ever exercised
+      through console smoke tests. This milestone made the windowed exe
+      itself do something: load the real extracted assets, build the
+      real 37-level world (M6's `DungeonGenerator`), create a real
+      class-0 character (M11's `PlayerCreation` -- there's no character-
+      creation UI yet, so the class is a fixed stand-in), and on every
+      `GameClock` tick (M1's real 250ms cadence) read arrow-key state
+      (`GetAsyncKeyState`, polled once per tick so a held key advances
+      once per tick rather than as fast as the message pump spins) into
+      `PlayerMovement::Move` (M13), then render the player's live
+      position/facing through `FrameRenderer::Render` (M9/M10) via
+      `DungeonView` (M19, so the corridor view now correctly opens into
+      neighboring levels at real level boundaries too) and present it
+      through the existing GDI `Window::Present`. `CMakeLists.txt`
+      links `dawnstar_port` against `dawnstar_player`/`dawnstar_render`
+      (previously linked against neither -- only `user32`/`gdi32`).
+
+      No new gameplay logic was ported here -- this is pure wiring of
+      already-verified pieces. Verified by actually running
+      `dawnstar_port.exe` and screen-capturing its real window: it
+      shows the real first-person corridor view (real floor/wall/gate
+      textures from the hub town's own layout), and holding the up
+      arrow for 1.5s (six ticks) visibly changes thousands of sampled
+      pixels versus the initial frame -- confirming movement input
+      actually reaches `PlayerMovement::Move` and a new frame is
+      rendered from the result, not just a static placeholder.
+
 ## Milestones next
 
-- [ ] **M20 and beyond (not yet planned in detail):** the live per-level
+- [ ] **M21 and beyond (not yet planned in detail):** the live per-level
       monster/chest/dropped-item registry (`Dungeon.java`'s
       `ESGame.monsters`/`chests`/`droppedItems` Hashtables/Vector) that
       `dropInventoryItem`, `Monster.onDeath`'s drop, the "curse of
@@ -807,10 +837,10 @@ milestone rather than just read-through.
       change simplification are all still waiting on (see
       `player_movement.h`/`monster_runtime.h`/`combat_resolution.h`'s
       class comments); object/monster/chest/NPC sprites and the HUD/
-      minimap (`GameCanvas.paintGameView()`'s other calls, now that the
-      base corridor view renders, the player can move through it across
-      real level boundaries, and combat resolves); and finally
-      `ESGame`'s own screen-wiring loop tying it all together. Each gets
+      minimap in the real windowed app (`GameCanvas.paintGameView()`'s
+      other calls); and finally `ESGame`'s own screen-wiring loop
+      (character creation, menus, dialogue, shops) tying it all
+      together in place of M20's fixed stand-in character. Each gets
       its own milestone once the shape of "how much fits in one slice"
       is clearer -- following `shadowkey-decomp`'s pattern of not over-
       planning milestones far in advance of actually reaching them.
