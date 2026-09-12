@@ -827,18 +827,62 @@ milestone rather than just read-through.
       actually reaches `PlayerMovement::Move` and a new frame is
       rendered from the result, not just a static placeholder.
 
+- [x] **M21 -- the Health/Magicka/Fatigue HUD status-bar overlay**
+      (this session). `HudRenderer::PaintStatusBars`
+      (`render/hud_renderer.h`, a header-only class) ports
+      `GameCanvas.paintStatusBars()`'s 3-bar meter exactly: a shared
+      40x7 yellow background per stat, then a red/green/blue fill
+      inside sized to `effectiveStat(index) * 38 / max`. That needed
+      `Player.java`'s `effectiveStat()` itself, which wasn't ported yet
+      -- added as `PlayerCombatStats::EffectiveStat` (`player/
+      player_combat_stats.h`/`.cpp`), reusing the already-verified
+      `SkillValue`/`IsEffectActive` primitives from M14. `Backbuffer`
+      (`graphics/backbuffer.h`) gained a small `FillRect` primitive
+      alongside its existing `SetPixel`/`Blit`, the natural counterpart
+      of `Graphics.fillRect()`.
+
+      This is the first module that genuinely needs both a `Backbuffer`
+      (render/) and player game-state math (player/), so
+      `dawnstar_render` gained a `PUBLIC` dependency on `dawnstar_player`
+      for it -- no cycle results, since nothing in `player/`/`world/`
+      depends back on `render/`. Wired into `main.cpp`'s per-frame
+      render call, right after `FrameRenderer::Render`.
+
+      Ported exactly, including one real quirk confirmed against the
+      source rather than assumed: the HP and Magicka bars' fill width
+      has no upper clamp against the 40px background, so a stat
+      temporarily above its own max (e.g. M16's documented unclamped-
+      Magicka-refund spellcasting bug) draws a fill past the background
+      -- but the Fatigue bar alone explicitly clamps its fill at 40px.
+      Not a rendering bug to unify away; the original really does treat
+      the third bar differently from the first two.
+
+      Verified via the new `hud_renderer_smoke.exe` (no JVM ground
+      truth, same reason as M6/M9/M11/M13-M20) against a real created
+      character: fill widths cross-checked against an independent
+      hand-transcription of `effectiveStat()`'s formula for a baseline
+      character, again with effect 23 ("Regeneration") forced active to
+      exercise `effectiveStat()`'s only real branch, and again with
+      every stat forced to 3x its own max to confirm the HP/Magicka
+      overflow-with-no-clamp vs. Fatigue-clamps-at-40 quirk really
+      reproduces. All checks passed. Also confirmed visually: screen-
+      captured the real `dawnstar_port.exe` window and saw the 3 bars
+      rendered correctly (full red/green/blue on a fresh character) in
+      their real position, over the real corridor view from M20.
+
 ## Milestones next
 
-- [ ] **M21 and beyond (not yet planned in detail):** the live per-level
+- [ ] **M22 and beyond (not yet planned in detail):** the live per-level
       monster/chest/dropped-item registry (`Dungeon.java`'s
       `ESGame.monsters`/`chests`/`droppedItems` Hashtables/Vector) that
       `dropInventoryItem`, `Monster.onDeath`'s drop, the "curse of
       hunger" monster spawn, and the roaming-monster-cleanup-on-level-
       change simplification are all still waiting on (see
       `player_movement.h`/`monster_runtime.h`/`combat_resolution.h`'s
-      class comments); object/monster/chest/NPC sprites and the HUD/
-      minimap in the real windowed app (`GameCanvas.paintGameView()`'s
-      other calls); and finally `ESGame`'s own screen-wiring loop
+      class comments); the hotbar panel/message popup/object-monster-
+      chest-NPC sprites/minimap in the real windowed app (the rest of
+      `GameCanvas.paintGameView()`'s calls, now that the status bars are
+      wired up too); and finally `ESGame`'s own screen-wiring loop
       (character creation, menus, dialogue, shops) tying it all
       together in place of M20's fixed stand-in character. Each gets
       its own milestone once the shape of "how much fits in one slice"

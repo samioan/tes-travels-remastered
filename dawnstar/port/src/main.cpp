@@ -24,6 +24,7 @@
 #include "player/player_movement.h"
 #include "player/player_state.h"
 #include "render/frame_renderer.h"
+#include "render/hud_renderer.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
 #include "world/dungeon_view.h"
@@ -106,6 +107,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             dawnstar::DungeonView view(levels, player.currentLevel - 1);
             dawnstar::FrameRenderer::Render(backbuffer, textures, view, player.tileX, player.tileY, player.facing,
                                              levels[static_cast<size_t>(player.currentLevel - 1)].number);
+            dawnstar::HudRenderer::PaintStatusBars(backbuffer, player, charData);
             window.Present(backbuffer);
         });
     } catch (const std::exception&) {

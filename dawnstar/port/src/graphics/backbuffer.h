@@ -33,6 +33,23 @@ public:
         pixels_[static_cast<size_t>(y) * kWidth + x] = rgb565;
     }
 
+    // Graphics.fillRect()'s counterpart -- clipped to the backbuffer. A
+    // non-positive w/h simply draws nothing (MIDP's own fillRect leaves
+    // negative widths/heights undefined; this port just no-ops them,
+    // matching the empty-clip-range GameCanvas itself would effectively
+    // see).
+    void FillRect(int x, int y, int w, int h, uint16_t rgb565) {
+        int x0 = std::max(x, 0);
+        int y0 = std::max(y, 0);
+        int x1 = std::min(x + w, kWidth);
+        int y1 = std::min(y + h, kHeight);
+        for (int yy = y0; yy < y1; yy++) {
+            for (int xx = x0; xx < x1; xx++) {
+                pixels_[static_cast<size_t>(yy) * kWidth + xx] = rgb565;
+            }
+        }
+    }
+
     const uint16_t* Data() const { return pixels_.data(); }
 
     // Straight opaque-pixel copy of a DecodedImage at (x, y), clipped to

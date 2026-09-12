@@ -43,14 +43,14 @@ add_library(dawnstar_world STATIC
 target_include_directories(dawnstar_world PUBLIC src)
 target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 
-# M9/M10: corridor rendering -- see docs/PORT_ROADMAP.md, src/render/,
-# src/world/dungeon_view.h.
+# M9/M10/M21: corridor rendering + the HUD status-bar overlay -- see
+# docs/PORT_ROADMAP.md, src/render/, src/world/dungeon_view.h.
 add_library(dawnstar_render STATIC
   src/render/corridor_render_plan.cpp
   src/render/frame_renderer.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
-target_link_libraries(dawnstar_render PUBLIC dawnstar_world)
+target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player)
 
 # M11/M12/M13/M14/M16/M17: player character creation + full save format +
 # movement + combat/skill stat math + inventory/equip management +
@@ -171,3 +171,7 @@ target_link_libraries(use_item_smoke PRIVATE dawnstar_combat)
 # M19 milestone smoke test -- see src/tests/m19_dungeon_view_smoke.cpp.
 add_executable(dungeon_view_smoke src/tests/m19_dungeon_view_smoke.cpp)
 target_link_libraries(dungeon_view_smoke PRIVATE dawnstar_world)
+
+# M21 milestone smoke test -- see src/tests/m21_hud_renderer_smoke.cpp.
+add_executable(hud_renderer_smoke src/tests/m21_hud_renderer_smoke.cpp)
+target_link_libraries(hud_renderer_smoke PRIVATE dawnstar_render)

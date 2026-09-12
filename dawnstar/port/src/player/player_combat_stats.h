@@ -62,6 +62,16 @@ public:
     // combatTargetSpawnId != 0 (i.e. while in combat); >0: still
     // counting down.
     static bool IsEffectActive(const PlayerState& p, int effectId);
+    // Player.java's effectiveStat(index): the HP/Magicka/Fatigue values
+    // GameCanvas's status-bar HUD (render/hud_renderer.h, M21) actually
+    // displays -- coreStats[index] as-is, unless the "Regeneration"-style
+    // buff (effect 23) is active AND index is 2 (HP)/4 (Magicka)/6
+    // (Fatigue), in which case skillValue(10, false) is added back in,
+    // capped at the matching max stat (coreStats[index+1]). Every other
+    // index (and every other caller reading coreStats directly instead
+    // of through this) intentionally sees the buff-less raw value --
+    // ported exactly, not generalized.
+    static int EffectiveStat(const PlayerState& p, const CharacterData& charData, int index);
     static void ClearEffect(PlayerState& p, int effectId) { p.effectDurations[static_cast<size_t>(effectId - 1)] = 0; }
     static bool HasAilment(const PlayerState& p, int ailmentNumber) {
         return (p.ailmentMask & (1 << (ailmentNumber - 1))) != 0;

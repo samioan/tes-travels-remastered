@@ -163,6 +163,23 @@ bool PlayerCombatStats::IsEffectActive(const PlayerState& p, int effectId) {
     return duration == -2 ? p.combatTargetSpawnId != 0 : duration > 0;
 }
 
+int PlayerCombatStats::EffectiveStat(const PlayerState& p, const CharacterData& charData, int index) {
+    int value = p.coreStats[static_cast<size_t>(index)];
+    if (IsEffectActive(p, 23)) {
+        if (index == 2) {
+            value += SkillValue(p, charData, 10, false);
+            if (value > p.coreStats[3]) value = p.coreStats[3];
+        } else if (index == 6) {
+            value += SkillValue(p, charData, 10, false);
+            if (value > p.coreStats[7]) value = p.coreStats[7];
+        } else if (index == 4) {
+            value += SkillValue(p, charData, 10, false);
+            if (value > p.coreStats[5]) value = p.coreStats[5];
+        }
+    }
+    return value;
+}
+
 void PlayerCombatStats::GainSkillExp(PlayerState& p, const CharacterData& charData, int skillIndex, int amount) {
     if (skillIndex < 0 || skillIndex >= 14) return;
 
