@@ -99,11 +99,11 @@ add_library(dawnstar_monster STATIC
 target_include_directories(dawnstar_monster PUBLIC src)
 target_link_libraries(dawnstar_monster PUBLIC dawnstar_assets dawnstar_world)
 
-# M15/M16/M32: the combat entry points needing both Player and Monster,
-# plus (M32) the attack-action/death-resolution tick orchestration,
-# which additionally needs dawnstar_render (render/message_popup.h) --
-# see docs/PORT_ROADMAP.md and src/combat/. No cycle: dawnstar_render
-# doesn't depend back on dawnstar_combat.
+# M15/M16/M32/M33: the combat entry points needing both Player and
+# Monster, plus (M32/M33) the attack/spellcast-action/death-resolution
+# tick orchestration, which additionally needs dawnstar_render
+# (render/message_popup.h) -- see docs/PORT_ROADMAP.md and src/combat/.
+# No cycle: dawnstar_render doesn't depend back on dawnstar_combat.
 add_library(dawnstar_combat STATIC
   src/combat/combat_resolution.cpp
   src/combat/combat_tick.cpp
@@ -125,7 +125,8 @@ target_link_libraries(dawnstar_dungeon PUBLIC dawnstar_world dawnstar_monster)
 # src/engine/, src/graphics/, src/platform/win32/, src/main.cpp. M32
 # adds dawnstar_combat: the attack action needs CombatResolution::
 # PlayerAttack/MonsterRuntime::OnDeath directly from main.cpp's own
-# tick-dispatch orchestration.
+# tick-dispatch orchestration. M33 additionally wires spellcasting the
+# same way (CombatTick::ProcessSpellCast/CycleSpell).
 add_executable(dawnstar_port WIN32
   src/main.cpp
   src/platform/win32/window.cpp
@@ -262,3 +263,7 @@ target_link_libraries(hotbar_renderer_smoke PRIVATE dawnstar_render)
 # M32 milestone smoke test -- see src/tests/m32_combat_tick_smoke.cpp.
 add_executable(combat_tick_smoke src/tests/m32_combat_tick_smoke.cpp)
 target_link_libraries(combat_tick_smoke PRIVATE dawnstar_combat)
+
+# M33 milestone smoke test -- see src/tests/m33_spellcast_tick_smoke.cpp.
+add_executable(spellcast_tick_smoke src/tests/m33_spellcast_tick_smoke.cpp)
+target_link_libraries(spellcast_tick_smoke PRIVATE dawnstar_combat)

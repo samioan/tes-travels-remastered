@@ -1706,19 +1706,86 @@ milestone rather than just read-through.
       right after the kill (context 0 again, with a real "CREATURE IS
       DEAD!" popup) -- before the diagnostic was removed.
 
+- [x] **M33 -- the spellcasting action (cast + cycle)** (this session).
+      The second of `dispatchTickActions()`'s priority-ordered actions
+      to get wired into the live tick loop (camp/interact/options
+      remain unwired -- each still needs UI this port doesn't have
+      yet). Cast and cycle both outrank attack per tick, matching the
+      original's own ordering exactly -- all of `Player.castOnSelf()`/
+      `castOnMonster()`/`cycleSelectedSpell()`'s underlying math was
+      already ported and verified back in M16; this milestone is
+      purely the tick-orchestration wiring around it (mirroring what
+      M32 did for the attack action).
+
+      New `'S'` (cast) and `'C'` (cycle) keys. Cast is polled every
+      tick like attack -- `GameCanvas.keyPressed()`'s own `key == 51`
+      handler sets `castSpellRequested` unconditionally (no
+      `hotbarContext` gate, unlike attack's own `key == 49`), but
+      `processSpellCast()`'s own 500ms cooldown throttles repeated
+      firing to the same cadence a held key would produce anyway --
+      same reasoning M32 already established for attack. Cycle,
+      unlike cast/attack, has NO internal cooldown -- every physical
+      keydown cycles exactly once -- so it's the one action this port
+      genuinely edge-detects: sampled at full frame rate (the same way
+      the `'M'` zoom key already is, since the original's own
+      `keyPressed()` fires immediately on a physical keydown too) into
+      a pending flag, but -- unlike zoom's own immediate effect --
+      only actually consumed once inside the tick-gated dispatch,
+      matching `dispatchTickActions()`'s real once-per-tick
+      consumption of `spellCycleRequested`.
+
+      New `CombatTick::ProcessSpellCast`/`CycleSpell` (`combat/
+      combat_tick.h`/`.cpp`) port `processSpellCast()`/
+      `cycleSelectedSpell()` exactly, including the original's own
+      real gate order (invalid spell id -> not enough Magicka -> the
+      500ms cooldown -> offensive-vs-self dispatch) and a genuinely
+      preserved quirk: `lastSpellCastTime` advances even when an
+      offensive cast finds no monster targeted, because the original's
+      own `this.lastSpellCastTime = now;` sits *outside* the
+      `monsterTargeted` check, at the end of the same cooldown-gated
+      branch that contains it -- attempting to cast at nothing still
+      consumes the cooldown. An offensive cast re-derives the front
+      monster fresh via `PlayerMovement::MonsterInFront` (the same
+      "SIMPLIFIED, but not lossy" reasoning M32 already established:
+      action dispatch is mutually exclusive per tick, so the front
+      tile can't have moved since `player.monsterTargeted` was last
+      refreshed this same tick).
+
+      `paintActionFlashes()` is now fully ported: `spellHitFlash`
+      (icon 8) and `selfSpellFlash` (icon 7) join M32's
+      `monsterHitFlash` (icon 6), reusing `HotbarRenderer::
+      PaintActionFlashIcon` as-is (already generic enough since M32 --
+      no code changes needed there, only stale doc comments claiming
+      the other two cases were still unported).
+
+      Verified via the new `spellcast_tick_smoke.exe` against the real
+      spellsin.dat `SpellDatabase` (picking whichever real offensive
+      and real non-offensive spell the archive lists first, rather
+      than hand-picked ids): the invalid-id/magicka/cooldown gate
+      order and each gate's exact message text/priority (including
+      `MessagePopup::Show`'s own negative-priority-becomes-10
+      internal convention), the offensive-vs-self flash-flag dispatch,
+      the preserved lastSpellCastTime-advances-with-no-target quirk,
+      and `CycleSpell`'s own known-spells-mask-driven selection and
+      messaging. All checks passed. Full clean rebuild zero warnings;
+      all 34 smoke tests pass. Also rendered two real frames via a
+      temporary diagnostic (a real generated level, a real monster
+      spawn, real Magicka spend) confirming an offensive cast's red
+      "spellHitFlash" burst next to the combat hotbar and a
+      self-targeted cast's blue "selfSpellFlash" swirl alongside its
+      own real message popup -- before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M33 and beyond (not yet planned in detail):** every remaining
-      `showMessage()` call site beyond the 3 M30 wired up (plus M32's
-      "Creature is dead!") stays unreachable until spellcast/camp/menu
-      actions are themselves wired into the live tick loop --
-      `spellHitFlash`/`selfSpellFlash` likewise wait on spellcasting's
-      own wiring. And finally `ESGame`'s own screen-wiring loop
-      (character creation, menus, dialogue, shops -- the full `Shop.
-      dialogue()` dispatcher traced while scoping M28 is still
-      unported, only its `npcstrings.dat` text itself loads so far, M8)
-      tying it all together in place of M20's fixed stand-in character.
-      Each gets its own milestone once the shape of "how much fits in
-      one slice" is clearer -- following `shadowkey-decomp`'s pattern
-      of not over-planning milestones far in advance of actually
-      reaching them.
+- [ ] **M34 and beyond (not yet planned in detail):** every remaining
+      `showMessage()` call site beyond what M30/M32/M33 already wired
+      up stays unreachable until camp/menu actions are themselves
+      wired into the live tick loop. And finally `ESGame`'s own
+      screen-wiring loop (character creation, menus, dialogue, shops --
+      the full `Shop.dialogue()` dispatcher traced while scoping M28 is
+      still unported, only its `npcstrings.dat` text itself loads so
+      far, M8) tying it all together in place of M20's fixed stand-in
+      character. Each gets its own milestone once the shape of "how
+      much fits in one slice" is clearer -- following
+      `shadowkey-decomp`'s pattern of not over-planning milestones far
+      in advance of actually reaching them.

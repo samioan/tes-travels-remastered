@@ -6,6 +6,7 @@
 #include "monster/monster_runtime.h"
 #include "player/player_combat_stats.h"
 #include "player/player_movement.h"
+#include "player/player_spellcasting.h"
 
 namespace dawnstar {
 
@@ -81,6 +82,52 @@ void CombatTick::RefreshAndResolveTargetMonster(PlayerState& player, std::vector
 
     player.monsterTargeted = false;
     player.minimapDirty = true;
+}
+
+void CombatTick::ProcessSpellCast(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
+                                   const MonsterDatabase& monsterDb, const ItemDatabase& items,
+                                   const CharacterData& charData, const SpellDatabase& spells,
+                                   MessagePopupState& messagePopup, JavaRandom& globalRng, int64_t nowMs,
+                                   int64_t& lastSpellCastTimeMs, bool& spellHitFlash, bool& selfSpellFlash) {
+    int spellId = player.selectedSpellId;
+    if (!spells.IsValidId(spellId)) return;
+
+    if (spells.ById(spellId).magickaCost > PlayerCombatStats::EffectiveStat(player, charData, 4)) {
+        MessagePopup::Show(messagePopup, {"Not enough", "magicka!"}, 3, nowMs);
+        return;
+    }
+
+    if (nowMs - lastSpellCastTimeMs < 500) return;
+
+    if (spells.IsOffensive(spellId)) {
+        if (!player.monsterTargeted) {
+            MessagePopup::Show(messagePopup, {"No monster", "here!"}, 1, nowMs);
+        } else {
+            auto* record = PlayerMovement::MonsterInFront(player, levels, world);
+            if (record != nullptr) {
+                MonsterState target = MonsterRuntime::FromBytes(*record);
+                CombatResolution::CastOnMonster(player, target, charData, items, monsterDb, spells, globalRng);
+                *record = MonsterRuntime::ToBytes(target);
+                spellHitFlash = true;
+            }
+        }
+    } else {
+        PlayerSpellcasting::CastOnSelf(player, charData, items, spells, globalRng);
+        selfSpellFlash = true;
+    }
+
+    lastSpellCastTimeMs = nowMs;
+}
+
+void CombatTick::CycleSpell(PlayerState& player, const SpellDatabase& spells, MessagePopupState& messagePopup,
+                             int64_t nowMs) {
+    int spellId = PlayerSpellcasting::CycleSelectedSpell(player, spells);
+    if (spellId == 0) {
+        MessagePopup::Show(messagePopup, {"No spells!", ""}, -1, nowMs);
+    } else {
+        player.selectedSpellId = static_cast<int8_t>(spellId);
+        MessagePopup::Show(messagePopup, MessagePopup::WrapToTwoLines(spells.ById(spellId).name), -1, nowMs);
+    }
 }
 
 }  // namespace dawnstar

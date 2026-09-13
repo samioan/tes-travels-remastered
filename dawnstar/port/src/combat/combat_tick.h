@@ -5,6 +5,7 @@
 #include "assets/character_data.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "assets/spell_database.h"
 #include "dungeon/dungeon_runtime.h"
 #include "player/player_state.h"
 #include "render/message_popup.h"
@@ -14,15 +15,17 @@
 namespace dawnstar {
 
 // Renamed-source counterpart of GameCanvas.processAttack()/
-// refreshTargetMonster()/resolveMonsterDeath() -- the player-initiated
-// attack action, plus dispatchTickActions()'s own always-run-every-tick
+// refreshTargetMonster()/resolveMonsterDeath()/processSpellCast()/
+// cycleSelectedSpell() -- the player-initiated attack and spellcasting
+// actions, plus dispatchTickActions()'s own always-run-every-tick
 // target-refresh/death-resolution tail. Kept in its own module (the
 // same reason combat/combat_resolution.h itself is) because it needs
-// BOTH dawnstar_combat (CombatResolution::PlayerAttack/MonsterRuntime::
-// OnDeath) and dawnstar_render (render/message_popup.h, for the
-// "Creature is dead!" popup) -- neither depends on the other, so
-// combining them anywhere else would either cycle or force main.cpp to
-// duplicate untested logic inline. See docs/PORT_ROADMAP.md's M32 entry.
+// BOTH dawnstar_combat (CombatResolution::PlayerAttack/CastOnMonster/
+// MonsterRuntime::OnDeath) and dawnstar_render (render/message_popup.h,
+// for the "Creature is dead!"/"Not enough magicka!"/etc. popups) --
+// neither depends on the other, so combining them anywhere else would
+// either cycle or force main.cpp to duplicate untested logic inline.
+// See docs/PORT_ROADMAP.md's M32/M33 entries.
 class CombatTick {
 public:
     // GameCanvas.processAttack(): resolves a player-initiated attack
@@ -68,6 +71,41 @@ public:
                                                 WorldRegistry& world, const MonsterDatabase& monsterDb,
                                                 const ItemDatabase& items, MessagePopupState& messagePopup,
                                                 JavaRandom& globalRng, int64_t nowMs, int16_t& nextDropSpawnId);
+
+    // GameCanvas.processSpellCast(): casts player.selectedSpellId,
+    // gated by the same "poll the held key every tick, rely on the
+    // original's own internal 500ms cooldown to throttle it" shape
+    // ProcessAttack above already established for a discrete-keydown-
+    // event-plus-cooldown action (GameCanvas.keyPressed()'s own
+    // `key == 51` handler sets castSpellRequested unconditionally,
+    // unlike attack's own hotbarContext-gated key). Order matches the
+    // original exactly: invalid spell id -> no-op; not enough Magicka
+    // -> message (does NOT advance the cooldown); cooldown not yet
+    // elapsed -> no-op; then, if offensive, either "No monster here!"
+    // or CombatResolution::CastOnMonster on whatever's directly in
+    // front (re-derived fresh via PlayerMovement::MonsterInFront, same
+    // "SIMPLIFIED but not lossy" reasoning as ProcessAttack above --
+    // action dispatch is mutually exclusive per tick, so the front tile
+    // can't have moved since player.monsterTargeted was last refreshed);
+    // otherwise CombatResolution::CastOnSelf. A real preserved quirk:
+    // `lastSpellCastTimeMs` advances even when an offensive cast finds
+    // no monster -- the original's own `this.lastSpellCastTime = now;`
+    // sits OUTSIDE the monsterTargeted check, at the end of the same
+    // branch that guards it.
+    static void ProcessSpellCast(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
+                                  const MonsterDatabase& monsterDb, const ItemDatabase& items,
+                                  const CharacterData& charData, const SpellDatabase& spells,
+                                  MessagePopupState& messagePopup, JavaRandom& globalRng, int64_t nowMs,
+                                  int64_t& lastSpellCastTimeMs, bool& spellHitFlash, bool& selfSpellFlash);
+
+    // GameCanvas.cycleSelectedSpell(): unlike ProcessAttack/
+    // ProcessSpellCast above, the original has no internal cooldown
+    // here -- every physical keydown cycles exactly once, so main.cpp's
+    // own caller edge-detects the key itself (a stand-in for
+    // spellCycleRequested, set on keydown and consumed here) rather
+    // than polling it every tick the way attack/cast do.
+    static void CycleSpell(PlayerState& player, const SpellDatabase& spells, MessagePopupState& messagePopup,
+                           int64_t nowMs);
 };
 
 }  // namespace dawnstar

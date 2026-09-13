@@ -33,27 +33,22 @@ struct HotbarTextures {
 // matching the original's own two-pass drawChar calls exactly) and
 // their 4 icons, all at 4 fixed positions.
 //
-// GameCanvas.paintActionFlashes()'s monsterHitFlash case is also ported
-// here (as PaintActionFlashIcon below), M32 -- its spellHitFlash/
-// selfSpellFlash siblings remain unported pending the spellcasting-
-// wiring milestone. The actual keyPressed() dispatch that reads
-// hotbarContext back for camp/interact/cast/cycle/options
-// (campRequested/interactRequested/etc.) is also still not ported --
-// same reason (no camp/shop/spell-select/options UI exists yet).
+// GameCanvas.paintActionFlashes() is fully ported here (as
+// PaintActionFlashIcon below): monsterHitFlash since M32, spellHitFlash/
+// selfSpellFlash since M33. The actual keyPressed() dispatch that reads
+// hotbarContext back for camp/interact/options
+// (campRequested/interactRequested/optionsRequested) is still not
+// ported -- no camp/shop/options UI exists yet (cast/cycle don't
+// consult hotbarContext at all, so they needed no such UI to wire).
 class HotbarRenderer {
 public:
     // GameCanvas.computeHotbarContext(): 0 = exploring, 1 = a monster is
     // targeted (combat hotbar), 2 = a chest or NPC is in sight (interact
-    // hotbar). `monsterTargeted` is a plain parameter here rather than a
-    // PlayerState field -- unlike M28/M29's own "GameCanvas statics
-    // folded into PlayerState" precedent -- because nothing in this
-    // port ever sets it yet: GameCanvas.monsterTargeted is only ever
-    // written by the combat attack-targeting flow, which isn't wired
-    // into the live tick loop (see docs/PORT_ROADMAP.md). Adding a
-    // PlayerState field nothing writes would just be dead state; every
-    // real call site in this port passes `false` until that combat
-    // wiring lands, at which point this signature already has the hook
-    // ready for it.
+    // hotbar). `monsterTargeted` is a plain parameter (a plain read of
+    // player.monsterTargeted at each of this port's 2 call sites -- see
+    // main.cpp) rather than PlayerState itself being threaded straight
+    // in, simply because this function only ever needs that one bit of
+    // it.
     static int ComputeHotbarContext(bool monsterTargeted, bool chestInSight, int npcInSight);
 
     // Paints the panel background plus whichever of the 3 digit/icon
@@ -67,8 +62,9 @@ public:
     // for its one-shot combat-flash icons -- exposed publicly (unlike
     // Paint's own 4 fixed per-context placements above) since these use
     // per-event RANDOM offsets the original picks at the call site, not
-    // a fixed table (see main.cpp's own M32 wiring for the only
-    // reachable case, monsterHitFlash -- iconIdx 6).
+    // a fixed table (see main.cpp's own wiring for all 3 reachable
+    // cases: monsterHitFlash iconIdx 6, selfSpellFlash iconIdx 7,
+    // spellHitFlash iconIdx 8).
     static void PaintActionFlashIcon(Backbuffer& bb, const HotbarTextures& textures, int iconIdx, int x, int y);
 };
 

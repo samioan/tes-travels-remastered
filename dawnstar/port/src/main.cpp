@@ -20,6 +20,7 @@
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
 #include "assets/monster_image_names.h"
+#include "assets/spell_database.h"
 #include "combat/combat_tick.h"
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
@@ -102,11 +103,25 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // standing in for whatever the original's own arrow/game-action keys
     // were).
     bool zoomKeyWasDown = false;
+    // GameCanvas.spellCycleRequested -- a genuine discrete-keydown-event
+    // flag (unlike attack/cast, it has no internal cooldown of its own
+    // to throttle repeated firing), so it's captured the same
+    // full-frame-rate edge-detected way as the zoom key above (matching
+    // the original's own keyPressed(), which sets it immediately on a
+    // physical keydown independent of the 250ms tick) but -- unlike
+    // zoom's own immediate effect -- only actually CONSUMED once inside
+    // the tick-gated dispatch below, matching dispatchTickActions()'s
+    // real once-per-tick consumption.
+    bool spellCycleKeyWasDown = false;
+    bool spellCyclePending = false;
     // GameCanvas.lastAttackTime -- a GameCanvas field, not one of
     // Player's own, so kept here rather than folded into PlayerState
     // (same reasoning as M30's MessagePopupState being kept separate --
     // see its own doc comment).
     int64_t lastAttackTimeMs = 0;
+    // GameCanvas.lastSpellCastTime -- same reasoning as lastAttackTimeMs
+    // above.
+    int64_t lastSpellCastTimeMs = 0;
     // Item.nextSpawnId()'s counter, substituted the same way
     // player/player_creation.cpp's GrantStartingItems already does --
     // see MonsterRuntime::OnDeath's own doc comment.
@@ -122,6 +137,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // already noted elsewhere in this file (e.g. the 'M' key's own
     // comment above).
     bool monsterHitFlash = false;
+    // GameCanvas.spellHitFlash/selfSpellFlash -- same reasoning as
+    // monsterHitFlash above.
+    bool spellHitFlash = false;
+    bool selfSpellFlash = false;
 
     // Same default-relative-path convention every console smoke test
     // uses (see e.g. tests/m10_frame_render_smoke.cpp) -- this exe also
@@ -132,6 +151,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::DatArchive archive(root + "/datfiles.lmp");
         dawnstar::ItemDatabase items = dawnstar::ItemDatabase::Load(archive);
         dawnstar::MonsterDatabase monsters = dawnstar::MonsterDatabase::Load(archive);
+        dawnstar::SpellDatabase spells = dawnstar::SpellDatabase::Load(archive);
         dawnstar::CharacterData charData = dawnstar::CharacterData::Load(archive);
         dawnstar::DungeonGeometry geometry = dawnstar::DungeonGeometry::Load(archive);
         dawnstar::ImgArchive imageArchive(root + "/imgfiles.lmp");
@@ -175,6 +195,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             }
             zoomKeyWasDown = zoomKeyDown;
 
+            // GameCanvas.keyPressed()'s own `key == 53` handler
+            // (spellCycleRequested) -- captured at full frame rate for
+            // the same immediate-keydown-event reason as the zoom key
+            // above, but left PENDING rather than acted on here (see
+            // spellCyclePending's own doc comment above).
+            bool spellCycleKeyDown = KeyPressed('C');
+            if (spellCycleKeyDown && !spellCycleKeyWasDown) {
+                spellCyclePending = true;
+            }
+            spellCycleKeyWasDown = spellCycleKeyDown;
+
             if (clock.ConsumeTick()) {
                 // GameCanvas.run()'s own `now = System.
                 // currentTimeMillis()`, sampled once per tick and reused
@@ -195,25 +226,34 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // GameCanvas.dispatchTickActions()'s own if/else-if
                 // priority chain: only camp/interact/cast/cycle/attack/
                 // options/unusedKey9/move ever fires per tick, never
-                // more than one. Only attack and move are wired so far
-                // (the rest need UI this port doesn't have yet -- camp
-                // state, shop dialogue, a spell-selection overlay, an
-                // options menu); attack outranks move, matching the
-                // original's own ordering. GameCanvas.keyPressed()'s own
-                // `key == 49` handler only ever sets attackRequested
-                // when hotbarContext == 1 -- reproduced here as
-                // `attackActive`'s own `hotbarContext == 1` gate, rather
-                // than a separate one-shot request flag, since (like
-                // movement) polling the held key every tick and relying
-                // on processAttack's own 500ms cooldown to throttle it
-                // reproduces the same pacing without needing to
-                // reproduce keyPressed's discrete per-keydown event
-                // semantics (same simplification movement already
-                // established -- see this block's own comment below).
+                // more than one. Cast/cycle/attack/move are wired so far
+                // (camp/interact/options still need UI this port doesn't
+                // have yet -- camp state, shop dialogue, an options
+                // menu); cast outranks cycle outranks attack outranks
+                // move, matching the original's own ordering exactly
+                // (interactRequested's own higher rank is moot until
+                // it's wired, since nothing sets it yet).
+                //
+                // Cast, like attack, is polled every tick rather than
+                // edge-detected: GameCanvas.keyPressed()'s own
+                // `key == 51` handler sets castSpellRequested
+                // unconditionally (no hotbarContext gate, unlike
+                // attack's own `key == 49`), but processSpellCast's own
+                // 500ms cooldown (lastSpellCastTimeMs) throttles it to
+                // the same pacing a held key would produce anyway --
+                // same reasoning as attackActive below.
+                bool castActive = KeyPressed('S');
                 bool attackActive = KeyPressed('A') && hotbarContext == 1;
 
                 bool moveAttempted = false;
-                if (attackActive) {
+                if (castActive) {
+                    dawnstar::CombatTick::ProcessSpellCast(player, levels, world, monsters, items, charData, spells,
+                                                            messagePopup, globalRng, nowMs, lastSpellCastTimeMs,
+                                                            spellHitFlash, selfSpellFlash);
+                } else if (spellCyclePending) {
+                    dawnstar::CombatTick::CycleSpell(player, spells, messagePopup, nowMs);
+                    spellCyclePending = false;
+                } else if (attackActive) {
                     if (dawnstar::CombatTick::ProcessAttack(player, levels, world, monsters, items, charData,
                                                               globalRng, nowMs, lastAttackTimeMs)) {
                         monsterHitFlash = true;
@@ -334,15 +374,27 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             dawnstar::HotbarRenderer::Paint(backbuffer, hotbarTextures, renderHotbarContext);
             // paintGameView()'s own paintMessagePopup() call -- M30.
             dawnstar::MessagePopup::Paint(backbuffer, messagePopup);
-            // paintGameView()'s own paintActionFlashes() call --
-            // monsterHitFlash only (M32); spellHitFlash/selfSpellFlash
-            // remain unported (see render/hotbar_renderer.h's own doc
-            // comment).
+            // paintGameView()'s own paintActionFlashes() call -- all 3
+            // cases now wired (monsterHitFlash since M32; spellHitFlash/
+            // selfSpellFlash since M33), same icon/offset table as the
+            // original.
             if (monsterHitFlash) {
                 int x = 40 + dawnstar::LingoRandomInt(globalRng, 30);
                 int y = 50 + dawnstar::LingoRandomInt(globalRng, 20);
                 dawnstar::HotbarRenderer::PaintActionFlashIcon(backbuffer, hotbarTextures, 6, x, y);
                 monsterHitFlash = false;
+            }
+            if (spellHitFlash) {
+                int x = 40 + dawnstar::LingoRandomInt(globalRng, 30);
+                int y = 50 + dawnstar::LingoRandomInt(globalRng, 22);
+                dawnstar::HotbarRenderer::PaintActionFlashIcon(backbuffer, hotbarTextures, 8, x, y);
+                spellHitFlash = false;
+            }
+            if (selfSpellFlash) {
+                int x = 50 + dawnstar::LingoRandomInt(globalRng, 2);
+                int y = 80 + dawnstar::LingoRandomInt(globalRng, 2);
+                dawnstar::HotbarRenderer::PaintActionFlashIcon(backbuffer, hotbarTextures, 7, x, y);
+                selfSpellFlash = false;
             }
             // paintGameView()'s own actual LAST drawing step (outside
             // its own try block, after paintMessagePopup/
