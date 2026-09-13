@@ -45,6 +45,17 @@ public:
     // facing-relative placement math (Place) placeVisibleObject uses.
     static void Tick(PlayerState& p, const std::vector<GeneratedLevel>& levels, WorldRegistry& world);
 
+    // GameCanvas.paintVisibleObjects()'s own `monsterAttacking` -- true
+    // if ANY of the 13 visibleObjects slots currently holds a monster
+    // record whose "seen" flag (see this class's own doc comment above)
+    // is set. M36's real name for this, despite what the original calls
+    // it: because that flag never resets, this is really "a monster
+    // that has EVER been sighted is currently somewhere in view", not
+    // "a monster is actively attacking" -- ported as this real
+    // (surprisingly permissive) behavior, not the more sensible-sounding
+    // name.
+    static bool AnyMonsterAttacking(const PlayerState& p);
+
 private:
     // Player.refreshVisibleObjects(): samples p.corridorView at the 13
     // slots' fixed forward/diagonal offsets, marking wall-blocked slots

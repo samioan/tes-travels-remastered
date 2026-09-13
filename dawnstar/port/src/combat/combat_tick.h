@@ -16,16 +16,18 @@ namespace dawnstar {
 
 // Renamed-source counterpart of GameCanvas.processAttack()/
 // refreshTargetMonster()/resolveMonsterDeath()/processSpellCast()/
-// cycleSelectedSpell() -- the player-initiated attack and spellcasting
-// actions, plus dispatchTickActions()'s own always-run-every-tick
-// target-refresh/death-resolution tail. Kept in its own module (the
-// same reason combat/combat_resolution.h itself is) because it needs
-// BOTH dawnstar_combat (CombatResolution::PlayerAttack/CastOnMonster/
-// MonsterRuntime::OnDeath) and dawnstar_render (render/message_popup.h,
-// for the "Creature is dead!"/"Not enough magicka!"/etc. popups) --
-// neither depends on the other, so combining them anywhere else would
-// either cycle or force main.cpp to duplicate untested logic inline.
-// See docs/PORT_ROADMAP.md's M32/M33 entries.
+// cycleSelectedSpell(), plus (M36) Dungeon.tickNearbyMonsters() itself
+// -- the player-initiated attack and spellcasting actions, the
+// monster-initiated AI tick, and dispatchTickActions()'s own
+// always-run-every-tick target-refresh/death-resolution tail. Kept in
+// its own module (the same reason combat/combat_resolution.h itself is)
+// because it needs BOTH dawnstar_combat (CombatResolution::PlayerAttack/
+// CastOnMonster/MonsterTick/MonsterRuntime::OnDeath/Chase) and
+// dawnstar_render (render/message_popup.h, for the "Creature is dead!"/
+// "Not enough magicka!"/"Creature attacks!"/etc. popups) -- neither
+// depends on the other, so combining them anywhere else would either
+// cycle or force main.cpp to duplicate untested logic inline. See
+// docs/PORT_ROADMAP.md's M32/M33/M36 entries.
 class CombatTick {
 public:
     // GameCanvas.processAttack(): resolves a player-initiated attack
@@ -106,6 +108,41 @@ public:
     // than polling it every tick the way attack/cast do.
     static void CycleSpell(PlayerState& player, const SpellDatabase& spells, MessagePopupState& messagePopup,
                            int64_t nowMs);
+
+    // Dungeon.tickNearbyMonsters(now, player): the monster-initiated AI
+    // tick -- every monster registered on the player's own current level
+    // within Manhattan distance 1-3 either attacks (distance 1, via
+    // CombatResolution::MonsterTick, an 800ms wind-up then an action
+    // phase) or takes one step toward the player (distance 2-3, via
+    // MonsterRuntime::Chase, at most once every 5 calls per monster).
+    // Sets player.minimapDirty on any monster step (GameCanvas.run()'s
+    // own `(flags & 1) != 0` check) and shows the real "Creature
+    // attacks!" popup on any landed attack (`(flags & 2) != 0`) --
+    // folding both of run()'s own post-tickNearbyMonsters checks in here
+    // rather than threading a return value back out to main.cpp, same
+    // "no real caller needs the raw bits separately" reasoning as
+    // RefreshAndResolveTargetMonster's own void return above.
+    //
+    // SIMPLIFIED, but not lossy: iterates the live WorldRegistry's own
+    // monster map directly (filtering by distance from each entry's own
+    // position key) rather than the original's 7x7 TILE scan that looks
+    // the registry up only after finding a tile with bit 2 set -- exactly
+    // equivalent, since every registered monster's own tile always
+    // carries that same bit by construction (RegisterGeneratedSpawns/
+    // MonsterRuntime::Move/DungeonRuntime::RemoveMonster all keep the
+    // two in sync), so nothing is missed or double-counted either way.
+    //
+    // A successful Chase step is the FIRST live (in-tick-loop) caller
+    // that actually relocates a registered monster -- MonsterRuntime::
+    // Move() itself already updates the moved monster's tile bits, but
+    // (per its own doc comment) was never able to update a live registry
+    // key, since none existed until M22/M24. This method is what finally
+    // re-keys the WorldRegistry entry (erase the old position, insert at
+    // the new one) after a step actually lands, closing that gap.
+    static void TickNearbyMonsters(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
+                                    const CharacterData& charData, const ItemDatabase& items,
+                                    const MonsterDatabase& monsterDb, int64_t nowMs, JavaRandom& globalRng,
+                                    MessagePopupState& messagePopup);
 };
 
 }  // namespace dawnstar

@@ -25,16 +25,14 @@ class CampTick {
 public:
     // GameCanvas's own campRequested dispatch branch (dispatchTickActions()'s
     // highest-priority action): if a monster is actively attacking, shows
-    // "Cannot/Camp!" instead of entering camp. `monsterAttacking` is
-    // always passed false by this port's only real call site (main.cpp)
-    // -- GameCanvas.monsterAttacking is only ever set true by Dungeon.
-    // tickNearbyMonsters()'s own monster-AI tick loop, which isn't wired
-    // into this port's tick loop yet (CombatResolution::MonsterTick
-    // exists and has been fully ported and tested since M15, but nothing
-    // calls it from main.cpp) -- so this branch is real but currently
-    // unreachable, the same "the branch exists, but nothing sets the
-    // condition that reaches it yet" shape as M32/M34's own documented
-    // stand-ins.
+    // "Cannot/Camp!" instead of entering camp. `monsterAttacking` is a
+    // plain bool parameter here rather than something this method reads
+    // off PlayerState itself -- since M36, main.cpp's own real call site
+    // passes VisibleObjects::AnyMonsterAttacking's own result (itself a
+    // persistent, one-tick-lagged local there, same shape as
+    // hotbarContext -- see main.cpp's own doc comment on why); M32-M35
+    // always passed a hardcoded false instead, back when nothing in this
+    // port ever set it.
     //
     // GameCanvas.enterCampState(): campState 1 by default; 3 instead for
     // the rare scripted "disturbed" camp event (a 1-in-10 roll, gated on

@@ -1,13 +1,12 @@
 // Renamed from decompiled/i.java. See ../docs/CLASS_MAP.md and
 // ../docs/ASSET_FORMATS.md (geomin.dat).
 //
-// `Player` here is the real, already-renamed Player class. Note this
-// class's own `tickNearbyMonsters` (and by extension this whole class)
-// is presently unreachable from GameCanvas/Player: they hold dungeons
-// via the OLD unrenamed `i` class (ESGame.dungeons[] is still typed
-// `i[]`), not this one -- see Player.java's and GameCanvas.java's class
-// header notes. Kept updated to the real Player type anyway, ready for
-// when ESGame's own rename pass makes `Dungeon` reachable.
+// `Player` here is the real, already-renamed Player class, and this
+// class IS reachable from GameCanvas/Player: ESGame.dungeons[] is typed
+// `Dungeon[]` and Player.currentDungeon() returns `Dungeon`, both fixed
+// alongside ESGame's own later rename pass (see Player.java's own class
+// header note) -- this comment used to say otherwise and is now stale,
+// left over from before that pass landed.
 import java.util.Enumeration;
 import java.util.Hashtable;
 import java.util.Vector;

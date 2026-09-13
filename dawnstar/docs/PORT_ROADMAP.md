@@ -1850,8 +1850,6 @@ milestone rather than just read-through.
       real "IVORY CLASP" found-item popup with the hotbar correctly
       reverted to context 0 after -- before the diagnostic was removed.
 
-## Milestones next
-
 - [x] **M35 -- the camp system** (this session). The fourth of
       `dispatchTickActions()`'s priority-ordered actions to land, and
       it outranks all of interact/cast/cycle/attack, matching the
@@ -1974,22 +1972,126 @@ milestone rather than just read-through.
       a real "REST COMPLETE!" popup and HP visibly restored to max --
       before the diagnostic was removed.
 
+- [x] **M36 -- the monster AI tick** (this session). Wires
+      `Dungeon.tickNearbyMonsters()` itself into the live tick loop --
+      not a `dispatchTickActions()` action at all, but `GameCanvas.run()`'s
+      OWN per-tick monster-AI pass, called unconditionally the instant
+      `runTick` is true (the very first thing inside that block, ahead
+      of `hotbarContext`/dispatch), so monsters finally act whether or
+      not the player does anything that tick. Every monster registered
+      on the player's own current level within Manhattan distance 1-3
+      either attacks (distance 1, via `CombatResolution::MonsterTick` --
+      fully ported and tested since M15, but never called from
+      `main.cpp` until now) or takes a chase-step toward the player
+      (distance 2-3, via `MonsterRuntime::Chase`, at most once every 5
+      calls per monster). New `CombatTick::TickNearbyMonsters`
+      (`combat/combat_tick.h`/`.cpp` -- the same module, not a new one,
+      since it already has exactly the right dependency shape: Player +
+      Monster + the live registry + the popup this needs) folds in
+      `run()`'s own two post-tick checks too: `player.minimapDirty` on
+      any chase-step attempt, and a real "Creature attacks!" popup
+      (priority 2) on any landed attack.
+
+      SIMPLIFIED, but not lossy: iterates the live `WorldRegistry`'s own
+      monster map directly (filtering candidates by distance from each
+      entry's own position key, snapshotting the in-range keys into a
+      separate list before touching any of them -- mutating a
+      `std::unordered_map` while range-iterating it is undefined
+      behavior, the same class of bug M34's own test caught and fixed
+      for a different map) rather than the original's 7x7 TILE scan
+      that only looks the registry up after finding a tile with bit 2
+      set -- exactly equivalent, since every registered monster's own
+      tile always carries that bit by construction.
+
+      Closed a real gap `MonsterRuntime::Move`'s own doc comment has
+      flagged since M15: it already updates a moved monster's tile bits
+      but was never able to update a live registry KEY, since no
+      registry existed yet. `TickNearbyMonsters` is the first live
+      caller of `Chase`/`Move` in the actual tick loop, so it's now the
+      one that re-keys a successfully-relocated monster's `WorldRegistry`
+      entry (erase the old position, insert at the new one) -- the
+      original's Java `Hashtable` needed the equivalent re-`put()` for
+      the same reason (`store()`, which `Move()`/`Chase()` never called
+      either, for the same "no registry yet" reason at the time).
+
+      A second real, confirmed finding while tracing why `Chase()`'s own
+      name is misleading: it never actually pathfinds toward a distant
+      player at all in the usual sense -- it's really "attempt one step
+      toward the target, preferring the larger-distance axis (ties
+      broken randomly), falling back to the other axis if blocked, at
+      most once every 5 calls" -- already correctly ported this way
+      since M15, just newly annotated once a real live caller made the
+      distinction concrete.
+
+      A THIRD real finding, this one resolving a years-old-in-this-
+      project mystery: `MonsterState::flag` (`rec[6]` in the packed
+      record) was documented since M15 as a "collected/looted marker"
+      of unconfirmed meaning, and M25's own `VisibleObjects::MarkLooted`
+      had already traced it to really mean "this monster has EVER been
+      visible" (permanent once set, confirmed by grepping every real
+      write site). This milestone is what that finding was FOR:
+      `GameCanvas.paintVisibleObjects()`'s own `monsterAttacking` --
+      the flag gating "Cannot Camp!" and the "Creature attacks!"
+      message -- turns out to just be `rec[6] != 0` for whatever's in
+      any of the 13 `visibleObjects` slots. So despite its name, it
+      really means "a monster that has EVER been sighted is somewhere
+      in view right now", not "a monster is actively attacking" -- a
+      real, surprisingly permissive quirk of the original game, ported
+      exactly via the new `VisibleObjects::AnyMonsterAttacking`. Because
+      M25's own data model already tracked the "seen" bit correctly,
+      this needed no new data, just the derivation. `main.cpp`'s
+      `monsterAttacking` local is now real (previously a hardcoded
+      `false` at every `CampTick::TryEnterCamp` call site since M32) --
+      it's computed at render time alongside `hotbarContext`, with the
+      exact same one-tick lag (`paintVisibleObjects()`, like
+      `paintHotbar()`, only ever runs as part of `paintGameView()`, so
+      both freeze at their pre-camp value while actually camping).
+
+      Also fixed a real, confirmed-stale doc comment found while
+      scoping this milestone: `../src/Dungeon.java`'s own header claimed
+      `tickNearbyMonsters()` (and the whole class) was "presently
+      unreachable from GameCanvas/Player" because `ESGame.dungeons[]`
+      was still typed with an old unrenamed class -- true when that
+      note was written, but `Player.java`'s own header already recorded
+      that gap being closed by a later rename pass (`ESGame.dungeons[]`
+      is `Dungeon[]`, `currentDungeon()` returns `Dungeon`); `Dungeon.java`'s
+      note just never got updated to match. Corrected in place.
+
+      Verified via the new `monster_ai_tick_smoke.exe` against the real
+      37-level generated world: a real pre-placed monster spawn's
+      distance-1 attack driven repeatedly (exactly like the real tick
+      loop would) until a hit actually lands, checking the
+      outcome-independent invariant that matters (hp never increases
+      from a monster attack, same M32 philosophy) rather than forcing a
+      specific roll; a synthetic distance-2 "chaser" monster's
+      guaranteed first-call step attempt (fresh `moveCooldown == 0`)
+      confirmed to set `minimapDirty` and leave the registry
+      self-consistent (found exactly once, keyed at wherever it now
+      claims to be) whether or not the actual step landed; a
+      distance-4+ monster confirmed completely untouched; and
+      `AnyMonsterAttacking` checked directly against hand-built
+      `visibleObjects` slots (unpopulated, monster-with-unset-flag,
+      monster-with-set-flag, and a non-monster slot). All checks passed.
+      Full clean rebuild zero warnings; all 34 smoke tests pass. Also
+      drove a real character to a real landed hit against a real
+      spawned monster via a temporary diagnostic (HP 45 -> 39), then
+      confirmed the newly-real `monsterAttacking` correctly blocks a
+      camp attempt with the real "Cannot Camp!" popup -- the exact
+      branch that had been documented as unreachable since M32 --
+      before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M36 and beyond (not yet planned in detail):** every remaining
-      `showMessage()` call site beyond what M30/M32/M33/M34/M35 already
-      wired up stays unreachable until the options action (and
-      `openNpcDialogue`'s own dialogue UI) is itself wired into the
-      live tick loop -- likewise `Dungeon.tickNearbyMonsters()`'s own
-      monster-AI tick loop (`CombatResolution::MonsterTick` has been
-      ported and tested since M15, but nothing calls it from
-      `main.cpp` yet, so `monsterAttacking` stays permanently false and
-      monsters never actually act on their own). And finally `ESGame`'s
-      own screen-wiring loop (character creation, menus, dialogue,
-      shops -- the full `Shop.dialogue()` dispatcher traced while
-      scoping M28 is still unported, only its `npcstrings.dat` text
-      itself loads so far, M8) tying it all together in place of M20's
-      fixed stand-in character. Each gets its own milestone once the
-      shape of "how much fits in one slice" is clearer -- following
-      `shadowkey-decomp`'s pattern of not over-planning milestones far
-      in advance of actually reaching them.
+- [ ] **M37 and beyond (not yet planned in detail):** every remaining
+      `showMessage()` call site beyond what M30/M32-M36 already wired up
+      stays unreachable until the options action (and `openNpcDialogue`'s
+      own dialogue UI) is itself wired into the live tick loop. And
+      finally `ESGame`'s own screen-wiring loop (character creation,
+      menus, dialogue, shops -- the full `Shop.dialogue()` dispatcher
+      traced while scoping M28 is still unported, only its
+      `npcstrings.dat` text itself loads so far, M8) tying it all
+      together in place of M20's fixed stand-in character. Each gets
+      its own milestone once the shape of "how much fits in one slice"
+      is clearer -- following `shadowkey-decomp`'s pattern of not
+      over-planning milestones far in advance of actually reaching
+      them.

@@ -300,3 +300,7 @@ target_link_libraries(interact_tick_smoke PRIVATE dawnstar_interact)
 # M35 milestone smoke test -- see src/tests/m35_camp_tick_smoke.cpp.
 add_executable(camp_tick_smoke src/tests/m35_camp_tick_smoke.cpp)
 target_link_libraries(camp_tick_smoke PRIVATE dawnstar_camp)
+
+# M36 milestone smoke test -- see src/tests/m36_monster_ai_tick_smoke.cpp.
+add_executable(monster_ai_tick_smoke src/tests/m36_monster_ai_tick_smoke.cpp)
+target_link_libraries(monster_ai_tick_smoke PRIVATE dawnstar_combat dawnstar_player)

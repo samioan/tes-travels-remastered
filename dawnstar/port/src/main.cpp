@@ -146,6 +146,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // frozen at its pre-camp value for the same reason there, not
     // because this port specifically special-cased it.
     int hotbarContext = 0;
+    // GameCanvas.monsterAttacking -- same "written only during
+    // paintGameView()'s own paintVisibleObjects(), read one tick later
+    // by the campRequested dispatch" lag as hotbarContext above, so it's
+    // a persistent local for the same reason. M36 finally makes this
+    // real (VisibleObjects::AnyMonsterAttacking) -- every prior
+    // milestone's CampTick::TryEnterCamp call passed a hardcoded false.
+    bool monsterAttacking = false;
     // GameCanvas.campStartTime -- a GameCanvas field, not one of
     // Player's own, same reasoning as lastAttackTimeMs below.
     int64_t campStartTimeMs = 0;
@@ -287,6 +294,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                   messagePopup, suppressMoveThisTick);
 
                 if (runTick) {
+                    // GameCanvas.run()'s own `tickNearbyMonsters()` call
+                    // -- the FIRST thing inside `if (runTick)` in the
+                    // original, run every tick the player isn't actually
+                    // camping: every monster on the player's own level
+                    // within Manhattan distance 1-3 either attacks
+                    // (distance 1) or takes a step toward the player
+                    // (distance 2-3), at most once every 5 calls each --
+                    // M36.
+                    dawnstar::CombatTick::TickNearbyMonsters(player, levels, world, charData, items, monsters, nowMs,
+                                                              globalRng, messagePopup);
+
                     // GameCanvas.paintHotbar()'s own `hotbarContext`
                     // field, as it stood after the LAST tick's
                     // dispatch/refresh -- exactly what keyPressed()
@@ -327,12 +345,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     bool moveAttempted = false;
                     if (campPending) {
                         // GameCanvas.dispatchTickActions()'s own
-                        // campRequested branch: `monsterAttacking` is
-                        // always passed false here -- see camp/
-                        // camp_tick.h's own doc comment on TryEnterCamp
-                        // for why.
+                        // campRequested branch -- `monsterAttacking`
+                        // (the persistent local above) reads whatever
+                        // the LAST render step's paintVisibleObjects()
+                        // equivalent computed, same one-tick lag as
+                        // hotbarContext -- M36 makes this a real value
+                        // instead of a hardcoded false.
                         dawnstar::CampTick::TryEnterCamp(player, globalRng, nowMs, campStartTimeMs, messagePopup,
-                                                          false);
+                                                          monsterAttacking);
                         campPending = false;
                     } else if (interactPending) {
                         dawnstar::InteractTick::ProcessInteract(player, levels, world, items, messagePopup, nowMs);
@@ -484,6 +504,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             dawnstar::FrameRenderer::Render(backbuffer, textures, view, player.tileX, player.tileY, player.facing,
                                              levels[static_cast<size_t>(player.currentLevel - 1)].number);
             dawnstar::VisibleObjectRenderer::Render(backbuffer, visibleObjectTextures, player.visibleObjects);
+            // GameCanvas.paintVisibleObjects()'s own `monsterAttacking`
+            // recomputation -- M36. Only ever updated here (skipped
+            // during the camping-screen `return` above), matching the
+            // original's own paintHotbar-style one-tick lag (see this
+            // variable's own doc comment above).
+            monsterAttacking = dawnstar::VisibleObjects::AnyMonsterAttacking(player);
             // paintGameView()'s own "if (npcInSight >= 0)" gate, drawn
             // right after paintVisibleObjects and before
             // paintStatusBars -- M28.

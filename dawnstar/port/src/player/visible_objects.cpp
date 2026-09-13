@@ -213,4 +213,11 @@ void VisibleObjects::Tick(PlayerState& p, const std::vector<GeneratedLevel>& lev
     }
 }
 
+bool VisibleObjects::AnyMonsterAttacking(const PlayerState& p) {
+    for (const VisibleSlot& slot : p.visibleObjects) {
+        if (slot.kind == VisibleSlotKind::Monster && slot.monsterRecord[6] != 0) return true;
+    }
+    return false;
+}
+
 }  // namespace dawnstar

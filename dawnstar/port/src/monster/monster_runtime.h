@@ -84,8 +84,15 @@ public:
     // monster-occupied tile-bit marker (bit 2) on
     // `levels[m.dungeonLevel-1]`. Uses Dungeon.isWalkable's rule
     // (DungeonView::IsWalkable), NOT Player.isWalkable's -- they differ
-    // (see world/dungeon_view.h). SIMPLIFIED: doesn't call store() (no
-    // live registry -- see the class comment above).
+    // (see world/dungeon_view.h). SIMPLIFIED: doesn't call store() itself
+    // (no live registry when this was first ported -- see the class
+    // comment above); since M36, combat/combat_tick.h's own
+    // TickNearbyMonsters is the one live caller of Chase (below), and IT
+    // re-keys the moved monster's WorldRegistry entry after a successful
+    // step (position IS the registry's key, unlike Java's Hashtable,
+    // which keys the same way but re-puts under a plain string -- either
+    // way, a moved monster's OLD key must be dropped and a new one
+    // inserted, not updated in place).
     static bool Move(MonsterState& m, int direction, std::vector<GeneratedLevel>& levels);
     // True if (x,y) is one of this level's 4 fixed stairway tiles AND
     // this level actually has a stairway in that direction (monsters
@@ -95,7 +102,10 @@ public:
     // Monster.chase(targetX,targetY): moves once every 5 ticks, toward
     // (targetX,targetY), picking the larger-distance axis first (ties
     // broken randomly via `globalRng`), falling back to the other axis
-    // if blocked. Returns whether it actually stepped this call.
+    // if blocked. Returns whether it actually stepped this call. Despite
+    // the name, this is Monster.java's ONLY movement-AI method reachable
+    // from any distance -- it's really "take one step toward the
+    // target, at most once every 5 calls", not a pathfinding chase.
     static bool Chase(MonsterState& m, int targetX, int targetY, std::vector<GeneratedLevel>& levels,
                        JavaRandom& globalRng);
 

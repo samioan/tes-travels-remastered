@@ -1,6 +1,7 @@
 #include "combat/combat_tick.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 #include "combat/combat_resolution.h"
 #include "monster/monster_runtime.h"
@@ -128,6 +129,55 @@ void CombatTick::CycleSpell(PlayerState& player, const SpellDatabase& spells, Me
         player.selectedSpellId = static_cast<int8_t>(spellId);
         MessagePopup::Show(messagePopup, MessagePopup::WrapToTwoLines(spells.ById(spellId).name), -1, nowMs);
     }
+}
+
+void CombatTick::TickNearbyMonsters(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
+                                     const CharacterData& charData, const ItemDatabase& items,
+                                     const MonsterDatabase& monsterDb, int64_t nowMs, JavaRandom& globalRng,
+                                     MessagePopupState& messagePopup) {
+    auto& monsterMap = world.monsters[static_cast<size_t>(player.currentLevel - 1)];
+
+    // Snapshot the in-range keys first: a successful Chase step below
+    // re-keys its own map entry (erase+insert), which would be undefined
+    // behavior if done while range-iterating the same live map (the
+    // exact bug M34's own test caught and fixed for a different map).
+    std::vector<int> keysInRange;
+    for (const auto& [key, record] : monsterMap) {
+        int x = 0, y = 0;
+        UnpackPosKey(key, &x, &y);
+        int dist = std::abs(x - player.tileX) + std::abs(y - player.tileY);
+        if (dist >= 1 && dist <= 3) keysInRange.push_back(key);
+    }
+
+    bool moved = false;
+    bool attacked = false;
+    for (int key : keysInRange) {
+        auto it = monsterMap.find(key);
+        if (it == monsterMap.end()) continue;  // defensive only: nothing above ever removes an entry this loop hasn't reached yet.
+
+        MonsterState m = MonsterRuntime::FromBytes(it->second);
+        int dist = std::abs(static_cast<int>(m.x) - player.tileX) + std::abs(static_cast<int>(m.y) - player.tileY);
+        if (dist == 1) {
+            if (CombatResolution::MonsterTick(m, player, charData, items, monsterDb, nowMs, globalRng)) {
+                attacked = true;
+            }
+            it->second = MonsterRuntime::ToBytes(m);
+        } else {
+            int oldX = m.x, oldY = m.y;
+            if (MonsterRuntime::Chase(m, player.tileX, player.tileY, levels, globalRng)) {
+                moved = true;
+            }
+            if (m.x != oldX || m.y != oldY) {
+                monsterMap.erase(key);
+                monsterMap[PackPosKey(m.x, m.y)] = MonsterRuntime::ToBytes(m);
+            } else {
+                it->second = MonsterRuntime::ToBytes(m);
+            }
+        }
+    }
+
+    if (moved) player.minimapDirty = true;
+    if (attacked) MessagePopup::Show(messagePopup, {"Creature", "attacks!"}, 2, nowMs);
 }
 
 }  // namespace dawnstar
