@@ -27,6 +27,13 @@ public:
     // Presents the backbuffer, nearest-neighbor scaled to the client area.
     void Present(const Backbuffer& backbuffer);
 
+    // Requests the window close itself (posts WM_CLOSE, the same real
+    // message the OS sends for the title bar's own close button) --
+    // M38's own real quit-confirmation flow needs to close the window
+    // programmatically from inside the idle callback, not just react to
+    // the user clicking the OS close button.
+    void Close();
+
     bool ShouldClose() const { return shouldClose_; }
 
     // Opaque pimpl -- public only so window.cpp's free-function WndProc

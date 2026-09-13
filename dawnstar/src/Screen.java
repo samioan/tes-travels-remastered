@@ -29,10 +29,20 @@ public class Screen {
    static final Font DEFAULT_TEXT_FONT = Font.getFont(0, 1, 8);
    static final Font LARGE_TEXT_FONT = Font.getFont(0, 1, 0);
    int mode;
-   // Set from the constructor's 3rd arg; every call site so far passes a
-   // distinct-looking numeric id (e.g. 410, 27, 304) whose purpose isn't
-   // confirmed -- possibly a debug/support reference code, not consumed
-   // by any rendering or input logic traced so far.
+   // Set from the constructor's 3rd arg (or later via setSecondaryParam
+   // below); every call site passes a distinct-looking numeric id (e.g.
+   // 410, 27, 304). CONFIRMED load-bearing, not a debug/support code:
+   // it's this Screen's own real dispatch IDENTITY -- ESGame.
+   // commandAction1() (by far the largest method in ../src/ESGame.java)
+   // and handleNPCChoices() branch on exactly this value to know which
+   // real screen/prompt-list is currently active and what its own
+   // Select command should do. `Screen` itself never reads or writes it
+   // beyond storage -- it's ESGame's own dispatch key, analogous to
+   // `mode` being Screen's own PAINT dispatch key -- see ESGame.java's
+   // own doc comment on commandAction1() for the real decompiler/rename
+   // bug this port found and fixed (those two methods used to read
+   // `.mode` here instead, which can only ever be 3/4/5/6, never one of
+   // the dozens of distinct values they actually compare against).
    int secondaryParam;
    // Set to 0 in the constructor. Confirmed via ESGame: a per-instance
    // context value the caller stashes and reads back from its own

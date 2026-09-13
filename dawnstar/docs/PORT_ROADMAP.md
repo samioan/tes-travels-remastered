@@ -2197,20 +2197,124 @@ milestone rather than just read-through.
       item list, correctly-tracking highlight box, and both softkey
       labels ("Back"/"Select") -- before the diagnostic was removed.
 
+- [x] **M38 -- a real decompiler bug fix, then the real main menu +
+      Help/Credits/quit-confirmation navigation** (this session). While
+      scoping how `ESGame`'s own screen-wiring loop (M37's own "Milestones
+      next" stub) might actually get built, found and fixed a real,
+      significant decompiler/rename bug in `../src/ESGame.java` itself:
+      `commandAction1()` (by far the largest method in the whole
+      decompiled source, ~636 lines) and `handleNPCChoices()` dispatch
+      EVERY real screen/command action by comparing `uic.mode` against
+      dozens of distinct values (2, 7, 8-17, 20, 22, 27-41, 50-69,
+      101-102, 200-206, 305, 353-360, 399, 410, 499, ...) -- but
+      `Screen.mode` can only ever be 3/4/5/6 (`Screen.java`'s own
+      `paint()` switch, confirmed against every real `new Screen(...)`
+      call site in the file), never any of those. Every one of those
+      "impossible for `mode`" values matches EXACTLY the `secondaryParam`
+      argument passed (or later set via `setSecondaryParam`) at that
+      Screen's own real construction site instead -- and `secondaryParam`
+      was otherwise read NOWHERE ELSE in the entire codebase before this
+      fix (`Screen.java`'s own field doc comment had called it a
+      possible "debug/support reference code... not consumed by any
+      rendering or input logic traced so far" -- it IS consumed, by
+      these two methods, just mislabeled). Fixed by renaming all 50 real
+      dispatch-comparison reads from `.mode` to `.secondaryParam` in both
+      methods (confirmed nothing else in the file used `.mode` at all,
+      so nothing legitimate was touched); re-verified with a full
+      standalone `dawnstar/src/` compile (zero errors, same 6
+      pre-existing warnings as every prior run, per `src/README.md`'s
+      own compile-check procedure). `Screen.java`'s own `secondaryParam`
+      field doc comment updated to match -- see both files' own doc
+      comments for the full writeup. This is the same class of finding
+      as M4's class/race swap and M12's operator-precedence bug: a real
+      bug in the decompiled source itself, not something to silently
+      route around while porting.
+
+      This finding was essential, not incidental: building a menu
+      dispatcher against the WRONG (`.mode`) semantics would have been
+      completely broken, since `mainMenuUI`/`OptionsUI`/`helpUI` all
+      share `mode == 3` -- selecting anything on any of the three would
+      land in the exact same (wrong) branch. With the real semantics
+      confirmed, `ui/menu_flow.h`/`.cpp` (`MenuFlow`, a new small,
+      purpose-built navigation flow over M37's `Screen` -- NOT a port of
+      `commandAction1`'s own giant machinery, which stays future work)
+      reproduces the real main menu (`mainMenuUI`, secondaryParam 2),
+      its own real Help topic list (`helpUI`, secondaryParam 203, built
+      from M8's already-grouped `HelpText` titles/bodies), the shared
+      "GenericInfoUI" info-message screen reused for both a selected
+      Help topic's own body (secondaryParam 206, always returns to the
+      topic list) and Credits (secondaryParam 204, always returns to
+      Main Menu, using the real hardcoded credits string transcribed
+      directly from `getCreditsString()` -- no data file backs it in the
+      original either), and the "Are you sure?" quit confirmation
+      (`newConfirmQuitUI`, secondaryParam 202). Wired into `main.cpp`:
+      the app now shows this real menu FIRST (a new `inMenu` flag),
+      replacing M20's own "always start a fixed character immediately"
+      simplification -- "New Game" now constructs the character
+      (still M20's own fixed class-0 stand-in; the original's own real
+      multi-screen class-selection/name-entry flow, including a raw MIDP
+      `TextField` form Screen itself never models, stays unported) only
+      once actually selected. New `Window::Close()` (posts a real
+      `WM_CLOSE`, the same message the OS's own close button sends) lets
+      the quit confirmation actually close the window from inside the
+      idle callback.
+
+      A real, faithfully-preserved bug caught while transcribing
+      `newConfirmQuitUI`'s own dispatch: it explicitly removes its OWN
+      Cancel command (so there's no way to back out of "Are you sure?"
+      at all), and its commandAction1 branch calls `exit()`
+      UNCONDITIONALLY on Select -- never actually reading
+      `selectedIndexOrMinusOne()`. So in the original game, picking
+      "No" on the quit confirmation ALSO quits. Reproduced exactly (not
+      "fixed" into checking which item was selected) and specifically
+      tested with "No" actually selected, not just the untested default
+      "Yes".
+
+      Also a real, confirmed quirk `MenuFlow` had to model correctly
+      rather than assume away: the original's own `Screen` instances
+      are constructed ONCE and reused for every visit, never recreated
+      -- so `helpUI`'s own `selectedIndex`/scroll state genuinely
+      persists across a Help visit, a Cancel back to the main menu, and
+      a later re-visit, matching real MIDP `Displayable` semantics. This
+      milestone's own test caught its own wrong assumption here (that
+      returning to the main menu resets its selection to index 0) and
+      had to switch to forcing the selection back to a known index via
+      repeated `OnUp()` calls first, rather than assuming a fresh state.
+
+      Verified via the new `menu_flow_smoke.exe` against the real
+      `HelpText` data (M8): the full navigation graph -- New Game (->
+      `MenuFlowAction::StartNewGame`), Continue Game (a real, deferred
+      no-op), Help -> a real topic -> its own real body -> back to the
+      topic list (not Main Menu) -> Cancel back to Main Menu, Credits ->
+      its own real body -> Main Menu (not the topic list, confirming the
+      shared info screen's own two different hardcoded return targets
+      are tracked correctly), and Exit -> the quit confirmation -> EITHER
+      "Yes" or "No" actually exiting. All checks passed (after this
+      milestone's own test-assumption fix above). Full clean rebuild
+      zero warnings; all 36 smoke tests pass; the whole `dawnstar/src/`
+      tree re-verified to still compile standalone with zero errors
+      after the `secondaryParam` fix. Also rendered five real frames via
+      a temporary diagnostic (the real main menu, the real Help topic
+      list, a real topic's own body, the real credits text, and the real
+      quit confirmation showing only a "Select" softkey with no Back/
+      Cancel at all) confirming all five are legible and correct --
+      before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M38 and beyond (not yet planned in detail):** `ESGame`'s own
-      screen-wiring loop (character creation, the main/options menus,
-      NPC dialogue, shops -- the full `Shop.dialogue()` dispatcher
+- [ ] **M39 and beyond (not yet planned in detail):** `ESGame`'s own
+      remaining screen-wiring (character creation's real class-selection/
+      name-entry flow -- including a raw MIDP `TextField` form Screen
+      itself never models; the in-game options menu and its own 10
+      actions (stats/inventory/skills/spells/save/load/reveal-traitor/
+      quit); NPC dialogue; shops -- the full `Shop.dialogue()` dispatcher
       traced while scoping M28 is still unported, only its
-      `npcstrings.dat` text itself loads so far, M8) that CONSTRUCTS
-      real `Screen`s (M37) and dispatches their Select/Cancel/Back
-      commands into real game actions, in place of M20's fixed stand-in
-      character -- `ESGame.commandAction()`, by far the largest switch
-      in the whole decompiled source. Once that lands, the options
-      action and every remaining `showMessage()` call site beyond what
-      M30/M32-M36 already wired up stop being permanently unreachable.
-      Gets its own milestone (likely several) once the shape of "how
-      much fits in one slice" is clearer -- following
+      `npcstrings.dat` text itself loads so far, M8) that CONSTRUCTS the
+      rest of `ESGame`'s real `Screen`s (M37) and dispatches their
+      commands via the now-corrected `secondaryParam` semantics (M38).
+      Once that lands, every remaining `showMessage()` call site beyond
+      what M30/M32-M36/M38 already wired up stops being permanently
+      unreachable. Gets its own milestone (likely several) once the
+      shape of "how much fits in one slice" is clearer -- following
       `shadowkey-decomp`'s pattern of not over-planning milestones far
       in advance of actually reaching them.

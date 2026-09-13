@@ -62,7 +62,9 @@ target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 # (Screen.java's generic list/message/prompt-list UI primitive) needs
 # nothing beyond what this library already bundles (Backbuffer/BitmapFont/
 # MessagePopup::WordWrap), so it's folded in here too rather than
-# standing up a whole new library for one self-contained class.
+# standing up a whole new library for one self-contained class. M38's
+# src/ui/menu_flow.cpp (the real main-menu/help/credits/quit-confirm
+# navigation flow built on top of Screen) needs nothing further either.
 add_library(dawnstar_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -72,6 +74,7 @@ add_library(dawnstar_render STATIC
   src/render/minimap_renderer.cpp
   src/render/visible_object_renderer.cpp
   src/ui/screen.cpp
+  src/ui/menu_flow.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon)
@@ -313,3 +316,7 @@ target_link_libraries(monster_ai_tick_smoke PRIVATE dawnstar_combat dawnstar_pla
 # M37 milestone smoke test -- see src/tests/m37_screen_smoke.cpp.
 add_executable(screen_smoke src/tests/m37_screen_smoke.cpp)
 target_link_libraries(screen_smoke PRIVATE dawnstar_render)
+
+# M38 milestone smoke test -- see src/tests/m38_menu_flow_smoke.cpp.
+add_executable(menu_flow_smoke src/tests/m38_menu_flow_smoke.cpp)
+target_link_libraries(menu_flow_smoke PRIVATE dawnstar_render)

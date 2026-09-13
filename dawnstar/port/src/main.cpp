@@ -10,12 +10,14 @@
 
 #include <array>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "assets/character_data.h"
 #include "assets/dat_archive.h"
 #include "assets/dungeon_geometry.h"
+#include "assets/help_text.h"
 #include "assets/img_archive.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
@@ -39,6 +41,7 @@
 #include "render/message_popup.h"
 #include "render/minimap_renderer.h"
 #include "render/visible_object_renderer.h"
+#include "ui/menu_flow.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
 #include "world/dungeon_view.h"
@@ -188,6 +191,21 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool spellHitFlash = false;
     bool selfSpellFlash = false;
 
+    // M38: whether the real main-menu/help/credits/quit-confirm flow
+    // (see ui/menu_flow.h) is currently showing instead of the game
+    // itself -- ESGame's own real startup sequence shows its main menu
+    // first, not a fixed character directly (M20's own original
+    // simplification). Up/Down/Select/Cancel are each genuinely discrete
+    // keypress events in the original (Screen.handleKey()'s own
+    // per-keydown dispatch, not a per-tick poll), so all 4 are
+    // edge-detected at full frame rate the same way the 'M' zoom key
+    // above already is, rather than gated behind clock.ConsumeTick().
+    bool inMenu = true;
+    bool menuUpKeyWasDown = false;
+    bool menuDownKeyWasDown = false;
+    bool menuSelectKeyWasDown = false;
+    bool menuCancelKeyWasDown = false;
+
     // Same default-relative-path convention every console smoke test
     // uses (see e.g. tests/m10_frame_render_smoke.cpp) -- this exe also
     // lands in build/, two levels above dawnstar/extracted/.
@@ -200,6 +218,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::SpellDatabase spells = dawnstar::SpellDatabase::Load(archive);
         dawnstar::CharacterData charData = dawnstar::CharacterData::Load(archive);
         dawnstar::DungeonGeometry geometry = dawnstar::DungeonGeometry::Load(archive);
+        dawnstar::HelpText helpText = dawnstar::HelpText::Load(archive);
         dawnstar::ImgArchive imageArchive(root + "/imgfiles.lmp");
         dawnstar::FrameTextures textures = dawnstar::FrameTextures::Load(imageArchive);
         dawnstar::MonsterImageNames monsterImageNames = dawnstar::MonsterImageNames::Load(archive);
@@ -219,14 +238,57 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // meant to be reproducible either -- see player/player_creation.h's
         // doc comment on CreateCharacter's `globalRng` parameter.
         dawnstar::JavaRandom globalRng(static_cast<int64_t>(GetTickCount64()));
-        // No character-creation UI exists yet (that's ESGame's own
-        // screen-wiring loop, not yet ported) -- always start a fixed
-        // class-0 character, same stand-in class index the M11 test
-        // exercises first.
-        dawnstar::PlayerState player =
-            dawnstar::PlayerCreation::CreateCharacter(0, "Traveler", charData, items, globalRng);
+
+        // M38: the real main menu is now shown first (see `inMenu`
+        // above) -- the character itself is only constructed once "New
+        // Game" is actually selected, not unconditionally at startup
+        // like M20's own original simplification. Still no real
+        // character-creation UI exists (that's `ESGame`'s own
+        // class-selection/name-entry flow, still unported -- see
+        // ui/menu_flow.h's own class comment): "New Game" starts the
+        // same fixed class-0 stand-in character M20 always did, just
+        // now reached through a real menu selection instead of
+        // automatically.
+        dawnstar::MenuFlow menuFlow(helpText);
+        std::optional<dawnstar::PlayerState> playerSlot;
 
         window.RunMessageLoop([&] {
+            if (inMenu) {
+                bool upDown = KeyPressed(VK_UP);
+                if (upDown && !menuUpKeyWasDown) menuFlow.OnUp();
+                menuUpKeyWasDown = upDown;
+
+                bool downDown = KeyPressed(VK_DOWN);
+                if (downDown && !menuDownKeyWasDown) menuFlow.OnDown();
+                menuDownKeyWasDown = downDown;
+
+                bool cancelDown = KeyPressed(VK_ESCAPE);
+                if (cancelDown && !menuCancelKeyWasDown) menuFlow.OnCancel();
+                menuCancelKeyWasDown = cancelDown;
+
+                bool selectDown = KeyPressed(VK_RETURN);
+                if (selectDown && !menuSelectKeyWasDown) {
+                    switch (menuFlow.OnSelect()) {
+                        case dawnstar::MenuFlowAction::StartNewGame:
+                            playerSlot.emplace(
+                                dawnstar::PlayerCreation::CreateCharacter(0, "Traveler", charData, items, globalRng));
+                            inMenu = false;
+                            break;
+                        case dawnstar::MenuFlowAction::Exit:
+                            window.Close();
+                            break;
+                        case dawnstar::MenuFlowAction::None:
+                            break;
+                    }
+                }
+                menuSelectKeyWasDown = selectDown;
+
+                menuFlow.Render(backbuffer);
+                window.Present(backbuffer);
+                return;
+            }
+
+            dawnstar::PlayerState& player = *playerSlot;
             // Sampled every loop iteration rather than gated behind
             // clock.ConsumeTick(): the original's keyPressed() event
             // fires immediately on a physical key-down, independent of

@@ -711,6 +711,29 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
       }
    }
 
+   // Real decompiler/rename bug found and fixed while scoping dawnstar's
+   // PC port M38 (see ../docs/PORT_ROADMAP.md): every one of this
+   // method's (and handleNPCChoices' own single) `uic.mode == <N>`-style
+   // dispatch checks used to read `.mode` -- but Screen.mode can only
+   // ever be 3/4/5/6 (Screen.java's own paint() switch, and every real
+   // `new Screen(this, mode, secondaryParam)` call site in this file
+   // only ever passes one of those 4 values as `mode`), never any of the
+   // dozens of distinct values actually compared against here (2, 7,
+   // 8-17, 20, 22, 27-29, 31-41, 50-69, 101-102, 200-206, 305, 353-360,
+   // 399, 410, 499, ...). Every one of those "impossible for `mode`"
+   // values matches EXACTLY the `secondaryParam` argument passed (or
+   // later set via `setSecondaryParam`) at that Screen's own real
+   // construction site instead -- confirmed by cross-referencing every
+   // `new Screen(this, ...)` call in this file, and by `secondaryParam`
+   // otherwise being read NOWHERE ELSE in this entire codebase (Screen.
+   // java's own field doc comment, written before this was traced,
+   // called it a possible "debug/support reference code... not consumed
+   // by any rendering or input logic traced so far" -- it IS consumed,
+   // by this method, just mislabeled). Renamed every real dispatch
+   // comparison in this method (and handleNPCChoices' own `var1.mode -
+   // 9`) from `.mode` to `.secondaryParam` to match; nothing here was
+   // ever legitimately testing paint-mode 3/4/5/6, so no comparison
+   // value needed to change, only the field each one reads.
    private void commandAction1(Command var1, Displayable var2) throws Exception {
       debugCode = 18;
       if (uic != null) {
@@ -719,9 +742,9 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
             return;
          }
 
-         if (uic.mode == 410) {
+         if (uic.secondaryParam == 410) {
             this.exit();
-         } else if (uic.mode == 2) {
+         } else if (uic.secondaryParam == 2) {
             if (var1 == selectCommand) {
                int var3 = uic.selectedIndexOrMinusOne();
                switch (var3) {
@@ -754,7 +777,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                      this.setCurrentDisplay(this.confirmQuitUI);
                }
             }
-         } else if (uic.mode == 3) {
+         } else if (uic.secondaryParam == 3) {
             if (var1 == selectCommand) {
                int var9 = uic.selectedIndexOrMinusOne();
                String var42 = uic.selectedItemText();
@@ -765,7 +788,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                this.characterMainUI.setTextColumn(1, var42);
                this.setCurrentDisplay(this.characterMainUI);
             }
-         } else if (uic.mode == 4) {
+         } else if (uic.secondaryParam == 4) {
             if (var1 == selectCommand) {
                int var10 = uic.selectedIndexOrMinusOne();
                if (var10 == 0) {
@@ -779,39 +802,39 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   this.setCurrentDisplay(this.GenericInfoUI);
                }
             }
-         } else if (uic.mode == 5) {
+         } else if (uic.secondaryParam == 5) {
             if (var1 == okCommand) {
                this.setCurrentDisplay(this.characterMainUI);
             }
-         } else if (uic.mode == 6) {
+         } else if (uic.secondaryParam == 6) {
             if (var1 == okCommand) {
                this.setCurrentDisplay(this.charNameTextForm);
             }
-         } else if (uic.mode == 7) {
+         } else if (uic.secondaryParam == 7) {
             System.gc();
             printMemory("Going into game");
             this.GenericInfoUI.setSecondaryParam(101);
             this.GenericInfoUI.setupMessage("Introduction", Shop.dialogue[9][3]);
             this.setCurrentDisplay(this.GenericInfoUI);
-         } else if (uic.mode == 101) {
+         } else if (uic.secondaryParam == 101) {
             this.GenericInfoUI.setSecondaryParam(102);
             this.GenericInfoUI.setupMessage("Introduction", Shop.dialogue[9][4] + Shop.dialogue[9][5]);
             this.setCurrentDisplay(this.GenericInfoUI);
-         } else if (uic.mode == 102) {
+         } else if (uic.secondaryParam == 102) {
             if (var1 == okCommand) {
                this.gameCanvas.player = this.character;
                this.character.resetState(false);
                this.gameCanvas.startGameThread();
                this.setCurrentDisplay(this.gameCanvas);
             }
-         } else if (uic.mode != 8 && uic.mode != 360) {
-            if (uic.mode >= 9 && uic.mode <= 17) {
+         } else if (uic.secondaryParam != 8 && uic.secondaryParam != 360) {
+            if (uic.secondaryParam >= 9 && uic.secondaryParam <= 17) {
                if (var1 == cancelCommand) {
                   this.setCurrentDisplay(uic.backTarget);
                } else {
                   this.handleNPCChoices(uic);
                }
-            } else if (uic.mode == 20) {
+            } else if (uic.secondaryParam == 20) {
                if (var1 == selectCommand) {
                   int var11 = uic.contextIndex;
                   int var44 = uic.selectedIndexOrMinusOne();
@@ -823,7 +846,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   this.setAidPointsForNPC(var12);
                   this.setCurrentDisplay(this.NPCChoicesUI[var12]);
                }
-            } else if (uic.mode == 52) {
+            } else if (uic.secondaryParam == 52) {
                if (var1 == selectCommand) {
                   int var13 = uic.contextIndex;
                   int var45 = uic.selectedIndexOrMinusOne();
@@ -848,7 +871,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   this.setAidPointsForNPC(var14);
                   this.setCurrentDisplay(this.NPCChoicesUI[var14]);
                }
-            } else if (uic.mode == 54) {
+            } else if (uic.secondaryParam == 54) {
                if (var1 == selectCommand) {
                   int var15 = uic.selectedIndexOrMinusOne();
                   if (var15 == 0) {
@@ -859,7 +882,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                      this.setCurrentDisplay(this.GenericInfoUI);
                   }
                }
-            } else if (uic.mode == 50) {
+            } else if (uic.secondaryParam == 50) {
                if (var1 == selectCommand) {
                   int var16 = uic.contextIndex;
                   int var47 = uic.selectedIndexOrMinusOne();
@@ -873,7 +896,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   this.setAidPointsForNPC(var17);
                   this.setCurrentDisplay(this.NPCChoicesUI[var17]);
                }
-            } else if (uic.mode == 27) {
+            } else if (uic.secondaryParam == 27) {
                if (var1 == selectCommand) {
                   System.gc();
                   this.currentQWhat = uic.selectedIndexOrMinusOne();
@@ -898,7 +921,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   this.setAidPointsForNPC(var19);
                   this.setCurrentDisplay(this.NPCChoicesUI[var19]);
                }
-            } else if (uic.mode == 28) {
+            } else if (uic.secondaryParam == 28) {
                if (var1 == selectCommand) {
                   this.currentQWhom = uic.selectedIndexOrMinusOne();
                   int var20 = uic.contextIndex;
@@ -946,7 +969,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   this.setAidPointsForNPC(var21);
                   this.setCurrentDisplay(this.NPCChoicesUI[var21]);
                }
-            } else if (uic.mode == 22) {
+            } else if (uic.secondaryParam == 22) {
                if (var1 == selectCommand) {
                   int var22 = uic.contextIndex;
                   int var52 = uic.selectedIndexOrMinusOne();
@@ -959,7 +982,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   this.setAidPointsForNPC(var23);
                   this.setCurrentDisplay(this.NPCChoicesUI[var23]);
                }
-            } else if (uic.mode == 29) {
+            } else if (uic.secondaryParam == 29) {
                if (var1 == selectCommand) {
                   int var24 = uic.selectedIndexOrMinusOne();
                   if (var24 == 0) {
@@ -996,20 +1019,20 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                      this.setCurrentDisplay(this.gameCanvas);
                   }
                }
-            } else if (uic.mode != 23 && uic.mode != 21 && uic.mode != 24 && uic.mode != 25 && uic.mode != 26 && uic.mode != 353 && uic.mode != 355) {
-               if (uic.mode == 53) {
+            } else if (uic.secondaryParam != 23 && uic.secondaryParam != 21 && uic.secondaryParam != 24 && uic.secondaryParam != 25 && uic.secondaryParam != 26 && uic.secondaryParam != 353 && uic.secondaryParam != 355) {
+               if (uic.secondaryParam == 53) {
                   if (var1 == okCommand) {
                      this.NPCSellWhatUI = this.newSellWhat(uic.contextIndex);
                      this.NPCSellWhatUI.setSelectedIndex(this.currentItemIndex);
                      this.setCurrentDisplay(this.NPCSellWhatUI);
                   }
-               } else if (uic.mode == 51) {
+               } else if (uic.secondaryParam == 51) {
                   if (var1 == okCommand) {
                      this.NPCBuyWhatUI = this.newBuyWhat(uic.contextIndex);
                      this.NPCBuyWhatUI.setSelectedIndex(this.currentItemIndex);
                      this.setCurrentDisplay(this.NPCBuyWhatUI);
                   }
-               } else if (uic.mode == 69) {
+               } else if (uic.secondaryParam == 69) {
                   if (var1 == selectCommand) {
                      int var26 = uic.selectedIndexOrMinusOne();
                      if (var26 == 0) {
@@ -1020,12 +1043,12 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                         this.setCurrentDisplay(uic.backTarget);
                      }
                   }
-               } else if (uic.mode == 41) {
+               } else if (uic.secondaryParam == 41) {
                   if (var1 == okCommand) {
                      this.character.suppressStrafeAdjust = false;
                      this.setCurrentDisplay(this.gameCanvas);
                   }
-               } else if (uic.mode == 31) {
+               } else if (uic.secondaryParam == 31) {
                   if (var1 == selectCommand) {
                      int var27 = uic.selectedIndexOrMinusOne();
                      switch (var27) {
@@ -1084,11 +1107,11 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   } else if (var1 == backCommand) {
                      this.setCurrentDisplay(this.gameCanvas);
                   }
-               } else if (uic.mode == 32) {
+               } else if (uic.secondaryParam == 32) {
                   if (var1 == okCommand) {
                      this.setCurrentDisplay(this.OptionsUI);
                   }
-               } else if (uic.mode == 33) {
+               } else if (uic.secondaryParam == 33) {
                   try {
                      debugCode = 1;
                      if (var1 == selectCommand) {
@@ -1112,7 +1135,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                      var55.setCommandListener(this);
                      Display.getDisplay(this).setCurrent(var55);
                   }
-               } else if (uic.mode == 34) {
+               } else if (uic.secondaryParam == 34) {
                   if (var1 == selectCommand) {
                      int var29 = uic.selectedIndexOrMinusOne();
                      if (var29 == 0) {
@@ -1152,17 +1175,17 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
 
                      this.currentItemIndex = -1;
                   }
-               } else if (uic.mode == 60) {
+               } else if (uic.secondaryParam == 60) {
                   if (var1 == selectCommand) {
                      int var31 = uic.selectedIndexOrMinusOne();
                      this.newClueLogUI(var31);
                      this.setCurrentDisplay(this.GenericInfoUI);
                   }
-               } else if (uic.mode == 61) {
+               } else if (uic.secondaryParam == 61) {
                   if (var1 == okCommand) {
                      this.setCurrentDisplay(this.ClueUI);
                   }
-               } else if (uic.mode == 35) {
+               } else if (uic.secondaryParam == 35) {
                   if (var1 == selectCommand) {
                      int var32 = uic.selectedIndexOrMinusOne();
                      this.GenericInfoUI.setSecondaryParam(36);
@@ -1171,11 +1194,11 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                      this.GenericInfoUI.setupMessage("Skill Info", var68);
                      this.setCurrentDisplay(this.GenericInfoUI);
                   }
-               } else if (uic.mode == 36) {
+               } else if (uic.secondaryParam == 36) {
                   if (var1 == okCommand) {
                      this.setCurrentDisplay(this.SkillsListUI);
                   }
-               } else if (uic.mode == 37) {
+               } else if (uic.secondaryParam == 37) {
                   if (var1 == selectCommand) {
                      int var33 = uic.selectedIndexOrMinusOne();
                      if (var33 >= 0) {
@@ -1184,7 +1207,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                         this.setCurrentDisplay(this.SpellInfoUI);
                      }
                   }
-               } else if (uic.mode == 38) {
+               } else if (uic.secondaryParam == 38) {
                   if (var1 == selectCommand) {
                      int var34 = this.character.nthKnownSpellId(this.currentSpellIndex);
                      this.character.selectedSpellId = (byte)(var34 + 1);
@@ -1193,10 +1216,10 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                      this.setCurrentDisplay(this.SpellsListUI);
                      this.currentSpellIndex = -1;
                   }
-               } else if (uic.mode == 68) {
+               } else if (uic.secondaryParam == 68) {
                   this.RevealUI = this.newRevealUI();
                   this.setCurrentDisplay(this.RevealUI);
-               } else if (uic.mode == 65) {
+               } else if (uic.secondaryParam == 65) {
                   if (var1 == selectCommand) {
                      int var35 = uic.selectedIndexOrMinusOne();
                      if (var35 == 0) {
@@ -1206,7 +1229,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                         this.setCurrentDisplay(uic.backTarget);
                      }
                   }
-               } else if (uic.mode == 66) {
+               } else if (uic.secondaryParam == 66) {
                   if (var1 == selectCommand) {
                      int var36 = uic.selectedIndexOrMinusOne();
                      StringBuffer var57 = new StringBuffer();
@@ -1227,11 +1250,11 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                      this.character.resetToHubPosition(false);
                      this.setCurrentDisplay(this.GenericInfoUI);
                   }
-               } else if (uic.mode == 67) {
+               } else if (uic.secondaryParam == 67) {
                   this.character.ambushTimer = 1;
                   this.character.specialEncounterResolved = true;
                   this.setCurrentDisplay(this.gameCanvas);
-               } else if (uic.mode == 39) {
+               } else if (uic.secondaryParam == 39) {
                   if (var1 == selectCommand) {
                      String var37 = uic.selectedItemText();
                      attribIncr[uic.contextIndex] = -1;
@@ -1257,7 +1280,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                         this.gameCanvas.resumeThread();
                      }
                   }
-               } else if (uic.mode == 202) {
+               } else if (uic.secondaryParam == 202) {
                   if (var1 == selectCommand) {
                      int var38 = uic.selectedIndexOrMinusOne();
                      if (var38 == 0) {
@@ -1276,12 +1299,12 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                         this.setCurrentDisplay(uic.backTarget);
                      }
                   }
-               } else if (uic.mode == 202) {
+               } else if (uic.secondaryParam == 202) {
                   this.exit();
-               } else if (uic.mode == 40) {
+               } else if (uic.secondaryParam == 40) {
                   this.setCurrentDisplay(this.gameCanvas);
                   this.gameCanvas.resumeThread();
-               } else if (uic.mode == 203) {
+               } else if (uic.secondaryParam == 203) {
                   if (var1 == selectCommand) {
                      int var39 = uic.selectedIndexOrMinusOne();
                      this.GenericInfoUI.setSecondaryParam(206);
@@ -1290,17 +1313,17 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   } else {
                      this.setCurrentDisplay(uic.backTarget);
                   }
-               } else if (uic.mode == 206) {
+               } else if (uic.secondaryParam == 206) {
                   this.setCurrentDisplay(this.helpUI);
-               } else if (uic.mode == 204) {
+               } else if (uic.secondaryParam == 204) {
                   this.setCurrentDisplay(this.mainMenuUI);
-               } else if (uic.mode == 305) {
+               } else if (uic.secondaryParam == 305) {
                   if (uic.backTarget == this.OptionsUI) {
                      this.gameCanvas.startGameThread();
                   }
 
                   this.setCurrentDisplay(uic.backTarget);
-               } else if (uic.mode == 200 || uic.mode == 201) {
+               } else if (uic.secondaryParam == 200 || uic.secondaryParam == 201) {
                   this.GenericInfoUI.setSecondaryParam(399);
                   String var40 = "";
 
@@ -1312,9 +1335,9 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
                   this.GenericInfoUI.removeCommand(okCommand);
                   this.GenericInfoUI.addCommand(exitCommand);
                   this.setCurrentDisplay(this.GenericInfoUI);
-               } else if (uic.mode == 399) {
+               } else if (uic.secondaryParam == 399) {
                   this.exit();
-               } else if (uic.mode == 499) {
+               } else if (uic.secondaryParam == 499) {
                   this.exit();
                }
             } else if (var1 == okCommand) {
@@ -1350,7 +1373,7 @@ public class ESGame extends RegisteredMIDlet implements Runnable, CommandListene
 
    private void handleNPCChoices(Screen var1) {
       int var2 = var1.selectedIndexOrMinusOne();
-      int var3 = var1.mode - 9;
+      int var3 = var1.secondaryParam - 9;
       switch (var3) {
          case 0:
          case 1:
