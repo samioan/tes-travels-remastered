@@ -2080,18 +2080,137 @@ milestone rather than just read-through.
       branch that had been documented as unreachable since M32 --
       before the diagnostic was removed.
 
+- [x] **M37 -- the generic `Screen` UI primitive** (this session). Ports
+      `../src/Screen.java` (itself renamed from decompiled/g.java) --
+      the one class the original implements EVERY non-3D-view UI screen
+      through: main menu, options menu, NPC dialogue prompt lists,
+      inventory/shop lists, and `GenericInfoUI`-style message popups, all
+      via one `mode`-tagged class rather than a separate class per
+      screen type. This is the UI primitive M31/M35's own doc comments
+      have been pointing at as the still-missing piece blocking the
+      options action and `openNpcDialogue` from being wired live.
+
+      Deliberately a "logic + rendering first, wiring later" slice, the
+      same shape as M9/M10's corridor-selection-vs-drawing split and
+      M25/M26's visibleObjects-data-model-vs-sprite-drawing split:
+      `ui/screen.h`/`.cpp` ports Screen's own self-contained data model
+      (`setupList`/`setupMessage`/`setupPromptList`, both overloads),
+      pixel rendering (`paint()`, all 4 modes plus the shared soft-key
+      bar), and up/down list navigation (`handleKey()`'s game-action-1/6
+      branches) -- everything Screen.java implements ITSELF, with no
+      dependency on anything outside the class. Deliberately NOT
+      ported: `ESGame`'s own navigation graph that CONSTRUCTS real
+      Screens for the main menu/options/dialogue/shops and dispatches
+      their Select/Cancel/Back commands into real game actions
+      (`ESGame.commandAction()`, by far the largest switch in the whole
+      decompiled source) -- that's a separate, larger future milestone
+      this class exists to eventually be driven by. Needed no new
+      library: `Screen` depends on nothing beyond what `dawnstar_render`
+      already bundles (`Backbuffer`, M30's `BitmapFont`, and M35's
+      `MessagePopup::WordWrap`, reused directly rather than
+      re-implemented a second time), so `ui/screen.cpp` is folded
+      straight into that library, the same "no separate library needed
+      for a self-contained class that needs nothing new" precedent
+      `bitmap_font.cpp` itself already set there.
+
+      SIMPLIFIED, fields dropped entirely rather than ported (see
+      `ui/screen.h`'s own class comment for the full reasoning): `game`/
+      `canvas` (no `ESGame`/`GameCanvas` object exists for a Screen to
+      hold a pointer to -- `width()`/`height()` just return this port's
+      own fixed 176x208 constants directly); `listener` (no
+      `CommandListener`/`ESGame.commandAction()` exists yet to route a
+      press into -- `LeftSoftKeyCommand`/`RightSoftKeyCommand` are
+      exposed publicly instead, for a future wiring milestone to read
+      directly); `backTarget`/`returnDisplay`/`contextIndex`/
+      `secondaryParam`/`rawTaggedText` (all four are ESGame's OWN
+      navigation bookkeeping Screen itself never reads or writes back,
+      per Screen.java's own field doc comments, so there's nothing yet
+      for them to attach to). Text rendering uses the one single
+      invented `BitmapFont` in place of Screen.java's own 4 distinct,
+      unrecoverable MIDP `Font` objects (`TITLE_FONT`/`DEFAULT_TEXT_FONT`/
+      `LARGE_TEXT_FONT`/`SOFT_KEY_FONT`) -- same "no real glyph shapes or
+      metrics survive" status `SMALL_FONT` already had for M30, and the
+      per-row line pitch (12px) reuses `message_popup.cpp`'s own
+      already-invented pitch rather than inventing a second one.
+
+      Two real, faithfully-preserved subtleties confirmed while
+      transcribing `setupPromptList`'s own per-item word-wrap-splitting
+      loop (the mechanism that lets a long list item's own wrapped
+      continuation lines group under one logical item for up/down
+      navigation): (1) its local `extraLines` (`wrapped.length`) is read
+      at its ORIGINAL value exactly once (sizing the merged array and
+      copying the wrapped lines in), then decremented exactly once as a
+      side effect buried inside a `System.arraycopy` call's own argument
+      list -- every later use in that same iteration (the itemGroupStart
+      shift, the itemCount increase, the index advance) reads the
+      DECREMENTED value instead. Both are correct and intentional (the
+      decremented value is the real net "how many NEW rows a 1-item-for-
+      N-lines split actually adds"), reproduced exactly rather than
+      unified into one consistent variable. (2) `setItems()` (a small
+      runtime-reconfiguration method, ported alongside the rest of the
+      class per the usual "port the whole self-contained class" standard
+      M13/M14/M25 established) never refreshes `itemCount`/`scrollBottom`
+      to match a newly-set item list's real size -- only `scrollTop`
+      resets to 0 -- so calling it with a different-length replacement
+      genuinely leaves those two fields stale until something else (a
+      fresh `setup*` call, or `setSelectedIndex`'s own window-adjustment)
+      resets them. Not "fixed" here.
+
+      Verified via the new `screen_smoke.exe` against real game data
+      (no JVM ground truth, same reason as M6/M9/M11/M13-M36): a real
+      5-item main-menu-shaped list and a real 10-item Options-shaped
+      list (both from `../src/ESGame.java`'s own real string literals),
+      confirming the single-command-always-right-softkey rule and the
+      2-command Select/Cancel-vs-Back/Cancel resolution rule, plus
+      pixel-level rendering (title bar, item text, the selected row's
+      own highlight box, the softkey bar and its labels) cross-checked
+      against `BitmapFont::DrawString` used as an independent oracle
+      (rendering the same string onto a blank scratch buffer and
+      diffing its own "on" pixels against `Screen::Paint`'s output at
+      the expected offset, rather than hand-transcribing
+      `bitmap_font.cpp`'s own glyph bit table a second time); a real
+      `HelpText` body word-wrapped through `SetupMessage` and
+      cross-checked against `MessagePopup::WordWrap` directly; a real
+      `CharacterData::classNames` prompt list; a synthetic overlong
+      prompt-list item (no real prompt-list item in this game is long
+      enough to force the word-wrap-splitting branch, the same "real
+      data doesn't hit this rare branch, so a synthetic one does"
+      precedent M16/M30 already established) verified against an
+      independently hand-derived `itemGroupStart`/merged-items
+      expectation, including the highlight box correctly spanning every
+      one of the split item's own wrapped rows; up/down navigation
+      windowing on two real >10/>9-item lists, one through each of the
+      two distinct navigation branches (plain `selectedIndex` for
+      `SetupList`, `itemGroupStart`-aware for `SetupPromptList`) --
+      catching a real, confirmed difference between them along the way
+      (the `itemGroupStart` branch's own "does the NEXT item's start row
+      still fit" check scrolls the window one step earlier than the
+      plain branch's own "has the CURRENT selection outgrown the window"
+      check, for lists that otherwise look equivalent); and all of
+      `SetTitle`/`SetItems` (including its own stale-itemCount quirk
+      above)/`SetSelectedIndex`/`SelectedItemText`/`FirstLine`/
+      `SetTextColumn`/`SelectedIndexOrMinusOne`. All checks passed. Full
+      clean rebuild zero warnings; all 35 smoke tests pass. Also
+      rendered two real frames via a temporary diagnostic (the real
+      main-menu-shaped list, and the real Options-shaped list after 2
+      real `MoveSelectionDown()` calls) confirming a legible title bar,
+      item list, correctly-tracking highlight box, and both softkey
+      labels ("Back"/"Select") -- before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M37 and beyond (not yet planned in detail):** every remaining
-      `showMessage()` call site beyond what M30/M32-M36 already wired up
-      stays unreachable until the options action (and `openNpcDialogue`'s
-      own dialogue UI) is itself wired into the live tick loop. And
-      finally `ESGame`'s own screen-wiring loop (character creation,
-      menus, dialogue, shops -- the full `Shop.dialogue()` dispatcher
+- [ ] **M38 and beyond (not yet planned in detail):** `ESGame`'s own
+      screen-wiring loop (character creation, the main/options menus,
+      NPC dialogue, shops -- the full `Shop.dialogue()` dispatcher
       traced while scoping M28 is still unported, only its
-      `npcstrings.dat` text itself loads so far, M8) tying it all
-      together in place of M20's fixed stand-in character. Each gets
-      its own milestone once the shape of "how much fits in one slice"
-      is clearer -- following `shadowkey-decomp`'s pattern of not
-      over-planning milestones far in advance of actually reaching
-      them.
+      `npcstrings.dat` text itself loads so far, M8) that CONSTRUCTS
+      real `Screen`s (M37) and dispatches their Select/Cancel/Back
+      commands into real game actions, in place of M20's fixed stand-in
+      character -- `ESGame.commandAction()`, by far the largest switch
+      in the whole decompiled source. Once that lands, the options
+      action and every remaining `showMessage()` call site beyond what
+      M30/M32-M36 already wired up stop being permanently unreachable.
+      Gets its own milestone (likely several) once the shape of "how
+      much fits in one slice" is clearer -- following
+      `shadowkey-decomp`'s pattern of not over-planning milestones far
+      in advance of actually reaching them.

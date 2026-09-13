@@ -58,7 +58,11 @@ target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 # "no separate library needed for a header-only-adjacent utility only
 # one consumer needs" precedent src/platform/win32/window.cpp already
 # set for dawnstar_port itself. M31's hotbar_renderer.cpp reuses that
-# same font (digits, extended for this milestone).
+# same font (digits, extended for this milestone). M37's src/ui/screen.cpp
+# (Screen.java's generic list/message/prompt-list UI primitive) needs
+# nothing beyond what this library already bundles (Backbuffer/BitmapFont/
+# MessagePopup::WordWrap), so it's folded in here too rather than
+# standing up a whole new library for one self-contained class.
 add_library(dawnstar_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -67,6 +71,7 @@ add_library(dawnstar_render STATIC
   src/render/message_popup.cpp
   src/render/minimap_renderer.cpp
   src/render/visible_object_renderer.cpp
+  src/ui/screen.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon)
@@ -304,3 +309,7 @@ target_link_libraries(camp_tick_smoke PRIVATE dawnstar_camp)
 # M36 milestone smoke test -- see src/tests/m36_monster_ai_tick_smoke.cpp.
 add_executable(monster_ai_tick_smoke src/tests/m36_monster_ai_tick_smoke.cpp)
 target_link_libraries(monster_ai_tick_smoke PRIVATE dawnstar_combat dawnstar_player)
+
+# M37 milestone smoke test -- see src/tests/m37_screen_smoke.cpp.
+add_executable(screen_smoke src/tests/m37_screen_smoke.cpp)
+target_link_libraries(screen_smoke PRIVATE dawnstar_render)
