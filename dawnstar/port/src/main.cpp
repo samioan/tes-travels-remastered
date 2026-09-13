@@ -21,10 +21,12 @@
 #include "assets/monster_database.h"
 #include "assets/monster_image_names.h"
 #include "assets/spell_database.h"
+#include "camp/camp_tick.h"
 #include "combat/combat_tick.h"
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
+#include "graphics/bitmap_font.h"
 #include "interact/interact_tick.h"
 #include "platform/win32/window.h"
 #include "player/player_creation.h"
@@ -128,10 +130,29 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // exactly like a real device's keyPressed() would.
     bool interactKeyWasDown = false;
     bool interactPending = false;
+    // GameCanvas.campRequested -- same discrete-keydown-event shape as
+    // interact above, gated on `hotbarContext == 0` (GameCanvas.
+    // keyPressed()'s own `key == 48` handler) at the moment of the
+    // keydown.
+    bool campKeyWasDown = false;
+    bool campPending = false;
     // GameCanvas.hotbarContext -- see interactKeyWasDown's own doc
     // comment above for why this is now a persistent local instead of a
-    // tick-local one.
+    // tick-local one. Only ever reassigned inside a tick whose camp
+    // state machine says `runTick` (see below) -- while actually
+    // camping, paintHotbar() (the original's only writer of this field)
+    // never runs either, since paint()'s own top-level branch shows
+    // paintCampingScreen() instead of paintGameView() -- so this stays
+    // frozen at its pre-camp value for the same reason there, not
+    // because this port specifically special-cased it.
     int hotbarContext = 0;
+    // GameCanvas.campStartTime -- a GameCanvas field, not one of
+    // Player's own, same reasoning as lastAttackTimeMs below.
+    int64_t campStartTimeMs = 0;
+    // Monster.nextSpawnIdCounter -- see camp/camp_tick.h's own doc
+    // comment on TickCampState for why this is a SEPARATE counter from
+    // nextDropSpawnId below, not the same one.
+    int16_t nextMonsterSpawnId = 1;
     // GameCanvas.lastAttackTime -- a GameCanvas field, not one of
     // Player's own, so kept here rather than folded into PlayerState
     // (same reasoning as M30's MessagePopupState being kept separate --
@@ -236,159 +257,227 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             }
             interactKeyWasDown = interactKeyDown;
 
+            // GameCanvas.keyPressed()'s own `key == 48` handler
+            // (campRequested, gated on hotbarContext == 0) -- same shape
+            // as interact above, just with the opposite hotbarContext
+            // value (explore, not interact).
+            bool campKeyDown = KeyPressed('Z');
+            if (campKeyDown && !campKeyWasDown && hotbarContext == 0) {
+                campPending = true;
+            }
+            campKeyWasDown = campKeyDown;
+
             if (clock.ConsumeTick()) {
                 // GameCanvas.run()'s own `now = System.
                 // currentTimeMillis()`, sampled once per tick and reused
                 // for every showMessage/timeout check below -- M30.
                 int64_t nowMs = static_cast<int64_t>(GetTickCount64());
 
-                // GameCanvas.paintHotbar()'s own `hotbarContext` field,
-                // as it stood after the LAST tick's dispatch/refresh --
-                // exactly what keyPressed() itself reads on a real
-                // device (the hotbar shown is always one tick behind
-                // whatever action that tick's dispatch takes, matching
-                // the original's own real timing: paintHotbar's write to
-                // this field only ever happens once per repaint, right
-                // after a tick's dispatch has already run). Reassigns
-                // the persistent local declared above (M34) rather than
-                // a fresh tick-local one, since the interact key's own
-                // full-frame-rate edge detection needs to read this same
-                // value between ticks too.
-                hotbarContext = dawnstar::HotbarRenderer::ComputeHotbarContext(player.monsterTargeted,
-                                                                                 player.chestInSight, player.npcInSight);
+                // GameCanvas.run()'s own per-tick campState 1/2/3 state
+                // machine -- the block immediately preceding
+                // dispatchTickActions() itself in the original. Returns
+                // whether the rest of this tick's normal work should run
+                // at all (false while actually camping, before the
+                // relevant timer elapses); also sets suppressMoveThisTick
+                // true on the one tick a camp cycle actually resolves --
+                // see camp/camp_tick.h's own doc comment on both.
+                bool suppressMoveThisTick = false;
+                bool runTick = dawnstar::CampTick::TickCampState(player, levels, world, items, monsters, globalRng,
+                                                                  nowMs, campStartTimeMs, nextMonsterSpawnId,
+                                                                  messagePopup, suppressMoveThisTick);
 
-                // GameCanvas.dispatchTickActions()'s own if/else-if
-                // priority chain: only camp/interact/cast/cycle/attack/
-                // options/unusedKey9/move ever fires per tick, never
-                // more than one. Interact/cast/cycle/attack/move are
-                // wired so far (camp/options still need UI this port
-                // doesn't have yet -- camp state, an options menu);
-                // interact outranks cast outranks cycle outranks attack
-                // outranks move, matching the original's own ordering
-                // exactly.
-                //
-                // Cast, like attack, is polled every tick rather than
-                // edge-detected: GameCanvas.keyPressed()'s own
-                // `key == 51` handler sets castSpellRequested
-                // unconditionally (no hotbarContext gate, unlike
-                // attack's own `key == 49`), but processSpellCast's own
-                // 500ms cooldown (lastSpellCastTimeMs) throttles it to
-                // the same pacing a held key would produce anyway --
-                // same reasoning as attackActive below.
-                bool castActive = KeyPressed('S');
-                bool attackActive = KeyPressed('A') && hotbarContext == 1;
+                if (runTick) {
+                    // GameCanvas.paintHotbar()'s own `hotbarContext`
+                    // field, as it stood after the LAST tick's
+                    // dispatch/refresh -- exactly what keyPressed()
+                    // itself reads on a real device (the hotbar shown is
+                    // always one tick behind whatever action that
+                    // tick's dispatch takes, matching the original's own
+                    // real timing: paintHotbar's write to this field
+                    // only ever happens once per repaint, right after a
+                    // tick's dispatch has already run). Reassigns the
+                    // persistent local declared above (M34) rather than
+                    // a fresh tick-local one, since the interact/camp
+                    // keys' own full-frame-rate edge detection needs to
+                    // read this same value between ticks too.
+                    hotbarContext = dawnstar::HotbarRenderer::ComputeHotbarContext(
+                        player.monsterTargeted, player.chestInSight, player.npcInSight);
 
-                bool moveAttempted = false;
-                if (interactPending) {
-                    dawnstar::InteractTick::ProcessInteract(player, levels, world, items, messagePopup, nowMs);
-                    interactPending = false;
-                } else if (castActive) {
-                    dawnstar::CombatTick::ProcessSpellCast(player, levels, world, monsters, items, charData, spells,
-                                                            messagePopup, globalRng, nowMs, lastSpellCastTimeMs,
-                                                            spellHitFlash, selfSpellFlash);
-                } else if (spellCyclePending) {
-                    dawnstar::CombatTick::CycleSpell(player, spells, messagePopup, nowMs);
-                    spellCyclePending = false;
-                } else if (attackActive) {
-                    if (dawnstar::CombatTick::ProcessAttack(player, levels, world, monsters, items, charData,
-                                                              globalRng, nowMs, lastAttackTimeMs)) {
-                        monsterHitFlash = true;
-                    }
-                } else {
-                    // GameCanvas.run()'s own steady-250ms-tick cadence
-                    // (see engine/game_clock.h) is also when the real
-                    // key state would be sampled -- one Move() per tick
-                    // while a key is held reproduces that pacing rather
-                    // than moving once per PeekMessage-idle spin.
-                    moveAttempted = true;
-                    int slotsBefore = player.inventoryCount;
-                    if (KeyPressed(VK_UP)) {
-                        dawnstar::PlayerMovement::Move(player, 1, false, levels, world, items);
-                    } else if (KeyPressed(VK_DOWN)) {
-                        dawnstar::PlayerMovement::Move(player, 2, false, levels, world, items);
-                    } else if (KeyPressed(VK_RIGHT)) {
-                        dawnstar::PlayerMovement::Move(player, 3, false, levels, world, items);
-                    } else if (KeyPressed(VK_LEFT)) {
-                        dawnstar::PlayerMovement::Move(player, 4, false, levels, world, items);
-                    } else {
-                        moveAttempted = false;
-                    }
+                    // GameCanvas.dispatchTickActions()'s own if/else-if
+                    // priority chain: only camp/interact/cast/cycle/
+                    // attack/options/unusedKey9/move ever fires per
+                    // tick, never more than one. Camp/interact/cast/
+                    // cycle/attack/move are wired so far (options alone
+                    // still needs UI this port doesn't have yet -- an
+                    // options menu); camp outranks interact outranks
+                    // cast outranks cycle outranks attack outranks move,
+                    // matching the original's own ordering exactly.
+                    //
+                    // Cast, like attack, is polled every tick rather
+                    // than edge-detected: GameCanvas.keyPressed()'s own
+                    // `key == 51` handler sets castSpellRequested
+                    // unconditionally (no hotbarContext gate, unlike
+                    // attack's own `key == 49`), but processSpellCast's
+                    // own 500ms cooldown (lastSpellCastTimeMs) throttles
+                    // it to the same pacing a held key would produce
+                    // anyway -- same reasoning as attackActive below.
+                    bool castActive = KeyPressed('S');
+                    bool attackActive = KeyPressed('A') && hotbarContext == 1;
 
-                    // GameCanvas.commitMove()'s own "only when
-                    // pendingMoveDir != 0" gate -- called unconditionally
-                    // whenever a move was requested this tick, regardless
-                    // of whether it actually committed (matching the
-                    // original, which does all of this right after
-                    // player.move() with no success check).
-                    if (moveAttempted) {
-                        // commitMove()'s own `int pickedUp = player.
-                        // inventoryCount - slotsBefore;` -- diffed the
-                        // same way here as there, rather than threading
-                        // a count out of Move() itself -- M30.
-                        int pickedUp = player.inventoryCount - slotsBefore;
-                        if (pickedUp == 1) {
-                            int slot = player.inventoryCount - 1;
-                            int itemId = std::abs(static_cast<int>(player.inventoryItemIds[slot]));
-                            dawnstar::MessagePopup::Show(
-                                messagePopup,
-                                dawnstar::MessagePopup::WrapToTwoLines(items.name[static_cast<size_t>(itemId - 1)]),
-                                -1, nowMs);
-                        } else if (pickedUp > 1) {
-                            dawnstar::MessagePopup::Show(messagePopup, {"Several", "items!"}, -1, nowMs);
+                    bool moveAttempted = false;
+                    if (campPending) {
+                        // GameCanvas.dispatchTickActions()'s own
+                        // campRequested branch: `monsterAttacking` is
+                        // always passed false here -- see camp/
+                        // camp_tick.h's own doc comment on TryEnterCamp
+                        // for why.
+                        dawnstar::CampTick::TryEnterCamp(player, globalRng, nowMs, campStartTimeMs, messagePopup,
+                                                          false);
+                        campPending = false;
+                    } else if (interactPending) {
+                        dawnstar::InteractTick::ProcessInteract(player, levels, world, items, messagePopup, nowMs);
+                        interactPending = false;
+                    } else if (castActive) {
+                        dawnstar::CombatTick::ProcessSpellCast(player, levels, world, monsters, items, charData,
+                                                                spells, messagePopup, globalRng, nowMs,
+                                                                lastSpellCastTimeMs, spellHitFlash, selfSpellFlash);
+                    } else if (spellCyclePending) {
+                        dawnstar::CombatTick::CycleSpell(player, spells, messagePopup, nowMs);
+                        spellCyclePending = false;
+                    } else if (attackActive) {
+                        if (dawnstar::CombatTick::ProcessAttack(player, levels, world, monsters, items, charData,
+                                                                  globalRng, nowMs, lastAttackTimeMs)) {
+                            monsterHitFlash = true;
+                        }
+                    } else if (!suppressMoveThisTick) {
+                        // GameCanvas.run()'s own steady-250ms-tick
+                        // cadence (see engine/game_clock.h) is also when
+                        // the real key state would be sampled -- one
+                        // Move() per tick while a key is held reproduces
+                        // that pacing rather than moving once per
+                        // PeekMessage-idle spin. `suppressMoveThisTick`
+                        // (see camp/camp_tick.h's own doc comment) skips
+                        // this whole branch on the one tick a camp cycle
+                        // just resolved, matching GameCanvas.
+                        // suppressMoveInput's own real effect.
+                        moveAttempted = true;
+                        int slotsBefore = player.inventoryCount;
+                        if (KeyPressed(VK_UP)) {
+                            dawnstar::PlayerMovement::Move(player, 1, false, levels, world, items);
+                        } else if (KeyPressed(VK_DOWN)) {
+                            dawnstar::PlayerMovement::Move(player, 2, false, levels, world, items);
+                        } else if (KeyPressed(VK_RIGHT)) {
+                            dawnstar::PlayerMovement::Move(player, 3, false, levels, world, items);
+                        } else if (KeyPressed(VK_LEFT)) {
+                            dawnstar::PlayerMovement::Move(player, 4, false, levels, world, items);
+                        } else {
+                            moveAttempted = false;
                         }
 
-                        // refreshChestInSight(): ChestInFront's own
-                        // query half lives in PlayerMovement (see its own
-                        // doc comment for why); the showMessage half is
-                        // here.
-                        const std::array<uint8_t, 8>* chest =
-                            dawnstar::PlayerMovement::ChestInFront(player, levels, world);
-                        // M31: persisted for HotbarRenderer::
-                        // ComputeHotbarContext (see player/player_state.h's
-                        // own doc comment on why).
-                        player.chestInSight = chest != nullptr;
-                        if (chest != nullptr) {
-                            dawnstar::MessagePopup::Show(messagePopup, {"Chest", ""}, 1, nowMs);
-                        }
+                        // GameCanvas.commitMove()'s own "only when
+                        // pendingMoveDir != 0" gate -- called
+                        // unconditionally whenever a move was requested
+                        // this tick, regardless of whether it actually
+                        // committed (matching the original, which does
+                        // all of this right after player.move() with no
+                        // success check).
+                        if (moveAttempted) {
+                            // commitMove()'s own `int pickedUp = player.
+                            // inventoryCount - slotsBefore;` -- diffed
+                            // the same way here as there, rather than
+                            // threading a count out of Move() itself --
+                            // M30.
+                            int pickedUp = player.inventoryCount - slotsBefore;
+                            if (pickedUp == 1) {
+                                int slot = player.inventoryCount - 1;
+                                int itemId = std::abs(static_cast<int>(player.inventoryItemIds[slot]));
+                                dawnstar::MessagePopup::Show(
+                                    messagePopup,
+                                    dawnstar::MessagePopup::WrapToTwoLines(
+                                        items.name[static_cast<size_t>(itemId - 1)]),
+                                    -1, nowMs);
+                            } else if (pickedUp > 1) {
+                                dawnstar::MessagePopup::Show(messagePopup, {"Several", "items!"}, -1, nowMs);
+                            }
 
-                        // refreshNpcInSight(): same split as
-                        // refreshChestInSight above -- RefreshNpcInSight
-                        // itself only sets player.npcInSight (M28); the
-                        // shop-greeting showMessage call is here.
-                        dawnstar::PlayerMovement::RefreshNpcInSight(player, levels, world);
-                        if (player.npcInSight >= 0) {
-                            dawnstar::MessagePopup::Show(
-                                messagePopup, dawnstar::MessagePopup::WrapToTwoLines(kShopNames[player.npcInSight]),
-                                1, nowMs);
-                        }
+                            // refreshChestInSight(): ChestInFront's own
+                            // query half lives in PlayerMovement (see its
+                            // own doc comment for why); the showMessage
+                            // half is here.
+                            const std::array<uint8_t, 8>* chest =
+                                dawnstar::PlayerMovement::ChestInFront(player, levels, world);
+                            // M31: persisted for HotbarRenderer::
+                            // ComputeHotbarContext (see player/
+                            // player_state.h's own doc comment on why).
+                            player.chestInSight = chest != nullptr;
+                            if (chest != nullptr) {
+                                dawnstar::MessagePopup::Show(messagePopup, {"Chest", ""}, 1, nowMs);
+                            }
 
-                        // commitMove()'s own unconditional
-                        // `this.minimapDirty = true;` -- M29.
-                        player.minimapDirty = true;
+                            // refreshNpcInSight(): same split as
+                            // refreshChestInSight above --
+                            // RefreshNpcInSight itself only sets
+                            // player.npcInSight (M28); the shop-greeting
+                            // showMessage call is here.
+                            dawnstar::PlayerMovement::RefreshNpcInSight(player, levels, world);
+                            if (player.npcInSight >= 0) {
+                                dawnstar::MessagePopup::Show(
+                                    messagePopup,
+                                    dawnstar::MessagePopup::WrapToTwoLines(kShopNames[player.npcInSight]), 1, nowMs);
+                            }
+
+                            // commitMove()'s own unconditional
+                            // `this.minimapDirty = true;` -- M29.
+                            player.minimapDirty = true;
+                        }
                     }
+
+                    // dispatchTickActions()'s own tail:
+                    // refreshTargetMonster() + resolveMonsterDeath(),
+                    // unconditional every tick regardless of which
+                    // action (if any) fired above -- M32.
+                    dawnstar::CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsters, items,
+                                                                           messagePopup, globalRng, nowMs,
+                                                                           nextDropSpawnId);
+
+                    // GameCanvas.run()'s own per-tick order: movement
+                    // first, then Player.tickVisibleObjects() (M25) --
+                    // unconditional every tick, not just on a movement
+                    // tick.
+                    dawnstar::VisibleObjects::Tick(player, levels, world);
+
+                    // run()'s own "if (minimapDirty) refreshMinimap()"
+                    // gate, right after tickVisibleObjects -- M29.
+                    if (player.minimapDirty) {
+                        dawnstar::MinimapRenderer::Refresh(minimap, player, levels, world);
+                    }
+
+                    // run()'s own unconditional per-tick auto-hide
+                    // timeout check -- M30.
+                    dawnstar::MessagePopup::Tick(messagePopup, nowMs);
                 }
+            }
 
-                // dispatchTickActions()'s own tail: refreshTargetMonster()
-                // + resolveMonsterDeath(), unconditional every tick
-                // regardless of which action (if any) fired above -- M32.
-                dawnstar::CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsters, items,
-                                                                       messagePopup, globalRng, nowMs,
-                                                                       nextDropSpawnId);
-
-                // GameCanvas.run()'s own per-tick order: movement first,
-                // then Player.tickVisibleObjects() (M25) -- unconditional
-                // every tick, not just on a movement tick.
-                dawnstar::VisibleObjects::Tick(player, levels, world);
-
-                // run()'s own "if (minimapDirty) refreshMinimap()" gate,
-                // right after tickVisibleObjects -- M29.
-                if (player.minimapDirty) {
-                    dawnstar::MinimapRenderer::Refresh(minimap, player, levels, world);
-                }
-
-                // run()'s own unconditional per-tick auto-hide timeout
-                // check -- M30.
-                dawnstar::MessagePopup::Tick(messagePopup, nowMs);
+            // GameCanvas.paint()'s own top-level branch: paintCampingScreen()
+            // entirely REPLACES paintGameView() while camping (not layered
+            // on top of it) -- no corridor/HUD/hotbar/minimap at all.
+            if (player.campState != 0) {
+                // paintCampingScreen(): a black screen plus "CAMPING"
+                // centered in BIG_MESSAGE_FONT -- another MIDP built-in
+                // system font (like SMALL_FONT, see graphics/
+                // bitmap_font.h's own doc comment) with no recoverable
+                // real glyph shapes/metrics, so this reuses the same
+                // invented BitmapFont rather than hand-authoring a
+                // second, bigger invented font purely for this one
+                // screen.
+                backbuffer.Fill(dawnstar::PackRGB565(0, 0, 0));
+                const std::string campingText = "CAMPING";
+                int textX = (dawnstar::Backbuffer::kWidth - dawnstar::BitmapFont::StringWidth(campingText)) / 2;
+                int textY = (dawnstar::Backbuffer::kHeight - dawnstar::BitmapFont::kGlyphHeight) / 2;
+                dawnstar::BitmapFont::DrawString(backbuffer, textX, textY, campingText,
+                                                  dawnstar::PackRGB565(255, 255, 255));
+                window.Present(backbuffer);
+                return;
             }
 
             dawnstar::DungeonView view(levels, player.currentLevel - 1);

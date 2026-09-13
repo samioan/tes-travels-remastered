@@ -199,6 +199,22 @@ struct PlayerState {
     // attack/death-resolution code needs it (see main.cpp's own doc
     // comment on why that's equivalent, not just simpler).
     bool monsterTargeted = false;
+
+    // --- M35: GameCanvas.campState. Same GameCanvas-static-folded-in
+    // reasoning as chestInSight/npcInSight/monsterTargeted above --
+    // needed every frame by main.cpp's own render step to choose between
+    // the camping screen and the normal game view (GameCanvas.paint()'s
+    // own top-level branch). 0 = not camping; 1 = camping, waiting to
+    // see if it's interrupted; 2 = camping, guaranteed to complete
+    // (either past the interruption check, or entered directly for a
+    // safeCampingBuff/hub-town camp); 3 = camping, the rare scripted
+    // "disturbed" event, guaranteed interrupted. GameCanvas.campStartTime
+    // itself is NOT folded in here -- nothing needs it read across a
+    // frame boundary by rendering, only by the tick-gated camp state
+    // machine itself, so it stays a plain main.cpp local (same "GameCanvas
+    // field, not Player's own" reasoning as MessagePopupState/
+    // lastAttackTimeMs).
+    int campState = 0;
 };
 
 }  // namespace dawnstar

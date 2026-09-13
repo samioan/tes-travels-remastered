@@ -160,6 +160,24 @@ public:
     static std::array<uint8_t, 28>* MonsterInFront(PlayerState& p, std::vector<GeneratedLevel>& levels,
                                                      WorldRegistry& world);
 
+    // Shared by ComputeMoveTarget and ResetToHubPosition (both of
+    // Player.java's own real call sites for this exact block) -- and,
+    // since M35, a THIRD real call site, player/player_camp.h's own
+    // Rest() (Player.java's rest() opens with this exact same guard/
+    // scan/removal block, verbatim, just without a level change
+    // involved -- the player rests in place, so "the leaving level"
+    // here is simply p.currentLevel as it already stands). If
+    // p.roamingSpecialMonsterPresent, searches `world`'s registry for
+    // that level (p.currentLevel, read before a MOVING caller updates
+    // it) for a type-41 monster and removes it via
+    // DungeonRuntime::RemoveMonster, clearing the flag. The original's
+    // "Remove roaming gehen failed" console message on a flag left set
+    // isn't ported (no stdout channel any other module uses for this).
+    // Promoted from private to public for that third caller, which
+    // lives in a sibling header rather than inside this class itself.
+    static void CleanupRoamingMonsterIfPresent(PlayerState& p, std::vector<GeneratedLevel>& levels,
+                                                WorldRegistry& world);
+
 private:
     struct PendingMove {
         int level = 0;
@@ -168,17 +186,6 @@ private:
         int facing = 0;
         bool levelChanged = false;
     };
-
-    // Shared by ComputeMoveTarget and ResetToHubPosition (both of
-    // Player.java's own real call sites for this exact block): if
-    // p.roamingSpecialMonsterPresent, searches `world`'s registry for
-    // the LEAVING level (p.currentLevel, read before either caller
-    // updates it) for a type-41 monster and removes it via
-    // DungeonRuntime::RemoveMonster, clearing the flag. The original's
-    // "Remove roaming gehen failed" console message on a flag left set
-    // isn't ported (no stdout channel any other module uses for this).
-    static void CleanupRoamingMonsterIfPresent(PlayerState& p, std::vector<GeneratedLevel>& levels,
-                                                WorldRegistry& world);
 
     static PendingMove ComputeMoveTarget(PlayerState& p, int direction, std::vector<GeneratedLevel>& levels,
                                           WorldRegistry& world);

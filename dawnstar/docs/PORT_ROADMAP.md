@@ -1852,16 +1852,144 @@ milestone rather than just read-through.
 
 ## Milestones next
 
-- [ ] **M35 and beyond (not yet planned in detail):** every remaining
-      `showMessage()` call site beyond what M30/M32/M33/M34 already
-      wired up stays unreachable until camp/options actions (and
-      `openNpcDialogue`'s own dialogue UI) are themselves wired into
-      the live tick loop. And finally `ESGame`'s own screen-wiring loop
-      (character creation, menus, dialogue, shops -- the full `Shop.
-      dialogue()` dispatcher traced while scoping M28 is still
-      unported, only its `npcstrings.dat` text itself loads so far,
-      M8) tying it all together in place of M20's fixed stand-in
-      character. Each gets its own milestone once the shape of "how
-      much fits in one slice" is clearer -- following
+- [x] **M35 -- the camp system** (this session). The fourth of
+      `dispatchTickActions()`'s priority-ordered actions to land, and
+      it outranks all of interact/cast/cycle/attack, matching the
+      original's own ordering exactly (only options remains unwired --
+      it still needs an options-menu UI this port doesn't have). Unlike
+      M32-M34's actions, this one isn't a single dispatch call: it's a
+      whole per-tick state machine (`GameCanvas.run()`'s own campState
+      1/2/3 handling, sitting immediately before `dispatchTickActions()`
+      itself) that can freeze the ENTIRE rest of a tick -- no attack,
+      cast, cycle, interact, or movement -- for as long as the player is
+      actually asleep.
+
+      New `'Z'` key, gated on `hotbarContext == 0` the same way
+      `GameCanvas.keyPressed()`'s own `key == 48` handler is, and
+      genuinely edge-detected at full frame rate like M34's interact key
+      (`enterCampState()` has no internal cooldown either). New
+      `player/player_camp.h`/`.cpp` (`PlayerCamp::Rest`, `Player.rest()`)
+      -- Player-only logic (no live `Monster` needed) that DOES need the
+      live `WorldRegistry` for its roaming-special-monster cleanup, so
+      it lives alongside `player_movement.h`'s own registry-touching
+      methods rather than `player_combat_stats.h`. That cleanup turned
+      out to be Player.java's rest() opening with the EXACT SAME guard/
+      scan/removal block `PlayerMovement::CleanupRoamingMonsterIfPresent`
+      already implements for `ComputeMoveTarget`/`ResetToHubPosition` (M23)
+      -- so rather than a third copy, that method was promoted from
+      private to public for `PlayerCamp::Rest` to call directly, its own
+      doc comment updated to name the new caller.
+
+      New `camp/camp_tick.h`/`.cpp` (`CampTick`, its own module for the
+      same reason `combat/combat_tick.h`/`interact/interact_tick.h` are:
+      it needs `dawnstar_player` (`PlayerCamp::Rest`), `dawnstar_dungeon`
+      (`DungeonRuntime::TrySpawnMonsterNear`, for the monster that
+      interrupts a disturbed camp), AND `dawnstar_render` (the "Cannot
+      Camp!"/"Rest disturbed!"/"Rest complete!" popups) all at once)
+      ports `enterCampState()` (`TryEnterCamp`) and `run()`'s own
+      per-tick campState machine (`TickCampState`) exactly, including:
+      the sequential (not if/else-if) `campState` overwrites
+      `enterCampState()` itself uses -- default 1, then 2 if
+      `safeCampingBuff`, then 3 if a 1-in-10 roll hits (gated on
+      character level > 3 and `specialEncounterResolved` still false),
+      then unconditionally 2 again if in the hub town, so a hub-town
+      camp that also happens to roll into 3 still ends at 2, the hub
+      check firing last; campState 3 ALWAYS resolves "disturbed"
+      regardless of any roll (the interruption check itself is gated
+      `campState != 3`, short-circuiting to skip the roll entirely for
+      that case); and a genuinely two-different-counters finding traced
+      directly from `Monster.java` (lines ~441 and ~461): `onDeath()`'s
+      dropped-item spawnId uses `Item.nextSpawnId()` (this port's
+      already-existing `nextDropSpawnId`), but `Monster.spawn()`'s own
+      monster spawnId uses a SEPARATE `Monster.nextSpawnIdCounter` --
+      so `main.cpp` grew a second, independent `nextMonsterSpawnId`
+      counter for this milestone's new live monster-spawn call site
+      (the first ever wired into this port; every prior monster spawn
+      happened only during up-front world generation).
+
+      `TryEnterCamp`'s own `monsterAttacking` parameter is always passed
+      `false` by `main.cpp` -- `GameCanvas.monsterAttacking` is only
+      ever set by `Dungeon.tickNearbyMonsters()`'s monster-AI tick loop,
+      which isn't wired into this port yet (`CombatResolution::MonsterTick`
+      has been fully ported and tested since M15, but nothing calls it
+      from `main.cpp`) -- so the "Cannot Camp!" branch is real but
+      currently unreachable, the same shape as M32/M34's own documented
+      stand-ins. `GameCanvas.suppressMoveInput`'s real effect (skip ONLY
+      the movement branch, for exactly the one tick a camp cycle
+      resolves) is reproduced as `TickCampState`'s own
+      `suppressMoveThisTick` out-parameter, since this port has no
+      `pendingMoveDir` queue for the original's own
+      `(pendingMoveDir != 0 || suppressMoveInput) && !suppressMoveInput`
+      condition (which simplifies to "commit only if a move is pending
+      AND not suppressed") to fold into.
+
+      `PlayerState` grew `campState` (folded in, same GameCanvas-static
+      reasoning as `chestInSight`/`npcInSight`/`monsterTargeted` -- the
+      render step needs it every frame to choose between the camping
+      screen and the normal game view). `campStartTime` stays a plain
+      `main.cpp` local instead (same "GameCanvas field, not Player's
+      own, nothing needs it across a frame boundary" reasoning as
+      `lastAttackTimeMs`/`MessagePopupState`). `main.cpp`'s own
+      persistent `hotbarContext` local (hoisted in M34) now also
+      captures a real, previously-latent quirk for free: since it's
+      only ever reassigned inside a tick where `TickCampState` returns
+      `runTick == true`, it naturally freezes at its pre-camp value
+      while actually camping -- exactly matching the original, where
+      `paintHotbar()` (its only writer) never runs during
+      `paintCampingScreen()` either.
+
+      `paintCampingScreen()` itself is ported as a genuine SIMPLIFIED
+      substitution, not a simplification of logic: a black screen plus
+      "CAMPING" centered, using this port's own invented `BitmapFont`
+      (see its class comment) in place of the original's own
+      `BIG_MESSAGE_FONT` -- another MIDP built-in system font with no
+      recoverable real glyph shapes or metrics, the same class of gap
+      `SMALL_FONT` already was for M30.
+
+      Verified via the new `camp_tick_smoke.exe` against the real
+      37-level generated world: `TryEnterCamp`'s full `campState`
+      decision table (including the "Cannot Camp!" short-circuit, the
+      hub-town override beating a forced campState-3 roll, and the
+      rare campState-3 roll itself, both forced via a probe `JavaRandom`
+      seed whose OWN first call lands the exact 1-in-10 hit needed --
+      seeded fresh right before the call under test, not reused from
+      character creation, which would have already consumed calls off
+      it); `TickCampState`'s full timer/interruption/resolution
+      behavior for campState 1 (both the "not yet elapsed" and
+      "elapsed, not interrupted, transitions to 2" and "elapsed,
+      interrupted, resolves fully" cases), 2 (both "not yet elapsed"
+      and "elapsed, full rest, resolves"), 3 (always resolves
+      regardless of roll), and 0 (pure pass-through); and
+      `PlayerCamp::Rest` hand-derived directly against Player.java's own
+      arithmetic -- a partial (2/3) rest with ailment 8 active applies
+      BOTH scalings in sequence (2/3 then 3/4 of what's left = exactly
+      half the missing amount, not some single combined fraction), plus
+      the unconditional level-exp-counter zeroing and buff-flag
+      clearing. All checks passed. Full clean rebuild zero warnings;
+      all 33 smoke tests pass. Also rendered two real frames via a
+      temporary diagnostic (a real character with `safeCampingBuff` set
+      for a clean campState-2 demo, driven through a fake advancing
+      clock rather than a real 5-second wait) confirming the real
+      "CAMPING" screen and, after resolution, the normal game view with
+      a real "REST COMPLETE!" popup and HP visibly restored to max --
+      before the diagnostic was removed.
+
+## Milestones next
+
+- [ ] **M36 and beyond (not yet planned in detail):** every remaining
+      `showMessage()` call site beyond what M30/M32/M33/M34/M35 already
+      wired up stays unreachable until the options action (and
+      `openNpcDialogue`'s own dialogue UI) is itself wired into the
+      live tick loop -- likewise `Dungeon.tickNearbyMonsters()`'s own
+      monster-AI tick loop (`CombatResolution::MonsterTick` has been
+      ported and tested since M15, but nothing calls it from
+      `main.cpp` yet, so `monsterAttacking` stays permanently false and
+      monsters never actually act on their own). And finally `ESGame`'s
+      own screen-wiring loop (character creation, menus, dialogue,
+      shops -- the full `Shop.dialogue()` dispatcher traced while
+      scoping M28 is still unported, only its `npcstrings.dat` text
+      itself loads so far, M8) tying it all together in place of M20's
+      fixed stand-in character. Each gets its own milestone once the
+      shape of "how much fits in one slice" is clearer -- following
       `shadowkey-decomp`'s pattern of not over-planning milestones far
       in advance of actually reaching them.
