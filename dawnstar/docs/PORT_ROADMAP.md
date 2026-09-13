@@ -1775,16 +1775,92 @@ milestone rather than just read-through.
       self-targeted cast's blue "selfSpellFlash" swirl alongside its
       own real message popup -- before the diagnostic was removed.
 
+- [x] **M34 -- the interact action (chest looting)** (this session).
+      The third of `dispatchTickActions()`'s priority-ordered actions
+      to land, and it outranks all of cast/cycle/attack, matching the
+      original's own ordering exactly (camp/options remain unwired --
+      each still needs UI this port doesn't have yet).
+
+      New `'I'` key, gated on `hotbarContext == 2` the same way
+      `GameCanvas.keyPressed()`'s own `key == 57` handler is (`if
+      (hotbarContext == 2) interactRequested = true;`). Unlike
+      cast/attack, `processInteract()` has no internal cooldown of its
+      own, so -- like M33's cycle key -- this is genuinely edge-
+      detected at full frame rate rather than polled every tick.
+      Reading `hotbarContext` at that same full frame rate (to apply
+      its gate at the exact moment of the keydown, like the original
+      really does) meant promoting `hotbarContext` itself from a
+      tick-local recomputed fresh every tick (M32/M33) to a persistent
+      `wWinMain` local only ever *reassigned* inside the tick-gated
+      block -- a pure refactor, no behavior change, since every
+      existing reader of it (`attackActive`'s own gate) still reads
+      the exact same once-per-tick value it always did.
+
+      New `InteractTick::ProcessInteract` (a new `src/interact/`
+      module, `dawnstar_interact` -- its own small library for the same
+      reason `dawnstar_combat` is one: it needs `dawnstar_player`
+      (`PlayerInventory::AddItem`), `dawnstar_dungeon`
+      (`DungeonRuntime::RemoveChest`/`AddDroppedItem`), AND
+      `dawnstar_render` (the found-item/inventory-full popups) all at
+      once, none of which may depend on each other) ports
+      `processInteract()` in full. The `npcInSight >= 0` branch is a
+      deliberate no-op stand-in -- `openNpcDialogue()` needs
+      `Shop.dialogue()`'s actual line-selection logic (only
+      `npcstrings.dat`'s raw text loads so far, M8) plus a whole
+      `GenericInfoUI` screen, neither of which exists yet; same "the
+      branch exists, but does nothing until its own UI milestone
+      lands" shape as M32's monsterType-42 end-of-game-UI skip. The
+      chest-loot half (`Player.pickUpDroppedItem()`) is fully ported,
+      including two real preserved quirks: (1) the original's
+      `result == -1` ("Chest locked!") branch is dead code --
+      `pickUpDroppedItem()`'s own current body never actually returns
+      -1, so there was nothing to reproduce there; (2) a chest record
+      whose itemId low byte is 86 (`world/dungeon_generator.h`'s own
+      "extended itemId" encoding, where the record's last byte holds
+      the real id's high byte) is picked up as the literal byte 86 --
+      `pickUpDroppedItem()` never resolves that high byte back into
+      the real id, unlike `DungeonGenerator`'s own write side that
+      encoded it. A real, silently-inert bug, confirmed by reading
+      `Player.java` directly and ported exactly rather than "fixed".
+
+      Verified via the new `interact_tick_smoke.exe` against the real
+      37-level generated world (a real pre-placed chest spawn):
+      chestInSight==false and npcInSight>=0 both confirmed as hard
+      no-ops; a successful loot's inventory/popup/registry/tile-bit
+      effects all checked against the real chest's own itemId; a
+      full-inventory loot confirmed to still remove the chest from the
+      registry while routing the item to a floor-dropped record
+      instead (matching the original's own floor-drop branch exactly);
+      and -- found by scanning the real generated world for actual
+      low-byte-86 chests, the same way M24 first surfaced that
+      encoding, rather than a synthetic one -- a real extended-itemId
+      chest confirmed to add literal item 86, reproducing the
+      preserved bug against real generation data, not a hand-built
+      example. (Caught and fixed a real test bug of this milestone's
+      own along the way: an early draft's scan iterated
+      `world.chests[level]` with a range-based `for` while
+      `ProcessInteract`'s own `RemoveChest` call erased entries from
+      that same live map mid-iteration -- undefined behavior that
+      segfaulted; fixed by collecting matching candidates into a
+      separate list first, then dispatching the interact call
+      afterward.) All checks passed. Full clean rebuild zero warnings;
+      all 32 smoke tests pass. Also rendered two real frames via a
+      temporary diagnostic (a real generated level, a real chest)
+      confirming the interact hotbar (context 2) before looting and a
+      real "IVORY CLASP" found-item popup with the hotbar correctly
+      reverted to context 0 after -- before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M34 and beyond (not yet planned in detail):** every remaining
-      `showMessage()` call site beyond what M30/M32/M33 already wired
-      up stays unreachable until camp/menu actions are themselves
-      wired into the live tick loop. And finally `ESGame`'s own
-      screen-wiring loop (character creation, menus, dialogue, shops --
-      the full `Shop.dialogue()` dispatcher traced while scoping M28 is
-      still unported, only its `npcstrings.dat` text itself loads so
-      far, M8) tying it all together in place of M20's fixed stand-in
+- [ ] **M35 and beyond (not yet planned in detail):** every remaining
+      `showMessage()` call site beyond what M30/M32/M33/M34 already
+      wired up stays unreachable until camp/options actions (and
+      `openNpcDialogue`'s own dialogue UI) are themselves wired into
+      the live tick loop. And finally `ESGame`'s own screen-wiring loop
+      (character creation, menus, dialogue, shops -- the full `Shop.
+      dialogue()` dispatcher traced while scoping M28 is still
+      unported, only its `npcstrings.dat` text itself loads so far,
+      M8) tying it all together in place of M20's fixed stand-in
       character. Each gets its own milestone once the shape of "how
       much fits in one slice" is clearer -- following
       `shadowkey-decomp`'s pattern of not over-planning milestones far

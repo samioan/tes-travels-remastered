@@ -111,6 +111,17 @@ add_library(dawnstar_combat STATIC
 target_include_directories(dawnstar_combat PUBLIC src)
 target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster dawnstar_dungeon dawnstar_render)
 
+# M34: the interact action (chest looting), needing dawnstar_player
+# (PlayerInventory::AddItem) + dawnstar_dungeon (chest/dropped-item
+# registry) + dawnstar_render (the found-item/inventory-full popups) at
+# once -- same "own small module, no cycle" shape as dawnstar_combat
+# above. See docs/PORT_ROADMAP.md and src/interact/.
+add_library(dawnstar_interact STATIC
+  src/interact/interact_tick.cpp
+)
+target_include_directories(dawnstar_interact PUBLIC src)
+target_link_libraries(dawnstar_interact PUBLIC dawnstar_player dawnstar_dungeon dawnstar_render)
+
 # M22/M24: the live per-level monster/chest/dropped-item registry (needs
 # both World and Monster), now also populated from world generation
 # itself -- see docs/PORT_ROADMAP.md and src/dungeon/.
@@ -132,7 +143,7 @@ add_executable(dawnstar_port WIN32
   src/platform/win32/window.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
-target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat)
+target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact)
 if(WIN32)
   target_compile_definitions(dawnstar_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_link_libraries(dawnstar_port PRIVATE user32 gdi32)
@@ -267,3 +278,7 @@ target_link_libraries(combat_tick_smoke PRIVATE dawnstar_combat)
 # M33 milestone smoke test -- see src/tests/m33_spellcast_tick_smoke.cpp.
 add_executable(spellcast_tick_smoke src/tests/m33_spellcast_tick_smoke.cpp)
 target_link_libraries(spellcast_tick_smoke PRIVATE dawnstar_combat)
+
+# M34 milestone smoke test -- see src/tests/m34_interact_tick_smoke.cpp.
+add_executable(interact_tick_smoke src/tests/m34_interact_tick_smoke.cpp)
+target_link_libraries(interact_tick_smoke PRIVATE dawnstar_interact)

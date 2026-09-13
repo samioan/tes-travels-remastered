@@ -25,6 +25,7 @@
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
+#include "interact/interact_tick.h"
 #include "platform/win32/window.h"
 #include "player/player_creation.h"
 #include "player/player_movement.h"
@@ -114,6 +115,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // real once-per-tick consumption.
     bool spellCycleKeyWasDown = false;
     bool spellCyclePending = false;
+    // GameCanvas.interactRequested -- same discrete-keydown-event shape
+    // as spellCycleRequested above (no internal cooldown of its own),
+    // captured the same full-frame-rate edge-detected way, but ALSO
+    // gated on `hotbarContext == 2` at the moment of the keydown itself
+    // (GameCanvas.keyPressed()'s own `key == 57` handler: `if
+    // (hotbarContext == 2) interactRequested = true;`) -- hence
+    // `hotbarContext` itself is hoisted to a persistent local below
+    // (rather than a fresh one recomputed inside the tick-gated block
+    // every tick, as it was through M32/M33) so this full-frame-rate
+    // check can read "hotbarContext as of the end of the last tick",
+    // exactly like a real device's keyPressed() would.
+    bool interactKeyWasDown = false;
+    bool interactPending = false;
+    // GameCanvas.hotbarContext -- see interactKeyWasDown's own doc
+    // comment above for why this is now a persistent local instead of a
+    // tick-local one.
+    int hotbarContext = 0;
     // GameCanvas.lastAttackTime -- a GameCanvas field, not one of
     // Player's own, so kept here rather than folded into PlayerState
     // (same reasoning as M30's MessagePopupState being kept separate --
@@ -206,6 +224,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             }
             spellCycleKeyWasDown = spellCycleKeyDown;
 
+            // GameCanvas.keyPressed()'s own `key == 57` handler
+            // (interactRequested, gated on hotbarContext == 2) -- same
+            // full-frame-rate edge detection as cycle above, but with
+            // that extra hotbarContext gate reproduced at the exact same
+            // point the original checks it (inside the keydown handler
+            // itself, reading whatever hotbarContext currently holds).
+            bool interactKeyDown = KeyPressed('I');
+            if (interactKeyDown && !interactKeyWasDown && hotbarContext == 2) {
+                interactPending = true;
+            }
+            interactKeyWasDown = interactKeyDown;
+
             if (clock.ConsumeTick()) {
                 // GameCanvas.run()'s own `now = System.
                 // currentTimeMillis()`, sampled once per tick and reused
@@ -219,20 +249,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // whatever action that tick's dispatch takes, matching
                 // the original's own real timing: paintHotbar's write to
                 // this field only ever happens once per repaint, right
-                // after a tick's dispatch has already run).
-                int hotbarContext = dawnstar::HotbarRenderer::ComputeHotbarContext(
-                    player.monsterTargeted, player.chestInSight, player.npcInSight);
+                // after a tick's dispatch has already run). Reassigns
+                // the persistent local declared above (M34) rather than
+                // a fresh tick-local one, since the interact key's own
+                // full-frame-rate edge detection needs to read this same
+                // value between ticks too.
+                hotbarContext = dawnstar::HotbarRenderer::ComputeHotbarContext(player.monsterTargeted,
+                                                                                 player.chestInSight, player.npcInSight);
 
                 // GameCanvas.dispatchTickActions()'s own if/else-if
                 // priority chain: only camp/interact/cast/cycle/attack/
                 // options/unusedKey9/move ever fires per tick, never
-                // more than one. Cast/cycle/attack/move are wired so far
-                // (camp/interact/options still need UI this port doesn't
-                // have yet -- camp state, shop dialogue, an options
-                // menu); cast outranks cycle outranks attack outranks
-                // move, matching the original's own ordering exactly
-                // (interactRequested's own higher rank is moot until
-                // it's wired, since nothing sets it yet).
+                // more than one. Interact/cast/cycle/attack/move are
+                // wired so far (camp/options still need UI this port
+                // doesn't have yet -- camp state, an options menu);
+                // interact outranks cast outranks cycle outranks attack
+                // outranks move, matching the original's own ordering
+                // exactly.
                 //
                 // Cast, like attack, is polled every tick rather than
                 // edge-detected: GameCanvas.keyPressed()'s own
@@ -246,7 +279,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 bool attackActive = KeyPressed('A') && hotbarContext == 1;
 
                 bool moveAttempted = false;
-                if (castActive) {
+                if (interactPending) {
+                    dawnstar::InteractTick::ProcessInteract(player, levels, world, items, messagePopup, nowMs);
+                    interactPending = false;
+                } else if (castActive) {
                     dawnstar::CombatTick::ProcessSpellCast(player, levels, world, monsters, items, charData, spells,
                                                             messagePopup, globalRng, nowMs, lastSpellCastTimeMs,
                                                             spellHitFlash, selfSpellFlash);
