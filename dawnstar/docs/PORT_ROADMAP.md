@@ -2300,21 +2300,102 @@ milestone rather than just read-through.
       Cancel at all) confirming all five are legible and correct --
       before the diagnostic was removed.
 
+- [x] **M39 -- the real in-game options menu** (this session). Wires
+      `ESGame`'s own `OptionsUI` (secondaryParam 31, opened by
+      `GameCanvas.openOptionsMenu()` -- the numeric-keypad '7' key,
+      remapped to 'O' for a PC keyboard) via a new `ui/options_menu.h`/
+      `.cpp` (`OptionsMenu`), the in-game counterpart to M38's own
+      `MenuFlow`. A real, confirmed behavior this milestone had to
+      reproduce correctly, caught by reading `GameCanvas.run()` itself
+      before writing any wiring: whenever any real `Screen` (`activeScreen
+      != null`) is showing, the original's own per-tick loop skips
+      `dispatchTickActions()` ENTIRELY (not just rendering) -- opening
+      this menu genuinely pauses movement/combat/camp/interact/casting,
+      the same way M35's camping screen replaces `paintGameView()`
+      outright, just one level higher. `main.cpp`'s own new
+      `inOptionsMenu` flag is an early-return gate for exactly this
+      reason (mirroring `inMenu`'s own shape), not merely an overlay; the
+      'O' key itself is captured as a tick-gated pending flag (like
+      interact/camp) so it still respects the original's real
+      camp-outranks-interact-outranks-cast-outranks-cycle-outranks-attack-
+      outranks-options-outranks-move dispatch priority, rather than
+      preempting at full frame rate the way the 'M' zoom key does.
+
+      Reproduces, from secondaryParam==31's own real dispatch: "Stats"
+      (secondaryParam 32, `Player.buildCharacterSheet()` transcribed
+      line-for-line -- name/class/level/HP/Magicka/Fatigue (via the
+      already-verified `PlayerCombatStats::EffectiveStat`, M14) /active
+      ailments (`HasAilment`)/gift points/all 8 attributes); "Clue Log"
+      (secondaryParam 60/61, `ESGame.newClueLogUI()` transcribed exactly
+      -- a real, intricate lookup this milestone had to trace carefully:
+      a "Rumors" entry pooling any suspect's own revealed rumor steps via
+      `Shop.RUMOR_STRING_OFFSET[traitorIndex]`, and 4 named-suspect
+      entries each checking 6 topics x 3 "asked" flags against TWO
+      parallel offset tables (`UNCONFIRMED_A`/`_B`) -- `_B` (the
+      traitor's own admission) only when that suspect IS the player's
+      real, hidden `traitorIndex` AND a second confirmation flag
+      (`eventFlags[72+...]`) is set, with a `bump` value that resets only
+      once per topic-row, not per flag -- all sourced from the real
+      npcstrings.dat `ShopDialogue` (M8), which becomes real production
+      code for the first time here (previously loaded only by its own
+      M8 smoke test); "Help" (reopens the real M8 `HelpText` topic list,
+      entered with `helpUI.backTarget = OptionsUI` -- SIMPLIFIED: a
+      separate `Screen` instance from M38's own `MenuFlow::helpTopics_`,
+      not literally the same shared object the original's single
+      `ESGame.helpUI` field is, but provably unobservable in this port's
+      own control flow, since nothing here ever lets a player return to
+      `MenuFlow`'s own screens once a game has actually started); and
+      "Quit Game" (`newConfirmQuitUI`, reusing the exact same real
+      "either Yes or No exits" bug M38 already established).
+
+      Deliberately DEFERRED as real, silent no-ops (same "Continue Game"
+      precedent M38 established): "Inventory"/"Skills"/"Spells" (each
+      needs its own summary-list screen); "Save Game"/"Load Game" (real
+      file I/O plus `LoadingScreen`'s own background-thread machinery --
+      `PlayerSave` only (de)serializes to/from an in-memory buffer so
+      far); "Reveal Traitor" (secondaryParam 68/65/66's own multi-screen
+      "who is the traitor?" mini-quiz, which on a correct guess calls
+      `grantStarFrostItem()`/sets `newGamePlus`/`ambushTimer`, none of
+      which are ported).
+
+      Verified via the new `options_menu_smoke.exe`: the full navigation
+      graph (Stats -> Options; each deferred action leaves Options
+      showing; Clue Log -> a suspect entry -> Clue Log -> Options; Help
+      -> a topic's body -> Help -> Options; Quit Game -> confirmation ->
+      Cancel no-op -> "No" still exits) plus 3 independently-recomputed
+      Clue Log scenarios (a named suspect via `UNCONFIRMED_A`; "Rumors"
+      via `RUMOR_STRING_OFFSET`; the traitor's own admission via
+      `UNCONFIRMED_B`) checked against the real npcstrings.dat content,
+      using RUMOR_STRING_OFFSET/UNCONFIRMED_A/UNCONFIRMED_B tables
+      transcribed AGAIN independently in the test file (not reused from
+      options_menu.cpp) so the test isn't just checking its own
+      implementation's arithmetic against itself -- the same standard
+      M38's own MenuFlow test already set for `secondaryParam` dispatch.
+      The real character sheet is checked the same way (an independently
+      reconstructed expected string, not calling into options_menu.cpp's
+      own internal `BuildCharacterSheet`). All checks passed (after this
+      milestone's own test-authoring bug -- forgetting Clue Log's own
+      `selectedIndex_` persists across visits just like M38's Main Menu,
+      so a stale "Rumors" selection leaked into what was meant to be a
+      fresh "Alhavara" scenario -- was caught and fixed). Full clean
+      rebuild zero warnings; all 37 smoke tests pass; also rendered 6
+      real frames via a temporary diagnostic (Options, Stats, Clue Log,
+      a real clue entry, Help, and the quit confirmation) confirming all
+      six are legible and correct -- before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M39 and beyond (not yet planned in detail):** `ESGame`'s own
-      remaining screen-wiring (character creation's real class-selection/
-      name-entry flow -- including a raw MIDP `TextField` form Screen
-      itself never models; the in-game options menu and its own 10
-      actions (stats/inventory/skills/spells/save/load/reveal-traitor/
-      quit); NPC dialogue; shops -- the full `Shop.dialogue()` dispatcher
-      traced while scoping M28 is still unported, only its
-      `npcstrings.dat` text itself loads so far, M8) that CONSTRUCTS the
-      rest of `ESGame`'s real `Screen`s (M37) and dispatches their
-      commands via the now-corrected `secondaryParam` semantics (M38).
-      Once that lands, every remaining `showMessage()` call site beyond
-      what M30/M32-M36/M38 already wired up stops being permanently
-      unreachable. Gets its own milestone (likely several) once the
+- [ ] **M40 and beyond (not yet planned in detail):** `ESGame`'s own
+      remaining screen-wiring: character creation's real class-selection/
+      name-entry flow (including a raw MIDP `TextField` form Screen
+      itself never models); the "Inventory"/"Skills"/"Spells" Options
+      actions M39 deferred (each needs its own summary-list screen);
+      "Save Game"/"Load Game" (real file I/O, `LoadingScreen`'s own
+      background-thread machinery); "Reveal Traitor"'s own multi-screen
+      mini-quiz; NPC dialogue (needs `Shop.dialogue()`'s real
+      line-selection logic -- M39 only reused the raw npcstrings.dat
+      text `ShopDialogue` already loads, for Clue Log, not that
+      selection logic itself); shops. Gets its own milestone(s) once the
       shape of "how much fits in one slice" is clearer -- following
       `shadowkey-decomp`'s pattern of not over-planning milestones far
       in advance of actually reaching them.

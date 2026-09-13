@@ -65,6 +65,9 @@ target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 # standing up a whole new library for one self-contained class. M38's
 # src/ui/menu_flow.cpp (the real main-menu/help/credits/quit-confirm
 # navigation flow built on top of Screen) needs nothing further either.
+# M39's src/ui/options_menu.cpp (the real in-game options menu) needs
+# player/player_combat_stats.h (EffectiveStat/HasAilment) on top of
+# that -- already available transitively via dawnstar_player below.
 add_library(dawnstar_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -75,6 +78,7 @@ add_library(dawnstar_render STATIC
   src/render/visible_object_renderer.cpp
   src/ui/screen.cpp
   src/ui/menu_flow.cpp
+  src/ui/options_menu.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon)
@@ -320,3 +324,7 @@ target_link_libraries(screen_smoke PRIVATE dawnstar_render)
 # M38 milestone smoke test -- see src/tests/m38_menu_flow_smoke.cpp.
 add_executable(menu_flow_smoke src/tests/m38_menu_flow_smoke.cpp)
 target_link_libraries(menu_flow_smoke PRIVATE dawnstar_render)
+
+# M39 milestone smoke test -- see src/tests/m39_options_menu_smoke.cpp.
+add_executable(options_menu_smoke src/tests/m39_options_menu_smoke.cpp)
+target_link_libraries(options_menu_smoke PRIVATE dawnstar_render)

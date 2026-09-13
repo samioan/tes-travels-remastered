@@ -4,8 +4,13 @@
 // (M9/M10) into the actual windowed app -- previously this just
 // presented a solid-color placeholder backbuffer (see
 // docs/PORT_ROADMAP.md's M20 entry). Arrow keys move/turn at the
-// engine's fixed 250ms tick rate; there is no menu/character-creation
-// UI yet, so this always starts a fixed class-0 character.
+// engine's fixed 250ms tick rate. M38 added the real main-menu/help/
+// credits/quit-confirm flow shown before a game starts (`inMenu`); M39
+// added the real in-game options menu (`inOptionsMenu`, the 'O' key --
+// see ui/options_menu.h). Character creation itself is still M20's own
+// fixed class-0 stand-in -- the original's real class-selection/
+// name-entry flow stays unported (see ui/menu_flow.h's own class
+// comment).
 #include <windows.h>
 
 #include <array>
@@ -22,6 +27,7 @@
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
 #include "assets/monster_image_names.h"
+#include "assets/shop_dialogue.h"
 #include "assets/spell_database.h"
 #include "camp/camp_tick.h"
 #include "combat/combat_tick.h"
@@ -42,6 +48,7 @@
 #include "render/minimap_renderer.h"
 #include "render/visible_object_renderer.h"
 #include "ui/menu_flow.h"
+#include "ui/options_menu.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
 #include "world/dungeon_view.h"
@@ -139,6 +146,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // keydown.
     bool campKeyWasDown = false;
     bool campPending = false;
+    // GameCanvas.keyPressed()'s own `key == 55` handler (optionsRequested)
+    // -- same discrete-keydown-event shape as interact/camp above (no
+    // hotbarContext gate this time, matching the original's own handler
+    // exactly), consumed at the same point in the tick's own priority
+    // chain `dispatchTickActions()` checks it (right after attack,
+    // before movement) -- see M39's own `inOptionsMenu` doc comment
+    // below for why opening it needs to be a tick-gated event at all
+    // (not just full-frame-rate like the 'M' zoom key) to preserve that
+    // real priority ordering against camp/interact/cast/cycle/attack.
+    bool optionsKeyWasDown = false;
+    bool optionsPending = false;
     // GameCanvas.hotbarContext -- see interactKeyWasDown's own doc
     // comment above for why this is now a persistent local instead of a
     // tick-local one. Only ever reassigned inside a tick whose camp
@@ -206,6 +224,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool menuSelectKeyWasDown = false;
     bool menuCancelKeyWasDown = false;
 
+    // M39: whether the real in-game options menu (`../src/ESGame.java`'s
+    // own `OptionsUI`, see ui/options_menu.h) is currently showing.
+    // `GameCanvas.run()`'s own per-tick loop takes a completely
+    // different branch whenever `activeScreen != null` -- it skips
+    // `dispatchTickActions()` (movement/combat/camp/interact/casting,
+    // ALL of it) entirely, only repainting; `keyPressed()` similarly
+    // routes every key straight to `activeScreen.handleKey()` instead of
+    // any game key at all. So this early-returns exactly like `inMenu`
+    // above, rather than merely overlaying the game view -- see
+    // OptionsMenu's own class comment for the full writeup.
+    bool inOptionsMenu = false;
+    bool optionsMenuUpKeyWasDown = false;
+    bool optionsMenuDownKeyWasDown = false;
+    bool optionsMenuSelectKeyWasDown = false;
+    bool optionsMenuCancelKeyWasDown = false;
+
     // Same default-relative-path convention every console smoke test
     // uses (see e.g. tests/m10_frame_render_smoke.cpp) -- this exe also
     // lands in build/, two levels above dawnstar/extracted/.
@@ -219,6 +253,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::CharacterData charData = dawnstar::CharacterData::Load(archive);
         dawnstar::DungeonGeometry geometry = dawnstar::DungeonGeometry::Load(archive);
         dawnstar::HelpText helpText = dawnstar::HelpText::Load(archive);
+        // M39: npcstrings.dat is NOT bundled inside datfiles.lmp (see
+        // assets/shop_dialogue.h's own doc comment) -- loaded from its
+        // own top-level file, same convention as datfiles.lmp/
+        // imgfiles.lmp themselves.
+        dawnstar::ShopDialogue shopDialogue = dawnstar::ShopDialogue::Load(root + "/npcstrings.dat");
         dawnstar::ImgArchive imageArchive(root + "/imgfiles.lmp");
         dawnstar::FrameTextures textures = dawnstar::FrameTextures::Load(imageArchive);
         dawnstar::MonsterImageNames monsterImageNames = dawnstar::MonsterImageNames::Load(archive);
@@ -250,6 +289,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // now reached through a real menu selection instead of
         // automatically.
         dawnstar::MenuFlow menuFlow(helpText);
+        // M39: the real in-game options menu -- constructed here (not
+        // lazily once a game starts) since HelpText/ShopDialogue are
+        // both already loaded and it needs nothing else at construction
+        // time (see OptionsMenu::OnSelect's own doc comment on why the
+        // player/character data are passed in fresh per call instead).
+        // Passed BY VALUE (copied, not moved) below, same convention
+        // `menuFlow`'s own HelpText parameter already uses.
+        dawnstar::OptionsMenu optionsMenu(helpText, shopDialogue);
         std::optional<dawnstar::PlayerState> playerSlot;
 
         window.RunMessageLoop([&] {
@@ -284,6 +331,51 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 menuSelectKeyWasDown = selectDown;
 
                 menuFlow.Render(backbuffer);
+                window.Present(backbuffer);
+                return;
+            }
+
+            // M39: only reachable once `playerSlot` holds a character
+            // (inOptionsMenu is only ever set true from inside the
+            // tick-gated dispatch further below, itself only reachable
+            // once `inMenu` is false) -- see `inOptionsMenu`'s own doc
+            // comment above for why this mirrors the `inMenu` branch's
+            // shape (an early return, not an overlay).
+            if (inOptionsMenu) {
+                dawnstar::PlayerState& optionsPlayer = *playerSlot;
+
+                bool upDown = KeyPressed(VK_UP);
+                if (upDown && !optionsMenuUpKeyWasDown) optionsMenu.OnUp();
+                optionsMenuUpKeyWasDown = upDown;
+
+                bool downDown = KeyPressed(VK_DOWN);
+                if (downDown && !optionsMenuDownKeyWasDown) optionsMenu.OnDown();
+                optionsMenuDownKeyWasDown = downDown;
+
+                bool cancelDown = KeyPressed(VK_ESCAPE);
+                if (cancelDown && !optionsMenuCancelKeyWasDown) {
+                    if (optionsMenu.OnCancel() == dawnstar::OptionsMenuAction::ReturnToGame) {
+                        inOptionsMenu = false;
+                    }
+                }
+                optionsMenuCancelKeyWasDown = cancelDown;
+
+                bool selectDown = KeyPressed(VK_RETURN);
+                if (selectDown && !optionsMenuSelectKeyWasDown) {
+                    switch (optionsMenu.OnSelect(optionsPlayer, charData)) {
+                        case dawnstar::OptionsMenuAction::ReturnToGame:
+                            inOptionsMenu = false;
+                            break;
+                        case dawnstar::OptionsMenuAction::Exit:
+                            window.Close();
+                            break;
+                        case dawnstar::OptionsMenuAction::None:
+                            break;
+                    }
+                }
+                optionsMenuSelectKeyWasDown = selectDown;
+
+                optionsMenu.Render(backbuffer);
                 window.Present(backbuffer);
                 return;
             }
@@ -336,6 +428,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             }
             campKeyWasDown = campKeyDown;
 
+            // GameCanvas.keyPressed()'s own `key == 55` handler
+            // (optionsRequested) -- same full-frame-rate edge detection
+            // as interact/camp above, but with NO hotbarContext gate
+            // (matching the original's own handler, which sets this
+            // unconditionally). Remapped from the original's own
+            // numeric-keypad '7' to 'O' for a PC keyboard -- see
+            // `inOptionsMenu`'s own doc comment above for what actually
+            // opening this menu does.
+            bool optionsKeyDown = KeyPressed('O');
+            if (optionsKeyDown && !optionsKeyWasDown) {
+                optionsPending = true;
+            }
+            optionsKeyWasDown = optionsKeyDown;
+
             if (clock.ConsumeTick()) {
                 // GameCanvas.run()'s own `now = System.
                 // currentTimeMillis()`, sampled once per tick and reused
@@ -386,12 +492,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     // GameCanvas.dispatchTickActions()'s own if/else-if
                     // priority chain: only camp/interact/cast/cycle/
                     // attack/options/unusedKey9/move ever fires per
-                    // tick, never more than one. Camp/interact/cast/
-                    // cycle/attack/move are wired so far (options alone
-                    // still needs UI this port doesn't have yet -- an
-                    // options menu); camp outranks interact outranks
-                    // cast outranks cycle outranks attack outranks move,
-                    // matching the original's own ordering exactly.
+                    // tick, never more than one. camp outranks interact
+                    // outranks cast outranks cycle outranks attack
+                    // outranks options outranks move, matching the
+                    // original's own ordering exactly. (unusedKey9 is
+                    // real dead code in the original -- see GameCanvas.
+                    // java's own `unusedKey9Request` field -- so it has
+                    // nothing to port.)
                     //
                     // Cast, like attack, is polled every tick rather
                     // than edge-detected: GameCanvas.keyPressed()'s own
@@ -431,6 +538,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                   globalRng, nowMs, lastAttackTimeMs)) {
                             monsterHitFlash = true;
                         }
+                    } else if (optionsPending) {
+                        // GameCanvas.dispatchTickActions()'s own
+                        // `optionsRequested` branch: `this.
+                        // openOptionsMenu();` -- just a display swap in
+                        // the original (`setCurrentDisplay(OptionsUI)`),
+                        // reproduced here as the same `inOptionsMenu`
+                        // early-return gate `inMenu` above already uses
+                        // (see its own doc comment for why that's the
+                        // faithful shape, not merely an overlay).
+                        inOptionsMenu = true;
+                        optionsPending = false;
                     } else if (!suppressMoveThisTick) {
                         // GameCanvas.run()'s own steady-250ms-tick
                         // cadence (see engine/game_clock.h) is also when
