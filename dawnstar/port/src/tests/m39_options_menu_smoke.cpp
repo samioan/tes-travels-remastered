@@ -18,9 +18,13 @@
 
 #include "assets/character_data.h"
 #include "assets/dat_archive.h"
+#include "assets/dungeon_geometry.h"
 #include "assets/help_text.h"
 #include "assets/item_database.h"
+#include "assets/monster_database.h"
 #include "assets/shop_dialogue.h"
+#include "assets/spell_database.h"
+#include "dungeon/dungeon_runtime.h"
 #include "graphics/backbuffer.h"
 #include "graphics/bitmap_font.h"
 #include "player/player_combat_stats.h"
@@ -30,12 +34,14 @@
 #include "ui/options_menu.h"
 #include "ui/screen.h"
 #include "util/java_random.h"
+#include "world/dungeon_generator.h"
 
 namespace {
 
 using dawnstar::Backbuffer;
 namespace BitmapFont = dawnstar::BitmapFont;
 using dawnstar::CharacterData;
+using dawnstar::GeneratedLevel;
 using dawnstar::MessagePopup;
 using dawnstar::OptionsMenu;
 using dawnstar::OptionsMenuAction;
@@ -43,6 +49,7 @@ using dawnstar::PlayerCombatStats;
 using dawnstar::PlayerState;
 using dawnstar::Screen;
 using dawnstar::ShopDialogue;
+using dawnstar::WorldRegistry;
 
 bool g_ok = true;
 
@@ -138,11 +145,32 @@ int main(int argc, char** argv) {
     try {
         dawnstar::DatArchive archive(root + "/datfiles.lmp");
         dawnstar::ItemDatabase items = dawnstar::ItemDatabase::Load(archive);
+        dawnstar::MonsterDatabase monsterDb = dawnstar::MonsterDatabase::Load(archive);
+        dawnstar::SpellDatabase spells = dawnstar::SpellDatabase::Load(archive);
         CharacterData charData = CharacterData::Load(archive);
+        dawnstar::DungeonGeometry geometry = dawnstar::DungeonGeometry::Load(archive);
         dawnstar::HelpText helpText = dawnstar::HelpText::Load(archive);
         ShopDialogue shopDialogue = ShopDialogue::Load(root + "/npcstrings.dat");
         Check(shopDialogue.groups.size() == 10 && shopDialogue.groups[9].size() == 77,
               "the real npcstrings.dat should have 10 groups, group 9 with 77 entries (M8)");
+
+        // M41's own OnSelect signature grew `items`/`spells`/`levels`/
+        // `world` (needed by the now-real Inventory/Skills/Spells
+        // actions) -- this test doesn't exercise those in depth itself
+        // (see m41_inventory_skills_spells_smoke.cpp for that), so a
+        // real, minimally-built world is only here to satisfy the
+        // signature, same "real data everywhere, even where a test
+        // doesn't stress it" standard every other test already holds to.
+        std::vector<GeneratedLevel> levels;
+        WorldRegistry world(geometry.rows.size());
+        for (size_t i = 0; i < geometry.rows.size(); i++) {
+            int levelNumber = static_cast<int>(i) + 1;
+            levels.push_back(levelNumber == 1
+                                  ? dawnstar::DungeonGenerator::BuildHubLevel(geometry.rows[0])
+                                  : dawnstar::DungeonGenerator::PopulateLevel(levelNumber, geometry.rows[i], items,
+                                                                              monsterDb));
+            dawnstar::DungeonRuntime::RegisterGeneratedSpawns(levels.back(), world);
+        }
 
         dawnstar::JavaRandom rng(12345);
         PlayerState player = dawnstar::PlayerCreation::CreateCharacter(0, "Traveler", charData, items, rng);
@@ -162,7 +190,7 @@ int main(int argc, char** argv) {
               "the Options list's own first item should render (\"Stats\")");
 
         // --- B: "Stats" (index 0) -> the real character sheet. ---
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
               "selecting Stats should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -171,25 +199,27 @@ int main(int argc, char** argv) {
         std::vector<std::string> expectedSheetLines = MessagePopup::WordWrap(expectedSheet, Screen::width() - 5 - 5);
         Check(TextRenderedAt(bb, 5, 20, expectedSheetLines[0], kItemTextColor),
               "the Stats screen should show the real character sheet's own first (word-wrapped) line");
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "Ok on Stats is not a main.cpp-level action");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "Ok on Stats is not a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, "Options"), "Ok on Stats should return to Options");
 
-        // --- C: deferred no-ops (Inventory/Skills/Spells/Save/Load/
-        // Reveal Traitor -- see OptionsMenu's own header doc comment on
-        // why each still needs a whole system this port hasn't built
-        // yet). Each iteration forces the selection back to a known
-        // index (0) first via repeated OnUp() calls, then steps down to
-        // the target index -- same "real Screen instances persist their
-        // own selectedIndex across visits rather than resetting"
-        // precedent M38's own test already established. ---
-        for (int idx : {1, 3, 4, 5, 6, 8}) {
+        // --- C: deferred no-ops (Save Game/Load Game/Reveal Traitor --
+        // see OptionsMenu's own header doc comment on why each still
+        // needs a whole system this port hasn't built yet; Inventory/
+        // Skills/Spells became real in M41, see
+        // m41_inventory_skills_spells_smoke.cpp instead). Each iteration
+        // forces the selection back to a known index (0) first via
+        // repeated OnUp() calls, then steps down to the target index --
+        // same "real Screen instances persist their own selectedIndex
+        // across visits rather than resetting" precedent M38's own test
+        // already established. ---
+        for (int idx : {5, 6, 8}) {
             // Navigate Options back to a known index (0) first, then
             // step down to `idx`.
             for (int i = 0; i < 10; i++) menu.OnUp();
             for (int i = 0; i < idx; i++) menu.OnDown();
-            Check(menu.OnSelect(player, charData) == OptionsMenuAction::None,
+            Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
                   "a deferred Options action should be a real, silent no-op");
             bb.Fill(0);
             menu.Render(bb);
@@ -203,7 +233,7 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 10; i++) menu.OnUp();
         menu.OnDown();
         menu.OnDown();  // index 0 -> 1 -> 2 ("Clue Log")
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
               "selecting Clue Log should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -222,7 +252,7 @@ int main(int argc, char** argv) {
         // dialogue[9][5+19] = dialogue[9][24].
         player.traitorIndex = 2;
         player.eventFlags[0] = true;
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
               "selecting a Clue Log suspect should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -233,7 +263,7 @@ int main(int argc, char** argv) {
               "Alhavara's own clue entry should match the real, independently-recomputed UNCONFIRMED_A lookup");
 
         // Ok on a Clue Log entry returns to Clue Log, not Options.
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "Ok on a Clue Log entry is not a main.cpp-level action");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "Ok on a Clue Log entry is not a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, "Clue Log"), "Ok on a Clue Log entry should return to Clue Log, not Options");
@@ -245,7 +275,7 @@ int main(int argc, char** argv) {
         player.eventFlags[90] = true;  // Rumors reveal-step 0.
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < 4; i++) menu.OnDown();  // index 0 -> ... -> 4 ("Rumors")
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
               "selecting Rumors should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -258,7 +288,7 @@ int main(int argc, char** argv) {
         // --- F: the traitor's own admission (UNCONFIRMED_B), when
         // idx == the player's real traitorIndex AND the extra
         // eventFlags[72+...] confirmation flag is also set. ---
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "Ok on Rumors returns to Clue Log");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "Ok on Rumors returns to Clue Log");
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, "Clue Log"), "Ok on Rumors should return to Clue Log");
@@ -273,13 +303,13 @@ int main(int argc, char** argv) {
         for (int i = 0; i < 10; i++) menu.OnUp();
         menu.OnDown();
         menu.OnDown();  // Options -> Clue Log
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "re-entering Clue Log should be a no-op action");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "re-entering Clue Log should be a no-op action");
         // clueLog_'s own selectedIndex_ is still 4 ("Rumors", from
         // scenario E above) -- real Screen state persisting across
         // visits, same M38 precedent section C's own comment already
         // cites -- so it's forced back to 0 ("Alhavara") first.
         for (int i = 0; i < 10; i++) menu.OnUp();
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "selecting Alhavara again should be a no-op action");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "selecting Alhavara again should be a no-op action");
         bb.Fill(0);
         menu.Render(bb);
         // Same (row=0,col=0,bump=1) slot as scenario 1 above, but now
@@ -293,7 +323,7 @@ int main(int argc, char** argv) {
 
         // --- G: Ok back to Clue Log, then Cancel on Clue Log returns to
         // Options. ---
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "Ok on the traitor's own entry returns to Clue Log");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "Ok on the traitor's own entry returns to Clue Log");
         menu.OnCancel();
         bb.Fill(0);
         menu.Render(bb);
@@ -304,15 +334,15 @@ int main(int argc, char** argv) {
         // -> Cancel back to Options. ---
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < 7; i++) menu.OnDown();
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "selecting Help should not itself be a main.cpp-level action");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "selecting Help should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, "Help"), "selecting Help should show the real Help topic list");
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "selecting a Help topic should not itself be a main.cpp-level action");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "selecting a Help topic should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, helpText.titles[0]), "the info screen should show the SELECTED topic's own real title");
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "Ok on a Help topic's body is not a main.cpp-level action");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "Ok on a Help topic's body is not a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, "Help"), "Ok on a Help topic's body should return to Help, not Options");
@@ -326,7 +356,7 @@ int main(int argc, char** argv) {
         // MenuFlow already established. ---
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < 9; i++) menu.OnDown();
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::None, "selecting Quit Game should show a confirmation, not exit immediately");
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None, "selecting Quit Game should show a confirmation, not exit immediately");
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, "Quit?"), "selecting Quit Game should show the real quit-confirmation prompt");
@@ -335,7 +365,7 @@ int main(int argc, char** argv) {
         menu.Render(bb);
         Check(TitleShownIs(bb, "Quit?"), "Cancel on the quit confirmation should be a real no-op (stays showing)");
         menu.OnDown();  // select "No"
-        Check(menu.OnSelect(player, charData) == OptionsMenuAction::Exit,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::Exit,
               "selecting \"No\" on the quit confirmation should STILL exit -- the real, preserved bug");
 
         // --- J: fresh OptionsMenu, Back on Options returns to the game. ---

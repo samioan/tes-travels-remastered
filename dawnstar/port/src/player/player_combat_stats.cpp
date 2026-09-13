@@ -203,6 +203,34 @@ void PlayerCombatStats::GainSkillExp(PlayerState& p, const CharacterData& charDa
     }
 }
 
+std::vector<std::string> PlayerCombatStats::KnownSkillsSummary(const PlayerState& p, const CharacterData& charData) {
+    std::vector<std::string> out;
+    for (int i = 0; i < 14; i++) {
+        if (p.skills[static_cast<size_t>(i)][0] > 0) {
+            out.push_back(charData.skillNames[static_cast<size_t>(i)] + ": " +
+                          std::to_string(p.skills[static_cast<size_t>(i)][0]));
+        }
+    }
+    return out;
+}
+
+int PlayerCombatStats::NthKnownSkillIndex(const PlayerState& p, int index) {
+    int seen = 0;
+    for (int i = 0; i < 14; i++) {
+        if (p.skills[static_cast<size_t>(i)][0] > 0) {
+            if (seen == index) return i;
+            seen++;
+        }
+    }
+    return -1;
+}
+
+std::string PlayerCombatStats::SkillTooltip(const PlayerState& p, const CharacterData& charData, int skillIndex) {
+    return charData.skillNames[static_cast<size_t>(skillIndex)] + "\nRank: " +
+           std::to_string(p.skills[static_cast<size_t>(skillIndex)][0]) + "\nExp: " +
+           std::to_string(p.skills[static_cast<size_t>(skillIndex)][2]) + "/10";
+}
+
 PlayerCombatStats::RollResult PlayerCombatStats::RollOutcome(int atkChance, int defChance, JavaRandom& globalRng) {
     int atkRoll = LingoRandomInt(globalRng, 100);
     int defRoll = LingoRandomInt(globalRng, 100);

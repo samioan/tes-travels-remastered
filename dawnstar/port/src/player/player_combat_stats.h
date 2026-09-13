@@ -1,4 +1,7 @@
 #pragma once
+#include <string>
+#include <vector>
+
 #include "assets/character_data.h"
 #include "assets/item_database.h"
 #include "player/player_state.h"
@@ -93,6 +96,15 @@ public:
     // point (coreStats[1]); reaching 10 level-exp points levels the
     // character up (coreStats[0]++) and sets p.levelUpPending.
     static void GainSkillExp(PlayerState& p, const CharacterData& charData, int skillIndex, int amount);
+
+    // "Skill: rank" strings for every skill with rank > 0 -- Player.java's
+    // knownSkillsSummary(), the real "Skills" Options-menu list (M41).
+    static std::vector<std::string> KnownSkillsSummary(const PlayerState& p, const CharacterData& charData);
+    // The `index`-th skill with rank > 0 (matching KnownSkillsSummary's
+    // ordering), or -1 -- Player.java's nthKnownSkillIndex().
+    static int NthKnownSkillIndex(const PlayerState& p, int index);
+    // "SkillName\nRank: n\nExp: n/10" -- Player.java's skillTooltip().
+    static std::string SkillTooltip(const PlayerState& p, const CharacterData& charData, int skillIndex);
 
     struct RollResult {
         int outcome = 0;  // 0=miss/parry, 1=hit, 2=hit(favored), 3=critical

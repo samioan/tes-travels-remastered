@@ -11,7 +11,11 @@
 // character-creation flow (`inCharacterCreation` -- see
 // ui/character_creation_flow.h), so "New Game" now creates a real,
 // player-chosen/named character instead of M20's own fixed "class 0,
-// Traveler" stand-in.
+// Traveler" stand-in. M41 made the options menu's own "Inventory"/
+// "Skills"/"Spells" actions real (previously silent no-ops) -- "Use"
+// alone needs a real CombatResolution::UseItem call this file performs
+// itself, via the new OptionsMenuAction::UseInventoryItem round-trip
+// (see ui/options_menu.h's own class comment).
 #include <windows.h>
 
 #include <array>
@@ -31,6 +35,7 @@
 #include "assets/shop_dialogue.h"
 #include "assets/spell_database.h"
 #include "camp/camp_tick.h"
+#include "combat/combat_resolution.h"
 #include "combat/combat_tick.h"
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
@@ -470,13 +475,42 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
                 bool selectDown = KeyPressed(VK_RETURN);
                 if (selectDown && !optionsMenuSelectKeyWasDown) {
-                    switch (optionsMenu.OnSelect(optionsPlayer, charData)) {
+                    switch (optionsMenu.OnSelect(optionsPlayer, charData, items, spells, levels, world)) {
                         case dawnstar::OptionsMenuAction::ReturnToGame:
                             inOptionsMenu = false;
                             break;
                         case dawnstar::OptionsMenuAction::Exit:
                             window.Close();
                             break;
+                        case dawnstar::OptionsMenuAction::UseInventoryItem: {
+                            // M41: the one inventory-item action
+                            // OptionsMenu can't finish by itself (see its
+                            // own OptionsMenuAction::UseInventoryItem doc
+                            // comment) -- perform the real
+                            // CombatResolution::UseItem call here, with a
+                            // freshly re-derived front monster (same
+                            // "SIMPLIFIED but not lossy" reasoning as
+                            // combat/combat_tick.cpp's own ProcessAttack/
+                            // ProcessSpellCast), then hand back to
+                            // FinishUseItem() to run the shared
+                            // Drop/Equip/Unequip/Learn/Use tail.
+                            int slot = optionsMenu.PendingUseItemSlot();
+                            auto* record = dawnstar::PlayerMovement::MonsterInFront(optionsPlayer, levels, world);
+                            if (record != nullptr) {
+                                dawnstar::MonsterState target = dawnstar::MonsterRuntime::FromBytes(*record);
+                                dawnstar::CombatResolution::UseItem(optionsPlayer, slot, &target, items, monsters,
+                                                                    levels, world, globalRng);
+                                *record = dawnstar::MonsterRuntime::ToBytes(target);
+                            } else {
+                                dawnstar::CombatResolution::UseItem(optionsPlayer, slot, nullptr, items, monsters,
+                                                                    levels, world, globalRng);
+                            }
+                            if (optionsMenu.FinishUseItem(optionsPlayer, items) ==
+                                dawnstar::OptionsMenuAction::ReturnToGame) {
+                                inOptionsMenu = false;
+                            }
+                            break;
+                        }
                         case dawnstar::OptionsMenuAction::None:
                             break;
                     }

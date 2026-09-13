@@ -2473,13 +2473,99 @@ milestone rather than just read-through.
       text) confirming all nine are legible and correct -- before the
       diagnostic was removed.
 
+- [x] **M41 -- the real Options-menu "Inventory"/"Skills"/"Spells"
+      actions** (this session). Turns M39's three deferred no-ops into
+      the real thing: `ESGame`'s own `InventoryUI`/`InventoryItemUI`
+      (secondaryParam 33/34 -- the item list, and an item's own tooltip
+      plus a dynamic Drop/[Equip-or-Unequip]/[Learn]/[Use] action list,
+      built in the exact conditional order `newInventoryItemUI()`/its own
+      dispatch use, so a selected index always maps back to the right
+      action), `SkillsListUI` (secondaryParam 35/36 -- a rank>0 skill
+      list, each entry's tooltip reusing the shared Info screen the same
+      way Stats/Clue Log/Help already do), and `SpellsListUI`/
+      `SpellInfoUI` (secondaryParam 37/38 -- a known-spell list, each
+      entry's own tooltip plus a real "Ready Spell" prompt that sets
+      `selectedSpellId`). All added directly to `ui/options_menu.h`/
+      `.cpp` -- `OptionsMenu` grew 5 new `Screen` members (each REBUILT
+      FRESH on every real (re)entry, unlike `options_`/`clueLog_`/
+      `helpTopics_`, which are each a single persistent Screen instance
+      the original itself never recreates -- see options_menu.h's own
+      class comment on why that distinction actually matters here, the
+      first time a *selectable* list's own stale `selectedIndex_` would
+      otherwise leak across visits).
+
+      Needed three small additions to already-existing modules rather
+      than new ones: `PlayerInventory::ItemTooltip`/`DropInventoryItem`
+      (`player/player_inventory.h`/`.cpp` -- `dropInventoryItem()` was
+      deferred all the way from M18 pending a live dropped-item registry,
+      which M22/M24's `DungeonRuntime`/`WorldRegistry` have supplied since;
+      a real, faithfully-preserved quirk: dropping StarFrost, id 101,
+      removes it from the inventory but never actually places it on the
+      ground, see `DropInventoryItem`'s own doc comment) and
+      `PlayerCombatStats::KnownSkillsSummary`/`NthKnownSkillIndex`/
+      `SkillTooltip` (`player/player_combat_stats.h`/`.cpp` -- the Skills
+      screen's own real logic; nothing was missing on the Spells side,
+      `PlayerSpellcasting::KnownSpellsSummary`/`NthKnownSpellId`/
+      `SpellTooltip` already existed from M16).
+
+      A real architectural wrinkle, not a simplification: "Use" (an
+      inventory item's 87-99 "gift" action) is the one thing
+      `OptionsMenu::OnSelect` can't finish by itself -- `CombatResolution::
+      UseItem` lives in `dawnstar_combat`, which already depends on
+      `dawnstar_render` (for its own message-popup calls), so
+      `dawnstar_render` (where `OptionsMenu` lives) linking back against
+      `dawnstar_combat` would create a cycle. `OnSelect` stops short and
+      returns a new `OptionsMenuAction::UseInventoryItem` instead;
+      `main.cpp` (which already links both libraries) performs the real
+      `UseItem` call itself (re-deriving the front monster fresh via
+      `PlayerMovement::MonsterInFront`, same "SIMPLIFIED but not lossy"
+      reasoning `combat/combat_tick.cpp`'s own `ProcessAttack`/
+      `ProcessSpellCast` already established), then calls the new
+      `OptionsMenu::FinishUseItem` to run the shared post-action tail --
+      the same "return what happened, let main.cpp perform the actual
+      real-world effect" shape `MenuFlowAction`/`CharacterCreationAction`
+      already established, just with one extra round-trip. That tail
+      itself preserves a real, easy-to-miss quirk: using item 87 ("Warp
+      to Camp") from the Inventory screen sets `suppressStrafeAdjust`,
+      which the original routes straight back to the GAME VIEW, not back
+      to the Inventory list at all -- reproduced exactly via
+      `FinishInventoryItemAction`'s own branch.
+
+      Verified via the new `inventory_skills_spells_smoke.exe` against a
+      real Sorcerer character (M11), real `ItemDatabase`/`SpellDatabase`
+      data, and a real generated world: the full Inventory navigation
+      graph (list -> an item's own tooltip+actions -> Cancel chain back
+      to Options); a real Equip/Unequip round trip on whichever starting
+      slot is actually gated (found by scanning, not assumed); a real
+      Drop landing in the live `WorldRegistry` at the player's own tile,
+      plus the StarFrost-never-lands-on-the-ground quirk; a real Learn
+      round trip (an engineered category-12 scroll, gated on a real
+      skill-rank check); both real Use outcomes (item 87's
+      suppressStrafeAdjust routing to the game view, and item 96's
+      "Safe Camping" NOT being consumed -- a quirk M18 already
+      established); and the full Skills/Spells navigation graphs,
+      including "Ready Spell" actually updating `selectedSpellId` and the
+      freshly-rebuilt Spells list showing the real "R: " prefix
+      afterward. Every expected value is independently re-derived from
+      `../src/Player.java` directly (not reused from
+      `player_inventory.cpp`/`player_combat_stats.cpp`/
+      `options_menu.cpp`), the same standard M38-M40's own tests already
+      hold to. M39's own `options_menu_smoke.cpp` was updated for
+      `OnSelect`'s grown signature and to drop Inventory/Skills/Spells
+      from its "still a deferred no-op" list (only Save Game/Load
+      Game/Reveal Traitor remain there). All checks passed (both test
+      files). Full clean rebuild zero warnings; all 39 smoke tests pass.
+      Also rendered 7 real frames via a temporary diagnostic (Options,
+      Inventory, an Item screen, Skills, Skill Info, Spells, and Spell
+      Info) confirming all seven are legible and correct -- before the
+      diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M41 and beyond (not yet planned in detail):** the "Inventory"/
-      "Skills"/"Spells" Options actions M39 deferred (each needs its own
-      summary-list screen); "Save Game"/"Load Game" (real file I/O,
-      `LoadingScreen`'s own background-thread machinery); "Reveal
-      Traitor"'s own multi-screen mini-quiz; NPC dialogue (needs `Shop.
+- [ ] **M42 and beyond (not yet planned in detail):** "Save Game"/"Load
+      Game" (real file I/O, `LoadingScreen`'s own background-thread
+      machinery); "Reveal Traitor"'s own multi-screen mini-quiz (needs
+      `grantStarFrostItem()`, still unported); NPC dialogue (needs `Shop.
       dialogue()`'s real line-selection logic -- M39 only reused the raw
       npcstrings.dat text `ShopDialogue` already loads, for Clue Log, not
       that selection logic itself); shops. Gets its own milestone(s)

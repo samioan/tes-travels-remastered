@@ -1,8 +1,11 @@
 #include "ui/options_menu.h"
 
+#include <cstdlib>
 #include <utility>
 
 #include "player/player_combat_stats.h"
+#include "player/player_inventory.h"
+#include "player/player_spellcasting.h"
 
 namespace dawnstar {
 
@@ -121,7 +124,18 @@ OptionsMenu::OptionsMenu(HelpText helpText, ShopDialogue shopDialogue)
       clueLog_(ScreenMode::PromptList),
       helpTopics_(ScreenMode::HighlightedList),
       info_(ScreenMode::PlainList),
-      quitConfirm_(ScreenMode::PromptList) {
+      quitConfirm_(ScreenMode::PromptList),
+      // M41: InventoryUI/SkillsListUI/SpellsListUI/InventoryItemUI/
+      // SpellInfoUI are all mode 5 (PromptList) in the original -- these
+      // placeholder constructions are never actually shown; each is
+      // fully replaced by its own Rebuild* on first real (re)entry (see
+      // this class's own header doc comment on why that's a full
+      // replacement, not just a reconfiguration).
+      inventoryList_(ScreenMode::PromptList),
+      inventoryItem_(ScreenMode::PromptList),
+      skillsList_(ScreenMode::PromptList),
+      spellsList_(ScreenMode::PromptList),
+      spellInfo_(ScreenMode::PromptList) {
     // ESGame.allocateAllUIs()'s own OptionsUI construction: `setupList(
     // "Options", ..., false)` (not cancelable -- Select only) plus its
     // own separately-added `backCommand`.
@@ -156,6 +170,16 @@ Screen& OptionsMenu::ActiveScreen() {
             return info_;
         case Active::QuitConfirm:
             return quitConfirm_;
+        case Active::InventoryList:
+            return inventoryList_;
+        case Active::InventoryItem:
+            return inventoryItem_;
+        case Active::SkillsList:
+            return skillsList_;
+        case Active::SpellsList:
+            return spellsList_;
+        case Active::SpellInfo:
+            return spellInfo_;
     }
     return options_;
 }
@@ -166,7 +190,92 @@ void OptionsMenu::OnUp() { ActiveScreen().MoveSelectionUp(); }
 
 void OptionsMenu::OnDown() { ActiveScreen().MoveSelectionDown(); }
 
-OptionsMenuAction OptionsMenu::OnSelect(const PlayerState& player, const CharacterData& charData) {
+// ESGame.java's own newInventoryUI(): item names ("E: <name>" for an
+// equipped slot -- inventoryItemIds' own sign encodes that, matching
+// PlayerInventory::IsEquipped's convention) and the "Your gold: <TAG>"
+// prompt. Always a FULL replacement of inventoryList_ (see this class's
+// own header doc comment on why), so a stale selectedIndex_ never
+// leaks in from a previous, unrelated visit the way it deliberately does
+// for options_/clueLog_/helpTopics_.
+void OptionsMenu::RebuildInventoryList(const PlayerState& player, const ItemDatabase& items) {
+    std::vector<std::string> names;
+    for (int i = 0; i < player.inventoryCount; i++) {
+        int id = static_cast<int>(player.inventoryItemIds[static_cast<size_t>(i)]);
+        std::string name = items.name[static_cast<size_t>(std::abs(id) - 1)];
+        names.push_back(id < 0 ? "E: " + name : name);
+    }
+    inventoryList_ = Screen(ScreenMode::PromptList);
+    inventoryList_.SetupPromptList("Inventory", "Your gold: " + std::to_string(player.gold), names);
+}
+
+// ESGame.java's own newInventoryItemUI(slot): the item's own tooltip
+// (PlayerInventory::ItemTooltip) plus a Drop/[Equip-or-Unequip]/[Learn]/
+// [Use] action list, built in the EXACT SAME conditional order (Drop
+// always first, then equip/unequip iff CanEquipOrUnequip, then Learn iff
+// CanLearnSpell, then Use iff CanUseItem) that OnSelect's own
+// Active::InventoryItem branch below decrements a selected index against
+// -- the two must stay in lockstep the same way the original's own
+// construction and dispatch code do (see that branch's own doc comment).
+void OptionsMenu::RebuildInventoryItem(const PlayerState& player, const CharacterData& charData,
+                                       const ItemDatabase& items, const SpellDatabase& spells, int slot) {
+    std::string tooltip = PlayerInventory::ItemTooltip(player, charData, items, spells, slot);
+    std::vector<std::string> actions;
+    actions.push_back("Drop");
+    if (PlayerInventory::CanEquipOrUnequip(player, items, slot)) {
+        actions.push_back(PlayerInventory::IsEquipped(player, items, slot) ? "Unequip" : "Equip");
+    }
+    if (PlayerSpellcasting::CanLearnSpell(player, items, spells, slot)) actions.push_back("Learn");
+    if (PlayerInventory::CanUseItem(player, items, slot)) actions.push_back("Use");
+
+    inventoryItem_ = Screen(ScreenMode::PromptList);
+    inventoryItem_.SetupPromptList("Item", tooltip, actions);
+}
+
+// ESGame.java's own newSkillsListUI(): PlayerCombatStats::KnownSkillsSummary
+// ("Skill: rank" for every rank>0 skill).
+void OptionsMenu::RebuildSkillsList(const PlayerState& player, const CharacterData& charData) {
+    skillsList_ = Screen(ScreenMode::PromptList);
+    skillsList_.SetupPromptList("Skills", "Your Skills:", PlayerCombatStats::KnownSkillsSummary(player, charData));
+}
+
+// ESGame.java's own newSpellsListUI(): PlayerSpellcasting::KnownSpellsSummary
+// (every known spell's name, "R: "-prefixed for the currently-selected
+// one).
+void OptionsMenu::RebuildSpellsList(const PlayerState& player, const SpellDatabase& spells) {
+    spellsList_ = Screen(ScreenMode::PromptList);
+    spellsList_.SetupPromptList("Spells", "Your Spells:", PlayerSpellcasting::KnownSpellsSummary(player, spells));
+}
+
+// ESGame.java's own secondaryParam==34 dispatch tail, shared by every
+// real way an inventory-item action can finish (Drop/Equip/Unequip/Learn
+// resolve synchronously inside OnSelect below; Use finishes here too, but
+// only via FinishUseItem, after main.cpp has performed the real
+// CombatResolution::UseItem call -- see this class's own header doc
+// comment on why "Use" alone needs that extra round-trip). A real,
+// easy-to-miss quirk preserved exactly: using item 87 ("Warp to Camp")
+// sets `suppressStrafeAdjust`, which routes back to the GAME VIEW
+// directly here, not back to the Inventory list at all.
+OptionsMenuAction OptionsMenu::FinishInventoryItemAction(PlayerState& player, const ItemDatabase& items) {
+    if (player.suppressStrafeAdjust) {
+        player.suppressStrafeAdjust = false;
+        currentItemIndex_ = -1;
+        active_ = Active::Options;
+        return OptionsMenuAction::ReturnToGame;
+    }
+    RebuildInventoryList(player, items);
+    inventoryList_.SetSelectedIndex(currentItemIndex_);
+    active_ = Active::InventoryList;
+    currentItemIndex_ = -1;
+    return OptionsMenuAction::None;
+}
+
+OptionsMenuAction OptionsMenu::FinishUseItem(PlayerState& player, const ItemDatabase& items) {
+    return FinishInventoryItemAction(player, items);
+}
+
+OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData& charData, const ItemDatabase& items,
+                                        const SpellDatabase& spells, std::vector<GeneratedLevel>& levels,
+                                        WorldRegistry& world) {
     switch (active_) {
         case Active::Options: {
             // secondaryParam==31's own Select branch.
@@ -176,15 +285,26 @@ OptionsMenuAction OptionsMenu::OnSelect(const PlayerState& player, const Charact
                     infoBackTarget_ = Active::Options;
                     active_ = Active::Info;
                     return OptionsMenuAction::None;
-                case 1:  // "Inventory" -- deferred no-op, see this
-                         // class's own header doc comment.
+                case 1:  // "Inventory": `this.InventoryUI = this.
+                         // newInventoryUI(); this.setCurrentDisplay(
+                         // this.InventoryUI);`
+                    RebuildInventoryList(player, items);
+                    active_ = Active::InventoryList;
                     return OptionsMenuAction::None;
                 case 2:  // "Clue Log": `this.setCurrentDisplay(this.ClueUI);`
                     active_ = Active::ClueLog;
                     return OptionsMenuAction::None;
-                case 3:  // "Skills" -- deferred no-op.
+                case 3:  // "Skills": `this.SkillsListUI = this.
+                         // newSkillsListUI(); this.setCurrentDisplay(
+                         // this.SkillsListUI);`
+                    RebuildSkillsList(player, charData);
+                    active_ = Active::SkillsList;
                     return OptionsMenuAction::None;
-                case 4:  // "Spells" -- deferred no-op.
+                case 4:  // "Spells": `this.SpellsListUI = this.
+                         // newSpellsListUI(); this.setCurrentDisplay(
+                         // this.SpellsListUI);`
+                    RebuildSpellsList(player, spells);
+                    active_ = Active::SpellsList;
                     return OptionsMenuAction::None;
                 case 5:  // "Save Game" -- deferred no-op.
                     return OptionsMenuAction::None;
@@ -235,9 +355,9 @@ OptionsMenuAction OptionsMenu::OnSelect(const PlayerState& player, const Charact
             return OptionsMenuAction::None;
         }
         case Active::Info:
-            // secondaryParam==32 (Stats)/61 (Clue Log)/206 (Help) all
-            // return to a hardcoded target on Ok -- see infoBackTarget_'s
-            // own doc comment.
+            // secondaryParam==32 (Stats)/61 (Clue Log)/206 (Help)/36
+            // (Skill Info) all return to a hardcoded target on Ok -- see
+            // infoBackTarget_'s own doc comment.
             active_ = infoBackTarget_;
             return OptionsMenuAction::None;
         case Active::QuitConfirm:
@@ -245,6 +365,116 @@ OptionsMenuAction OptionsMenu::OnSelect(const PlayerState& player, const Charact
             // real, preserved bug (see this class's own header doc
             // comment and M38's MenuFlow, which established it first).
             return OptionsMenuAction::Exit;
+        case Active::InventoryList: {
+            // secondaryParam==33's own Select branch: `int var28 =
+            // selectedIndexOrMinusOne(); if (var28 >= 0) { InventoryItemUI
+            // = newInventoryItemUI(var28); currentItemIndex = var28;
+            // setCurrentDisplay(InventoryItemUI); }` (the original also
+            // wraps this in a try/catch that builds an error Form on any
+            // exception -- pure decompiled defensive boilerplate around
+            // array access, not real gameplay behavior, so not ported;
+            // the `idx >= 0` guard alone already prevents any equivalent
+            // issue here).
+            int idx = inventoryList_.SelectedIndexOrMinusOne();
+            if (idx >= 0) {
+                currentItemIndex_ = idx;
+                RebuildInventoryItem(player, charData, items, spells, idx);
+                active_ = Active::InventoryItem;
+            }
+            return OptionsMenuAction::None;
+        }
+        case Active::InventoryItem: {
+            // secondaryParam==34's own Select branch: decrements the
+            // selected index against the SAME conditional order
+            // RebuildInventoryItem's own action list was just built in
+            // (Drop always index 0; then Equip-or-Unequip iff
+            // CanEquipOrUnequip; then Learn iff CanLearnSpell; then Use
+            // iff CanUseItem) -- ported exactly, including the original
+            // re-evaluating each gate FRESH here rather than trusting the
+            // already-built action list's own implied semantics (safe,
+            // since nothing mutates `player` between the two).
+            int idx = inventoryItem_.SelectedIndexOrMinusOne();
+            if (idx == 0) {
+                PlayerInventory::DropInventoryItem(player, items, levels, world, currentItemIndex_);
+            } else {
+                int remaining = idx;
+                if (PlayerInventory::CanEquipOrUnequip(player, items, currentItemIndex_)) {
+                    if (--remaining == 0) {
+                        if (!PlayerInventory::IsEquipped(player, items, currentItemIndex_)) {
+                            PlayerInventory::Equip(player, items, currentItemIndex_, true);
+                        } else {
+                            PlayerInventory::UnequipSlot(player, items, currentItemIndex_);
+                        }
+                    }
+                }
+                if (remaining > 0 && PlayerSpellcasting::CanLearnSpell(player, items, spells, currentItemIndex_)) {
+                    if (--remaining == 0) PlayerSpellcasting::LearnSpellFromScroll(player, items, currentItemIndex_);
+                }
+                if (remaining > 0 && PlayerInventory::CanUseItem(player, items, currentItemIndex_)) {
+                    if (--remaining == 0) {
+                        // "Use" alone needs a live Monster target and
+                        // CombatResolution::UseItem -- outside this
+                        // library's reach (see this class's own header
+                        // doc comment on OptionsMenuAction::UseInventoryItem).
+                        // main.cpp performs the real call, then calls
+                        // FinishUseItem() to run this same method's own
+                        // tail below.
+                        pendingUseItemSlot_ = currentItemIndex_;
+                        return OptionsMenuAction::UseInventoryItem;
+                    }
+                }
+            }
+            return FinishInventoryItemAction(player, items);
+        }
+        case Active::SkillsList: {
+            // secondaryParam==35's own Select branch: `int var32 =
+            // selectedIndexOrMinusOne(); int var56 = character.
+            // nthKnownSkillIndex(var32); ... setupMessage("Skill Info",
+            // character.skillTooltip(var56));` -- no idx>=0 guard in the
+            // original (unreachable in practice: every class starts with
+            // at least one rank>0 skill, so this list is never actually
+            // empty -- see player/player_movement.h's own "no real tile
+            // ever borders a no-neighbor edge" precedent for the same
+            // "guard defensively in C++ anyway" reasoning).
+            int idx = skillsList_.SelectedIndexOrMinusOne();
+            if (idx >= 0) {
+                int skillIndex = PlayerCombatStats::NthKnownSkillIndex(player, idx);
+                if (skillIndex >= 0) {
+                    info_.SetupMessage("Skill Info", PlayerCombatStats::SkillTooltip(player, charData, skillIndex));
+                    infoBackTarget_ = Active::SkillsList;
+                    active_ = Active::Info;
+                }
+            }
+            return OptionsMenuAction::None;
+        }
+        case Active::SpellsList: {
+            // secondaryParam==37's own Select branch: `int var33 =
+            // selectedIndexOrMinusOne(); if (var33 >= 0) { SpellInfoUI =
+            // newSpellInfoUI(var33); currentSpellIndex = var33;
+            // setCurrentDisplay(SpellInfoUI); } }`
+            int idx = spellsList_.SelectedIndexOrMinusOne();
+            if (idx >= 0) {
+                currentSpellIndex_ = idx;
+                int spellIndex0 = PlayerSpellcasting::NthKnownSpellId(player, spells, idx);
+                spellInfo_ = Screen(ScreenMode::PromptList);
+                spellInfo_.SetupPromptList("Spell Info", PlayerSpellcasting::SpellTooltip(charData, spells, spellIndex0),
+                                            {"Ready Spell"});
+                active_ = Active::SpellInfo;
+            }
+            return OptionsMenuAction::None;
+        }
+        case Active::SpellInfo: {
+            // secondaryParam==38's own Select branch: only one real item
+            // ("Ready Spell"), so the original doesn't check which index
+            // was selected at all -- any Select here sets selectedSpellId.
+            int spellIndex0 = PlayerSpellcasting::NthKnownSpellId(player, spells, currentSpellIndex_);
+            player.selectedSpellId = static_cast<int8_t>(spellIndex0 + 1);
+            RebuildSpellsList(player, spells);
+            spellsList_.SetSelectedIndex(currentSpellIndex_);
+            active_ = Active::SpellsList;
+            currentSpellIndex_ = -1;
+            return OptionsMenuAction::None;
+        }
     }
     return OptionsMenuAction::None;
 }
@@ -274,6 +504,31 @@ OptionsMenuAction OptionsMenu::OnCancel() {
             // `newConfirmQuitUI()` explicitly removes its own Cancel
             // command -- same real "no way to back out" quirk M38's
             // MenuFlow already established.
+            return OptionsMenuAction::None;
+        case Active::InventoryList:
+            // `this.InventoryUI.backTarget = this.OptionsUI` (set in
+            // newInventoryUI()).
+            active_ = Active::Options;
+            return OptionsMenuAction::None;
+        case Active::InventoryItem:
+            // `var2.backTarget = this.InventoryUI` (set in
+            // newInventoryItemUI()).
+            active_ = Active::InventoryList;
+            return OptionsMenuAction::None;
+        case Active::SkillsList:
+            // `var1.backTarget = this.OptionsUI` (set in
+            // newSkillsListUI()).
+            active_ = Active::Options;
+            return OptionsMenuAction::None;
+        case Active::SpellsList:
+            // `var1.backTarget = this.OptionsUI` (set in
+            // newSpellsListUI()).
+            active_ = Active::Options;
+            return OptionsMenuAction::None;
+        case Active::SpellInfo:
+            // `var2.backTarget = this.SpellsListUI` (set in
+            // newSpellInfoUI()).
+            active_ = Active::SpellsList;
             return OptionsMenuAction::None;
     }
     return OptionsMenuAction::None;

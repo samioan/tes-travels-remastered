@@ -71,7 +71,10 @@ target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 # M40's src/ui/name_entry.cpp (the raw name-entry widget) needs nothing
 # further; src/ui/character_creation_flow.cpp needs
 # player/player_creation.h (CreateCharacter/BuildCreationSummary), same
-# transitive-availability reasoning as options_menu.cpp above.
+# transitive-availability reasoning as options_menu.cpp above. M41's real
+# Inventory/Skills/Spells actions need player/player_inventory.h/
+# player/player_spellcasting.h on top of that -- also already available
+# transitively via dawnstar_player.
 add_library(dawnstar_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -339,3 +342,11 @@ target_link_libraries(options_menu_smoke PRIVATE dawnstar_render)
 # src/tests/m40_character_creation_flow_smoke.cpp.
 add_executable(character_creation_flow_smoke src/tests/m40_character_creation_flow_smoke.cpp)
 target_link_libraries(character_creation_flow_smoke PRIVATE dawnstar_render)
+
+# M41 milestone smoke test -- see
+# src/tests/m41_inventory_skills_spells_smoke.cpp. Needs dawnstar_combat
+# too (CombatResolution::UseItem), on top of dawnstar_render (OptionsMenu
+# itself) -- no cycle, same reasoning as dawnstar_combat's own CMake
+# comment above.
+add_executable(inventory_skills_spells_smoke src/tests/m41_inventory_skills_spells_smoke.cpp)
+target_link_libraries(inventory_skills_spells_smoke PRIVATE dawnstar_render dawnstar_combat)
