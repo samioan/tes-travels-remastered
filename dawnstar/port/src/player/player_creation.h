@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+
 #include "assets/character_data.h"
 #include "assets/item_database.h"
 #include "player/player_state.h"
@@ -33,6 +35,15 @@ public:
     // comment on the definition for the mutation-as-a-side-effect
     // consequence of that.
     static uint32_t ComputeStartingSpellMask(PlayerState& p, const CharacterData& charData);
+
+    // Player.java's buildCreationSummary() -- M40's own "See Class
+    // Info" preview screen (ui/character_creation_flow.h) reads this;
+    // exposed here (not in that UI file) since it's real Player.java
+    // gameplay logic, not UI, matching player/player_combat_stats.h's
+    // own EffectiveStat/HasAilment precedent of small, self-contained,
+    // reusable Player.java ports living next to the class they came
+    // from rather than the one UI screen that happens to call them.
+    static std::string BuildCreationSummary(const PlayerState& p, const CharacterData& charData);
 };
 
 }  // namespace dawnstar

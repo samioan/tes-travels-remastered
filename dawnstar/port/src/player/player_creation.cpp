@@ -1,5 +1,6 @@
 #include "player/player_creation.h"
 
+#include "player/player_combat_stats.h"
 #include "player/player_inventory.h"
 
 namespace dawnstar {
@@ -152,6 +153,36 @@ PlayerState PlayerCreation::CreateCharacter(int characterClass, const std::strin
     GrantStartingItems(p, items);
 
     return p;
+}
+
+// Player.java's buildCreationSummary(), transcribed line-for-line --
+// shorter than buildCharacterSheet() (M39's own ui/options_menu.cpp):
+// race+class, level/HP/Magicka/Fatigue (via statLabels[0/2/4/6], NOT
+// hardcoded "Level"/"Health"/... literals like buildCharacterSheet
+// uses -- a real, deliberate difference between the two methods in the
+// original, ported exactly), all 8 attributes, then only the skills
+// with a nonzero rank (a fresh character's own class-template starting
+// ranks, since this is only ever called before any skill exp has been
+// gained).
+std::string PlayerCreation::BuildCreationSummary(const PlayerState& p, const CharacterData& charData) {
+    std::string out = charData.raceNames[static_cast<size_t>(p.raceIndex)] + " " +
+                       charData.classNames[static_cast<size_t>(p.classIndex)] + "\n";
+    out += charData.statLabels[0] + ": " + std::to_string(p.coreStats[0]) + "\n";
+    out += charData.statLabels[2] + ": " + std::to_string(PlayerCombatStats::EffectiveStat(p, charData, 2)) + "\n";
+    out += charData.statLabels[4] + ": " + std::to_string(PlayerCombatStats::EffectiveStat(p, charData, 4)) + "\n";
+    out += charData.statLabels[6] + ": " + std::to_string(PlayerCombatStats::EffectiveStat(p, charData, 6)) + "\n";
+    for (int i = 0; i < 8; i++) {
+        int slot = 2 * i;
+        out += charData.attributeNames[static_cast<size_t>(slot)] + ": " +
+               std::to_string(p.attributes[static_cast<size_t>(slot)]) + "\n";
+    }
+    for (int i = 0; i < 14; i++) {
+        if (p.skills[static_cast<size_t>(i)][0] > 0) {
+            out += charData.skillNames[static_cast<size_t>(i)] + ": " +
+                   std::to_string(p.skills[static_cast<size_t>(i)][0]) + "\n";
+        }
+    }
+    return out;
 }
 
 }  // namespace dawnstar

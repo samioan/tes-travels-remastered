@@ -68,6 +68,10 @@ target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 # M39's src/ui/options_menu.cpp (the real in-game options menu) needs
 # player/player_combat_stats.h (EffectiveStat/HasAilment) on top of
 # that -- already available transitively via dawnstar_player below.
+# M40's src/ui/name_entry.cpp (the raw name-entry widget) needs nothing
+# further; src/ui/character_creation_flow.cpp needs
+# player/player_creation.h (CreateCharacter/BuildCreationSummary), same
+# transitive-availability reasoning as options_menu.cpp above.
 add_library(dawnstar_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -79,6 +83,8 @@ add_library(dawnstar_render STATIC
   src/ui/screen.cpp
   src/ui/menu_flow.cpp
   src/ui/options_menu.cpp
+  src/ui/name_entry.cpp
+  src/ui/character_creation_flow.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon)
@@ -328,3 +334,8 @@ target_link_libraries(menu_flow_smoke PRIVATE dawnstar_render)
 # M39 milestone smoke test -- see src/tests/m39_options_menu_smoke.cpp.
 add_executable(options_menu_smoke src/tests/m39_options_menu_smoke.cpp)
 target_link_libraries(options_menu_smoke PRIVATE dawnstar_render)
+
+# M40 milestone smoke test -- see
+# src/tests/m40_character_creation_flow_smoke.cpp.
+add_executable(character_creation_flow_smoke src/tests/m40_character_creation_flow_smoke.cpp)
+target_link_libraries(character_creation_flow_smoke PRIVATE dawnstar_render)

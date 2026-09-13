@@ -49,15 +49,13 @@ enum class MenuFlowAction { None, StartNewGame, Exit };
 // of the three would have landed in the same, wrong branch).
 //
 // SIMPLIFIED, real gaps deliberately deferred rather than guessed at:
-// "New Game" still starts M20's own fixed class-0 stand-in character
-// directly -- the original's own real multi-screen character-creation
-// flow (`newGameUI`'s class-selection prompt list -> `characterMainUI`
-// -> a raw MIDP `TextField` name-entry `Form`, not even a `Screen` at
-// all -- a separate, not-yet-ported input widget class of its own) is
-// real future work, not attempted here. "Continue Game" is a genuine
-// no-op (real save-file load/store was never wired to disk by any
-// milestone so far -- `PlayerSave` only ever serializes to/from an
-// in-memory byte buffer, see docs/PORT_ROADMAP.md's M12/M17 entries).
+// "New Game" hands off to M40's own `ui/character_creation_flow.h`
+// (`CharacterCreationFlow`), a separate class from this one (see
+// `MenuFlowAction::StartNewGame`'s own doc comment) -- not modeled
+// here. "Continue Game" is a genuine no-op (real save-file load/store
+// was never wired to disk by any milestone so far -- `PlayerSave` only
+// ever serializes to/from an in-memory byte buffer, see
+// docs/PORT_ROADMAP.md's M12/M17 entries).
 //
 // A real, faithfully-preserved bug in the quit confirmation itself:
 // `newConfirmQuitUI()` builds a 2-item "Yes"/"No" prompt list, but its

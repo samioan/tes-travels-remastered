@@ -2383,19 +2383,106 @@ milestone rather than just read-through.
       a real clue entry, Help, and the quit confirmation) confirming all
       six are legible and correct -- before the diagnostic was removed.
 
+- [x] **M40 -- the real class-selection/name-entry character-creation
+      flow** (this session). Wires `ESGame`'s own `newGameUI`
+      (secondaryParam 3, a class-selection prompt list), `characterMainUI`
+      (secondaryParam 4, "You selected: <class>" -> See Class Info/Create
+      Character), the shared "GenericInfoUI" reused for a class-info
+      preview (5), the "Character Created!" prompt (6), the real
+      name-length error (a MIDP `Alert` in the original -- folded into
+      the same Info-screen-reuse pattern, since `Alert` has no real
+      custom `paint()` to distinguish from a plain message + Ok either),
+      and the 3-screen "Welcome"/"Introduction" chain (7/101/102) via a
+      new `ui/character_creation_flow.h`/`.cpp` (`CharacterCreationFlow`)
+      -- the same "small, purpose-built flow over Screen" shape M38/M39
+      already established, not a port of `commandAction1`'s own giant
+      machinery. `MenuFlow`'s own "New Game" now hands off here instead
+      of immediately constructing M20's fixed "class 0, Traveler"
+      stand-in -- a real, player-chosen/named character is used from
+      here on.
+
+      Also a new `ui/name_entry.h`/`.cpp` (`NameEntry`): the real
+      `charNameTextForm`'s counterpart -- a raw MIDP `Form` + single
+      `TextField(null, null, 10, 0)`, the ONLY real `TextField` anywhere
+      in the whole decompiled source (confirmed by grep), so this is a
+      small, purpose-built widget for that one real use, not a generic
+      `Form`/`TextField` port. A real `Form` has NO custom `paint()` of
+      its own at all (unlike `Screen`) -- its entire look was rendered
+      by the phone's own MIDP implementation, so `NameEntry::Render()`
+      is a deliberately invented presentation (reusing `Screen`'s own
+      color palette for visual consistency), the same unrecoverable-
+      system-UI status `graphics/bitmap_font.h`'s own invented glyphs
+      already have. Accepts exactly what `BitmapFont` can render (space/
+      '/-/! and A-Z/0-9), not the real `TextField`'s literal
+      any-character constraint -- a practical, harmless restriction
+      since no real string anywhere in this game's own data needs
+      anything outside that set either.
+
+      A real design point checked by reading `createNewGame()` (the
+      background-thread body a real device ran while character-creation's
+      own `createGameUI` `LoadingScreen` spun) before writing any of this:
+      it does nothing but null out now-unneeded UI fields (memory
+      pressure relief on a real MIDP device, irrelevant here) and
+      re-load `Shop`'s dialogue table (already loaded once at this
+      port's own startup, so redundant here too) before immediately
+      showing the next screen -- no actual asynchronous work, unlike
+      Save/Load's own real file I/O (still unported). So this milestone
+      skips modeling that loading screen/background-thread machinery
+      entirely, going straight from a confirmed name to "Welcome",
+      functionally identical to what a modern runtime would do anyway.
+
+      Also checked before writing any code: the original's own real
+      character-construction TIMING. A live (but not yet `resetState`d)
+      `Player` object exists from the moment a class is picked (for "See
+      Class Info"'s own preview), but starting items / the hidden
+      `traitorIndex` aren't rolled until `resetState(false)`/
+      `grantStartingItems`, called only once, right before entering
+      gameplay -- NOT at class-selection time. `CharacterCreationFlow`
+      reproduces that exact shape with a dedicated, throwaway
+      `previewRng_` for the "See Class Info" preview only (`Player.java`'s
+      own `buildCreationSummary()`, now also ported as
+      `PlayerCreation::BuildCreationSummary` -- real Player.java gameplay
+      logic, so it lives in `player/player_creation.h`, not the UI file);
+      the REAL, final `PlayerState` is only ever constructed once, in
+      `main.cpp`, once `CharacterCreationAction::StartGame` actually
+      fires -- with the player's own real chosen class and typed name,
+      not M20/M38's fixed stand-in.
+
+      Verified via the new `character_creation_flow_smoke.exe`: the full
+      navigation graph (class select -> "You selected" -> See Class Info
+      -> back -> Create Character -> name entry -> a too-short name's
+      real error -> retry -> a valid name -> Welcome -> Introduction ->
+      a second Introduction screen -> `StartGame`, plus Cancel from
+      "You selected" back to class select and Cancel from class select
+      requesting the main menu) using an independently-reconstructed
+      `buildCreationSummary()` expectation (built from a SEPARATE preview
+      character with a different rng seed than the flow's own internal
+      one -- valid because the summary reads only deterministic,
+      class-template-derived fields, not the rng-derived ones) and the
+      real npcstrings.dat introduction text. Also checked `NameEntry`'s
+      own real behavior directly: an unsupported character and lowercase
+      input are silently ignored, typed text truncates at the real
+      10-character max, Backspace on empty text is a no-op, and a
+      too-short name's own error screen preserves the typed text (a real
+      `TextField` is never cleared on that error) rather than assuming a
+      reset. All checks passed. Full clean rebuild zero warnings; all 38
+      smoke tests pass. Also rendered 9 real frames via a temporary
+      diagnostic (class select, "You selected: Knight", the class-info
+      preview, "Character Created!", the empty and typed name-entry
+      widget, and all 3 Welcome/Introduction screens with real story
+      text) confirming all nine are legible and correct -- before the
+      diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M40 and beyond (not yet planned in detail):** `ESGame`'s own
-      remaining screen-wiring: character creation's real class-selection/
-      name-entry flow (including a raw MIDP `TextField` form Screen
-      itself never models); the "Inventory"/"Skills"/"Spells" Options
-      actions M39 deferred (each needs its own summary-list screen);
-      "Save Game"/"Load Game" (real file I/O, `LoadingScreen`'s own
-      background-thread machinery); "Reveal Traitor"'s own multi-screen
-      mini-quiz; NPC dialogue (needs `Shop.dialogue()`'s real
-      line-selection logic -- M39 only reused the raw npcstrings.dat
-      text `ShopDialogue` already loads, for Clue Log, not that
-      selection logic itself); shops. Gets its own milestone(s) once the
-      shape of "how much fits in one slice" is clearer -- following
-      `shadowkey-decomp`'s pattern of not over-planning milestones far
-      in advance of actually reaching them.
+- [ ] **M41 and beyond (not yet planned in detail):** the "Inventory"/
+      "Skills"/"Spells" Options actions M39 deferred (each needs its own
+      summary-list screen); "Save Game"/"Load Game" (real file I/O,
+      `LoadingScreen`'s own background-thread machinery); "Reveal
+      Traitor"'s own multi-screen mini-quiz; NPC dialogue (needs `Shop.
+      dialogue()`'s real line-selection logic -- M39 only reused the raw
+      npcstrings.dat text `ShopDialogue` already loads, for Clue Log, not
+      that selection logic itself); shops. Gets its own milestone(s)
+      once the shape of "how much fits in one slice" is clearer --
+      following `shadowkey-decomp`'s pattern of not over-planning
+      milestones far in advance of actually reaching them.

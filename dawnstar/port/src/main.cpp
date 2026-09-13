@@ -7,10 +7,11 @@
 // engine's fixed 250ms tick rate. M38 added the real main-menu/help/
 // credits/quit-confirm flow shown before a game starts (`inMenu`); M39
 // added the real in-game options menu (`inOptionsMenu`, the 'O' key --
-// see ui/options_menu.h). Character creation itself is still M20's own
-// fixed class-0 stand-in -- the original's real class-selection/
-// name-entry flow stays unported (see ui/menu_flow.h's own class
-// comment).
+// see ui/options_menu.h); M40 added the real class-selection/name-entry
+// character-creation flow (`inCharacterCreation` -- see
+// ui/character_creation_flow.h), so "New Game" now creates a real,
+// player-chosen/named character instead of M20's own fixed "class 0,
+// Traveler" stand-in.
 #include <windows.h>
 
 #include <array>
@@ -47,6 +48,7 @@
 #include "render/message_popup.h"
 #include "render/minimap_renderer.h"
 #include "render/visible_object_renderer.h"
+#include "ui/character_creation_flow.h"
 #include "ui/menu_flow.h"
 #include "ui/options_menu.h"
 #include "util/java_random.h"
@@ -240,6 +242,33 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool optionsMenuSelectKeyWasDown = false;
     bool optionsMenuCancelKeyWasDown = false;
 
+    // M40: whether the real class-selection/name-entry character-
+    // creation flow (see ui/character_creation_flow.h) is showing --
+    // entered from MenuFlow's own "New Game" instead of that
+    // immediately constructing M20's own fixed stand-in character. Same
+    // early-return shape as inMenu/inOptionsMenu above (this isn't a
+    // GameCanvas.activeScreen state at all in the original -- character
+    // creation happens entirely before `gameCanvas` is ever shown -- but
+    // the "only one of these UIs owns the frame at a time" shape is the
+    // same).
+    bool inCharacterCreation = false;
+    bool ccUpKeyWasDown = false;
+    bool ccDownKeyWasDown = false;
+    bool ccSelectKeyWasDown = false;
+    bool ccCancelKeyWasDown = false;
+    // Name-entry character input -- polled only while
+    // CharacterCreationFlow's own NameEntry state is active (see
+    // ui/name_entry.h's own class comment on why there's no real MIDP
+    // TextField to defer to). 'A'-'Z'/'0'-'9' are valid Win32 virtual-
+    // key codes equal to their own ASCII values, so these two ranges
+    // need no separate lookup table.
+    std::array<bool, 26> ccLetterKeyWasDown{};
+    std::array<bool, 10> ccDigitKeyWasDown{};
+    bool ccSpaceKeyWasDown = false;
+    bool ccApostropheKeyWasDown = false;
+    bool ccHyphenKeyWasDown = false;
+    bool ccBackspaceKeyWasDown = false;
+
     // Same default-relative-path convention every console smoke test
     // uses (see e.g. tests/m10_frame_render_smoke.cpp) -- this exe also
     // lands in build/, two levels above dawnstar/extracted/.
@@ -281,13 +310,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // M38: the real main menu is now shown first (see `inMenu`
         // above) -- the character itself is only constructed once "New
         // Game" is actually selected, not unconditionally at startup
-        // like M20's own original simplification. Still no real
-        // character-creation UI exists (that's `ESGame`'s own
-        // class-selection/name-entry flow, still unported -- see
-        // ui/menu_flow.h's own class comment): "New Game" starts the
-        // same fixed class-0 stand-in character M20 always did, just
-        // now reached through a real menu selection instead of
-        // automatically.
+        // like M20's own original simplification.
         dawnstar::MenuFlow menuFlow(helpText);
         // M39: the real in-game options menu -- constructed here (not
         // lazily once a game starts) since HelpText/ShopDialogue are
@@ -297,6 +320,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // Passed BY VALUE (copied, not moved) below, same convention
         // `menuFlow`'s own HelpText parameter already uses.
         dawnstar::OptionsMenu optionsMenu(helpText, shopDialogue);
+        // M40: the real class-selection/name-entry character-creation
+        // flow -- "New Game" now leads here instead of immediately
+        // constructing M20's own fixed class-0 stand-in character (see
+        // CharacterCreationFlow's own class comment for the full
+        // writeup). Also constructed eagerly, for the same reason
+        // `optionsMenu` is.
+        dawnstar::CharacterCreationFlow characterCreationFlow(charData, items, shopDialogue);
         std::optional<dawnstar::PlayerState> playerSlot;
 
         window.RunMessageLoop([&] {
@@ -317,9 +347,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 if (selectDown && !menuSelectKeyWasDown) {
                     switch (menuFlow.OnSelect()) {
                         case dawnstar::MenuFlowAction::StartNewGame:
-                            playerSlot.emplace(
-                                dawnstar::PlayerCreation::CreateCharacter(0, "Traveler", charData, items, globalRng));
+                            // M40: "New Game" now leads to the real
+                            // class-selection/name-entry flow instead of
+                            // immediately constructing a character (M20/
+                            // M38's own fixed class-0 stand-in).
                             inMenu = false;
+                            inCharacterCreation = true;
                             break;
                         case dawnstar::MenuFlowAction::Exit:
                             window.Close();
@@ -331,6 +364,81 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 menuSelectKeyWasDown = selectDown;
 
                 menuFlow.Render(backbuffer);
+                window.Present(backbuffer);
+                return;
+            }
+
+            // M40: only reachable once `inMenu` is false (from "New
+            // Game" above). Character-by-character text input is only
+            // routed to the flow while its own NameEntry state is
+            // active -- `OnChar`/`OnBackspace` are themselves real
+            // no-ops otherwise (see CharacterCreationFlow's own doc
+            // comment), so this doesn't need to know which of the
+            // flow's own states is currently showing.
+            if (inCharacterCreation) {
+                bool upDown = KeyPressed(VK_UP);
+                if (upDown && !ccUpKeyWasDown) characterCreationFlow.OnUp();
+                ccUpKeyWasDown = upDown;
+
+                bool downDown = KeyPressed(VK_DOWN);
+                if (downDown && !ccDownKeyWasDown) characterCreationFlow.OnDown();
+                ccDownKeyWasDown = downDown;
+
+                bool cancelDown = KeyPressed(VK_ESCAPE);
+                if (cancelDown && !ccCancelKeyWasDown) {
+                    if (characterCreationFlow.OnCancel() == dawnstar::CharacterCreationAction::CancelToMainMenu) {
+                        inCharacterCreation = false;
+                        inMenu = true;
+                    }
+                }
+                ccCancelKeyWasDown = cancelDown;
+
+                bool selectDown = KeyPressed(VK_RETURN);
+                if (selectDown && !ccSelectKeyWasDown) {
+                    switch (characterCreationFlow.OnSelect()) {
+                        case dawnstar::CharacterCreationAction::StartGame:
+                            // The real end of character creation: the
+                            // REAL class/name are used here for the
+                            // first time, replacing M20/M38's own fixed
+                            // "class 0, Traveler" stand-in.
+                            playerSlot.emplace(dawnstar::PlayerCreation::CreateCharacter(
+                                characterCreationFlow.SelectedClassIndex(), characterCreationFlow.EnteredName(),
+                                charData, items, globalRng));
+                            inCharacterCreation = false;
+                            break;
+                        case dawnstar::CharacterCreationAction::CancelToMainMenu:
+                        case dawnstar::CharacterCreationAction::None:
+                            break;
+                    }
+                }
+                ccSelectKeyWasDown = selectDown;
+
+                for (int c = 'A'; c <= 'Z'; c++) {
+                    bool down = KeyPressed(c);
+                    size_t idx = static_cast<size_t>(c - 'A');
+                    if (down && !ccLetterKeyWasDown[idx]) characterCreationFlow.OnChar(static_cast<char>(c));
+                    ccLetterKeyWasDown[idx] = down;
+                }
+                for (int c = '0'; c <= '9'; c++) {
+                    bool down = KeyPressed(c);
+                    size_t idx = static_cast<size_t>(c - '0');
+                    if (down && !ccDigitKeyWasDown[idx]) characterCreationFlow.OnChar(static_cast<char>(c));
+                    ccDigitKeyWasDown[idx] = down;
+                }
+                bool spaceDown = KeyPressed(VK_SPACE);
+                if (spaceDown && !ccSpaceKeyWasDown) characterCreationFlow.OnChar(' ');
+                ccSpaceKeyWasDown = spaceDown;
+                bool apostropheDown = KeyPressed(VK_OEM_7);
+                if (apostropheDown && !ccApostropheKeyWasDown) characterCreationFlow.OnChar('\'');
+                ccApostropheKeyWasDown = apostropheDown;
+                bool hyphenDown = KeyPressed(VK_OEM_MINUS);
+                if (hyphenDown && !ccHyphenKeyWasDown) characterCreationFlow.OnChar('-');
+                ccHyphenKeyWasDown = hyphenDown;
+                bool backspaceDown = KeyPressed(VK_BACK);
+                if (backspaceDown && !ccBackspaceKeyWasDown) characterCreationFlow.OnBackspace();
+                ccBackspaceKeyWasDown = backspaceDown;
+
+                characterCreationFlow.Render(backbuffer);
                 window.Present(backbuffer);
                 return;
             }
