@@ -822,10 +822,14 @@ int main(int argc, char** argv) {
         // --- H: the Options menu's now-real "Save Game"/"Load Game" actions and
         // their two failure screens (secondaryParam==31's own case 5/6, plus
         // run()'s own two else-branches). ---
+        // M43: OnSelect's grown `nextItemSpawnId` parameter -- a plain
+        // stand-in for main.cpp's own nextDropSpawnId, started at the same
+        // 1 this test doesn't stress (m43_reveal_traitor_smoke.cpp does).
+        int16_t nextItemSpawnId = 1;
         OptionsMenu menu(helpText, shopDialogue);
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < 5; i++) menu.OnDown();  // index 5 == "Save Game"
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::SaveGame,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::SaveGame,
               "\"Save Game\" (secondaryParam==31's own case 5) should hand the real save back to main.cpp");
         Backbuffer optionsBb;
         optionsBb.Fill(0);
@@ -835,7 +839,7 @@ int main(int argc, char** argv) {
               "...and should leave the Options list itself showing -- the LoadingScreen swap is ESGame's own job");
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < 6; i++) menu.OnDown();  // index 6 == "Load Game"
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::LoadGame,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::LoadGame,
               "\"Load Game\" (case 6) should hand the real load back to main.cpp");
 
         // The Save Error screen: GenericInfoUI secondaryParam 499 -> exit().
@@ -848,7 +852,7 @@ int main(int argc, char** argv) {
               "the failed-save screen should show the real \"Save Error\" title on the shared info Screen");
         Check(menu.OnCancel() == OptionsMenuAction::None,
               "a mode-4 message screen has no Cancel command at all -- Cancel is a real no-op");
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::Exit,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::Exit,
               "Ok on \"Save Error\" should EXIT the game: secondaryParam==499's own dispatch is an unconditional exit()");
 
         // The "Unavailable" screen: secondaryParam 305 -> back to OptionsUI.
@@ -860,7 +864,7 @@ int main(int argc, char** argv) {
                              "Unavailable", kWhite),
               "the failed-load screen should show the real \"Unavailable\" title on its own separate Screen");
         Check(menu.OnCancel() == OptionsMenuAction::None, "its own mode-4 Cancel is a real no-op too");
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "Ok on \"Unavailable\" is not a main.cpp-level action...");
         Backbuffer backBb;
         backBb.Fill(0);

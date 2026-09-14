@@ -2703,17 +2703,128 @@ milestone rather than just read-through.
       message screens' own centered titles, 12px-pitch wrapped body lines
       and soft-key bars -- before the diagnostic was removed.
 
+- [x] **M43 -- the real "Reveal Traitor" mini-quiz** (this session). The
+      last deferred no-op in the Options menu is now real, and that list
+      is EMPTY. `ui/options_menu.h`/`.cpp` grew the full
+      `../src/ESGame.java` secondaryParam chain: 31's own case 8
+      (`GenericInfoUI` 68, `setupMessage("Reveal Traitor",
+      Shop.dialogue[9][66])`), 68's own Ok (any command in the original;
+      only Ok is attached -- `newRevealUI()`'s mode-5 Yes/No prompt over
+      `dialogue[9][67]`, with `removeCommand(cancelCommand)` so Cancel is
+      a real no-op, the same "no way to back out" quirk as the quit
+      confirmation), 65's own Select ("Yes" -> `newRevealWhomUI()`'s
+      "Who is the Traitor?" over the 4 suspect names; "No" -> backTarget
+      OptionsUI), 66's own Select (the guess itself), and 67's own Ok
+      (`ambushTimer = 1`, `specialEncounterResolved = true`, back to
+      `gameCanvas` -- again no command check; only Ok is attached). The
+      66 result message is ALWAYS `dialogue[9][68]+"\n"+
+      dialogue[9][69]+"\n"` plus a guess-dependent third line
+      (`dialogue[9][70]` correct, `Util.replace`-substituted
+      `dialogue[9][72]` wrong, naming the REAL traitor via
+      `Shop.NAMES[5+traitorIndex]` -- the quiz tells you who it actually
+      was).
+
+      The real state changes: a correct guess sets `Player.newGamePlus`
+      and calls `grantStarFrostItem()` -- ported as
+      `PlayerInventory::GrantStarFrostItem` (`player/player_inventory.h`)
+      alongside the other inventory slot management, since that's exactly
+      what it is: set `starFrostBonusActive` (whose +4 `SkillValue` reader
+      has existed since M14), take one spawn id from the live item
+      counter, `AddItem(100 /* StarFrost */, spawnId, 0)`; on a full
+      inventory, evict -- the FIRST id-87 slot wins outright
+      (Player.java's own `break`, before any cheaper item is even
+      considered), else the non-equipped slot with the lowest positive
+      `Item.column(5,...)` sell price, then retry with the SAME spawnId.
+      One real edge guarded defensively rather than ported literally:
+      with every slot equipped/zero-priced Player.java's evictSlot stays
+      -1 and `removeInventorySlot(-1)` would throw
+      ArrayIndexOutOfBoundsException (unreachable in practice -- at most
+      ~7 of 24 slots can be equipped); the port skips the removal instead
+      and the retry add simply fails, same "C++ has no exceptions safety
+      net" precedent as `PlayerMovement`'s no-neighbor-edge guard.
+      `PlayerState` gained `newGamePlus`/`ambushTimer` (both transient:
+      neither is in either save format, so a save/load cycle silently
+      loses them -- and `starFrostBonusActive` too, while the StarFrost
+      item itself survives in the serialized inventory).
+
+      **A real, preserved quirk worth calling out:** either way --
+      correct or wrong -- the 66 dispatch then runs
+      `character.resetToHubPosition(false)` OUTSIDE its if/else, so even
+      a WRONG guess yanks the player back to the hub and tells them who
+      the real traitor was.
+
+      **A doc correction, not a "fix":** CLASS_MAP.md had resolved the
+      ambush system ("`Player.ambushTimer >= 0`, was `Q >= 0`") as DEAD
+      code -- "nowhere in the entire codebase is ambushTimer ever
+      assigned anything other than its -1 field initializer". That
+      resolution was wrong even for the original: `ESGame.java`'s own
+      secondaryParam==67 branch assigns `ambushTimer = 1`, and the
+      M38-era decompile made the branch look unreachable only because the
+      dispatch then read the mis-renamed `.mode`. With M38's
+      `.mode`->`.secondaryParam` fix the branch is reachable as written,
+      so M43 also corrects that CLASS_MAP.md bullet. The armed ambush
+      still has no consumer in this port yet --
+      `GameCanvas.tickPerSecond`'s whole once-per-second passive tick
+      (regen/drain, effect countdowns, and the ambush spawner with its
+      two `newGamePlus`-selected checkpoint schedules, culminating in the
+      type-42 end-game monster at elapsed second 140) remains its own
+      future milestone; M43 sets the fields and documents exactly what
+      will read them.
+
+      Wiring: `OptionsMenu::OnSelect` grew an `int16_t& nextItemSpawnId`
+      parameter (main.cpp passes its own `nextDropSpawnId`,
+      `Item.nextSpawnId()`'s stand-in, so the StarFrost grant draws from
+      the same live counter combat's death drops already use -- the same
+      grown-signature reasoning as M41's own additions); the
+      `Util.replace` first-occurrence-only semantics got a small
+      file-local helper in options_menu.cpp (its first real ported call
+      site); and the 4 suspect names became one shared `kSuspectNames`
+      table used by both the Clue Log and the quiz. The saved-copy
+      spawn-id counters in `OtherStateInfo` remain un-synced with the
+      live counters, unchanged from M42's documented state (that wiring
+      still arrives with whichever milestone takes it up).
+
+      Verified via the new `reveal_traitor_smoke.exe` (60+ checks across
+      five sections) against a real generated 37-level world, a real
+      character (M11), and real `npcstrings.dat`/`itemsin.dat` data: the
+      full navigation graph (intro title+text, the Yes/No prompt with its
+      removed-Cancel no-op, "No" -> Options, fresh-screen "Yes" -> the
+      4-name list, Cancel -> Options) pixel-checked via the M37/M39
+      BitmapFont oracle; a wrong guess against an independently
+      re-derived expected message and state (no newGamePlus, no grant,
+      no ambush arming -- yet the hub teleport still happens); a correct
+      guess (newGamePlus, the immediate +4 via M14's own `SkillValue`,
+      id-100 with `(spawnId<<16)+0` data at the first free slot, counter
+      advanced, the `dialogue[9][70]` line, then the 67 tail arming
+      `ambushTimer=1`/`specialEncounterResolved` and returning to the
+      game); the transient-fields save/load quirk through a real
+      `PlayerSave::ToBytes`/`FromBytes` round trip; and
+      `GrantStarFrostItem`'s eviction math driven directly on scratch
+      inventories, with every expected eviction re-derived from
+      Player.java's own loop against the real sell prices (free-slot
+      append, lowest-value eviction, the id-87 break, and the
+      all-equipped guarded edge). M39's own test was updated to drop
+      "Reveal Traitor" from its deferred-no-op section (it now verifies
+      the entry/exit navigation only, deep checks in M43's own file).
+      All checks passed (all four affected test files). Full clean
+      rebuild zero warnings; all 41 smoke tests pass; `dawnstar_port.exe`
+      launches and stays up.
+
 ## Milestones next
 
-- [ ] **M43 and beyond (not yet planned in detail):** "Reveal Traitor"'s
-      own multi-screen mini-quiz (needs `grantStarFrostItem()`, still
-      unported) -- the last deferred no-op left in the Options menu; NPC
-      dialogue (needs `Shop.dialogue()`'s real line-selection logic -- M39
+- [ ] **M44 and beyond (not yet planned in detail):** NPC dialogue
+      (needs `Shop.dialogue()`'s real line-selection logic -- M39
       only reused the raw npcstrings.dat text `ShopDialogue` already loads,
       for Clue Log, not that selection logic itself); shops (which would
       also let `OtherStateInfo`'s own 26 saved `Shop.*` values, and the two
       global spawn-id counters M42 saves but nothing yet advances, become
-      live rather than format-only); `LoadingScreen.java`'s own modes 1/2
+      live rather than format-only); `GameCanvas.tickPerSecond`'s own
+      once-per-real-second passive tick, including the now-armed
+      "overstayed in one place" ambush spawner M43's secondaryParam==67
+      result sets up (nothing consumes `ambushTimer`/`newGamePlus` in this
+      port yet, and its two `newGamePlus`-selected checkpoint schedules
+      culminate in the type-42 end-game monster at elapsed second 140);
+      `LoadingScreen.java`'s own modes 1/2
       splash sequence, if the boot flow is ever reproduced. Gets its own
       milestone(s) once the shape of "how much fits in one slice" is
       clearer -- following `shadowkey-decomp`'s pattern of not over-planning

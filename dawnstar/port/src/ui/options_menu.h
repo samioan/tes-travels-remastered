@@ -107,13 +107,12 @@ enum class OptionsMenuAction { None, ReturnToGame, Exit, UseInventoryItem, SaveG
 // ui/loading_screen.h for the "Saving Game"/"Loading Game" progress bar
 // main.cpp shows while that runs.
 //
-// Still deliberately DEFERRED as a real, silent no-op (same "Continue Game"
-// precedent M38 already established), since it needs a whole system
-// this port hasn't built yet: "Reveal Traitor" (secondaryParam
-// 68/65/66's own multi-screen "who is the traitor?" mini-quiz, which on a
-// correct guess calls `grantStarFrostItem()` and sets `newGamePlus`/
-// `ambushTimer` -- none of which are ported: see player/player_state.h's
-// own `starFrostBonusActive`/`traitorSuspicionCount` doc comments).
+// M43 additionally reproduces "Reveal Traitor" (secondaryParam==31's own
+// case 8, then 68/65/66/67's own chain) -- no longer the silent no-op M39
+// left it as, and with it the Options menu's deferred-no-op list is now
+// EMPTY. See the Active::RevealIntro/RevealConfirm/RevealWhom/RevealResult
+// dispatch comments in options_menu.cpp for the exact screen chain, and
+// m43_reveal_traitor_smoke.cpp for the deep behavior checks.
 class OptionsMenu {
 public:
     OptionsMenu(HelpText helpText, ShopDialogue shopDialogue);
@@ -135,8 +134,17 @@ public:
     // AddDroppedItem) -- but NOT `MonsterDatabase`/`JavaRandom`: "Use"
     // never runs here at all, see OptionsMenuAction::UseInventoryItem's
     // own doc comment.
+    //
+    // M43 added `nextItemSpawnId` (main.cpp's own nextDropSpawnId,
+    // Item.nextSpawnId()'s stand-in): the Reveal Traitor quiz's
+    // correct-guess award hands the granted StarFrost its spawn id from
+    // that same live counter every other item-granting call site already
+    // takes it from -- passed by reference so the hand-out genuinely
+    // advances the shared counter, the same grown-signature reasoning as
+    // M41's own `items`/`spells`/`levels`/`world` additions.
     OptionsMenuAction OnSelect(PlayerState& player, const CharacterData& charData, const ItemDatabase& items,
-                               const SpellDatabase& spells, std::vector<GeneratedLevel>& levels, WorldRegistry& world);
+                               const SpellDatabase& spells, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
+                               int16_t& nextItemSpawnId);
 
     // The real Cancel/Back command (both map to this port's own single
     // "back" key -- same simplification MenuFlow::OnCancel already
@@ -199,8 +207,32 @@ public:
     void Render(Backbuffer& bb) const;
 
 private:
-    enum class Active { Options, ClueLog, Help, Info, QuitConfirm, InventoryList, InventoryItem, SkillsList,
-                         SpellsList, SpellInfo, SaveError, NoSavedGame };
+    enum class Active {
+        Options,
+        ClueLog,
+        Help,
+        Info,
+        QuitConfirm,
+        InventoryList,
+        InventoryItem,
+        SkillsList,
+        SpellsList,
+        SpellInfo,
+        SaveError,
+        NoSavedGame,
+        // M43: the "Reveal Traitor" chain. RevealIntro/RevealResult both
+        // RENDER the same shared info_ Screen (ESGame reuses its one
+        // GenericInfoUI for secondaryParam 68 and 67), kept as distinct
+        // Active states because their own dispatches differ -- exactly
+        // the same reasoning as Active::SaveError's own doc comment
+        // above. RevealConfirm/RevealWhom are the two PROMPT-list
+        // Screens ESGame's newRevealUI()/newRevealWhomUI() build FRESH
+        // on every entry.
+        RevealIntro,
+        RevealConfirm,
+        RevealWhom,
+        RevealResult
+    };
 
     Screen& ActiveScreen();
     const Screen& ActiveScreen() const;
@@ -255,6 +287,13 @@ private:
     Screen skillsList_;
     Screen spellsList_;
     Screen spellInfo_;
+    // M43: ESGame's own single RevealUI field, reassigned to a brand-new
+    // Screen by newRevealUI()/newRevealWhomUI() on every (re)entry -- two
+    // members here (one per construction) rather than one, so each keeps
+    // its own fresh-replacement semantics explicit, same "selection
+    // always starts fresh" reasoning as inventoryList_ above.
+    Screen revealConfirm_;
+    Screen revealWhom_;
     // ESGame.currentItemIndex/currentSpellIndex -- which inventory slot/
     // known-spell index InventoryItemUI/SpellInfoUI's own single-item
     // action dispatch (secondaryParam 34/38) applies to, since neither

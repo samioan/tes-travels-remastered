@@ -61,6 +61,37 @@ public:
     // Player.java's removeInventorySlot(). False if slot >= inventoryCount.
     static bool RemoveSlot(PlayerState& p, const ItemDatabase& items, int slot);
 
+    // M43: Player.java's grantStarFrostItem() -- the "Reveal Traitor"
+    // quiz's correct-guess award. Sets starFrostBonusActive (SkillValue's
+    // flat +4, M14), takes one spawn id from `nextItemSpawnId` (main.cpp's
+    // own nextDropSpawnId, Item.nextSpawnId()'s stand-in -- handed out
+    // with the same post-increment-from-1 convention combat_tick.cpp's
+    // own death-drop call site already established, so the id the original
+    // would hand out and this one agree on the first call: Java's
+    // nextSpawnId() returns ++nextSpawnId from a 0 start = 1), then tries
+    // AddItem(100 /* StarFrost */, spawnId, 0). If the inventory is full,
+    // evicts to make room: a slot holding item id 87 ("Warp to camp",
+    // Player.java's own check -- the loop breaks on the FIRST one it
+    // sees, before even considering any cheaper item, preserved exactly)
+    // wins outright; otherwise the non-equipped slot with the lowest
+    // positive Item.column(5,...) sell price is evicted, then the add is
+    // retried with the SAME spawnId. The original's "Still can't add
+    // StarFrost" println tail isn't ported (no stdout channel any module
+    // here uses).
+    //
+    // A real edge guarded defensively rather than ported literally: when
+    // every slot is equipped (or zero-priced), Player.java's evictSlot
+    // stays -1 and its removeInventorySlot(-1) would throw
+    // ArrayIndexOutOfBoundsException -- unreachable in practice (at most
+    // ~7 of 24 slots can be equipped, and every real inventory holds
+    // positive-value loot); guarded here instead, the same
+    // "C++ has no exceptions safety net for an out-of-bounds index"
+    // precedent player_movement.h's own no-neighbor-edge guard set. The
+    // retry add then simply fails again and the item is not granted --
+    // starFrostBonusActive stays set either way, exactly as in the
+    // original (it's set before the first add attempt).
+    static void GrantStarFrostItem(PlayerState& p, const ItemDatabase& items, int16_t& nextItemSpawnId);
+
     // Equips the most-recently-added inventory item (inventoryCount-1).
     static bool EquipLastPickedUpItem(PlayerState& p, const ItemDatabase& items, bool autoUnequipConflict);
 

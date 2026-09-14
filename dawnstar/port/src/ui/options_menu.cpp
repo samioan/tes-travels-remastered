@@ -5,6 +5,7 @@
 
 #include "player/player_combat_stats.h"
 #include "player/player_inventory.h"
+#include "player/player_movement.h"
 #include "player/player_spellcasting.h"
 
 namespace dawnstar {
@@ -114,6 +115,33 @@ std::string BuildClueEntry(const PlayerState& player, const ShopDialogue& dialog
     if (body.empty()) body = "You have no information yet.";
     return body;
 }
+// Shop.java's own NAMES[5..8] -- the 4 named-suspect NPC identities the
+// whole "who is the traitor?" subplot runs over (the Clue Log's own item
+// list and newRevealWhomUI() below are the same 4 names in the original
+// too; NAMES[0..4], the hub-town peddler identities, have no
+// reveal-traitor role). ESGame.java builds both arrays inline as the
+// same literals; kept here as one shared table rather than two duplicated
+// literal lists, the same reuse-over-duplication call M16/M17 already
+// made for the inventory/starting-spell helpers.
+const char* const kSuspectNames[4] = {"Alhavara", "Beatrice", "Chung", "Delacroix"};
+
+// Util.java's own replace(source, tag, value) (M43, its first real ported
+// call site): replaces only the FIRST occurrence of `tag` -- Util.java's
+// own doc comment notes that callers substituting several distinct
+// placeholders must call it once per placeholder in order, relying on
+// that. Ported as a small file-local helper rather than a new util module
+// because nothing else in this port has needed it yet; the two other
+// original call sites that substitute a suspect name (newGameOverUI's
+// dialogue[9][73] text, secondaryParam==201, and the Clue Log's own
+// dialogue[9][5+RUMOR_STRING_OFFSET...] lines) read their <TAG>-bearing
+// text straight from npcstrings.dat with the placeholder already
+// substituted in the data itself.
+std::string ReplaceFirstTag(const std::string& source, const std::string& tag, const std::string& value) {
+    size_t at = source.find(tag);
+    if (at == std::string::npos) return source;
+    return source.substr(0, at) + value + source.substr(at + tag.size());
+}
+
 
 }  // namespace
 
@@ -138,7 +166,14 @@ OptionsMenu::OptionsMenu(HelpText helpText, ShopDialogue shopDialogue)
       inventoryItem_(ScreenMode::PromptList),
       skillsList_(ScreenMode::PromptList),
       spellsList_(ScreenMode::PromptList),
-      spellInfo_(ScreenMode::PromptList) {
+      spellInfo_(ScreenMode::PromptList),
+      // M43: placeholder constructions, never actually shown in this
+      // state -- each is fully replaced by fresh construction inside
+      // OnSelect's RevealIntro/RevealConfirm branches below (ESGame's own
+      // newRevealUI()/newRevealWhomUI() build a brand-new Screen every
+      // time), same reasoning as inventoryList_ above.
+      revealConfirm_(ScreenMode::PromptList),
+      revealWhom_(ScreenMode::PromptList) {
     // ESGame.allocateAllUIs()'s own OptionsUI construction: `setupList(
     // "Options", ..., false)` (not cancelable -- Select only) plus its
     // own separately-added `backCommand`.
@@ -150,7 +185,8 @@ OptionsMenu::OptionsMenu(HelpText helpText, ShopDialogue shopDialogue)
     options_.AddCommand(CommandId::Back);
     // `this.ClueUI.setupPromptList("Clue Log", "", var12)` -- empty
     // prompt text, 4 named suspects plus "Rumors".
-    clueLog_.SetupPromptList("Clue Log", "", {"Alhavara", "Beatrice", "Chung", "Delacroix", "Rumors"});
+    clueLog_.SetupPromptList("Clue Log", "",
+                             {kSuspectNames[0], kSuspectNames[1], kSuspectNames[2], kSuspectNames[3], "Rumors"});
     // `this.helpUI.setupList("Help", helpTitles, true)` -- see this
     // class's own header doc comment on why this is a separate `Screen`
     // instance from M38's own `MenuFlow::helpTopics_`.
@@ -195,6 +231,18 @@ Screen& OptionsMenu::ActiveScreen() {
             return info_;
         case Active::NoSavedGame:
             return noSavedGame_;
+        case Active::RevealIntro:
+        case Active::RevealResult:
+            // The same shared info_ Screen again -- ESGame reuses its one
+            // GenericInfoUI for secondaryParam 68 (the quiz intro) and 67
+            // (the guess result) too, so both render info_; only their
+            // secondaryParams, and therefore their Ok dispatches, differ
+            // (exactly Active::SaveError's own reasoning above).
+            return info_;
+        case Active::RevealConfirm:
+            return revealConfirm_;
+        case Active::RevealWhom:
+            return revealWhom_;
     }
     return options_;
 }
@@ -290,7 +338,7 @@ OptionsMenuAction OptionsMenu::FinishUseItem(PlayerState& player, const ItemData
 
 OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData& charData, const ItemDatabase& items,
                                         const SpellDatabase& spells, std::vector<GeneratedLevel>& levels,
-                                        WorldRegistry& world) {
+                                        WorldRegistry& world, int16_t& nextItemSpawnId) {
     switch (active_) {
         case Active::Options: {
             // secondaryParam==31's own Select branch.
@@ -348,7 +396,17 @@ OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData
                          // OptionsUI; this.setCurrentDisplay(this.helpUI);`
                     active_ = Active::Help;
                     return OptionsMenuAction::None;
-                case 8:  // "Reveal Traitor" -- deferred no-op.
+                case 8:
+                    // "Reveal Traitor": secondaryParam==31's own case 8 --
+                    // `this.GenericInfoUI.setSecondaryParam(68); this.
+                    // GenericInfoUI.setupMessage("Reveal Traitor",
+                    // Shop.dialogue[9][66]); this.setCurrentDisplay(this.
+                    // GenericInfoUI);`. The intro text is dialogue row 9's
+                    // own index 66; the shared info_ Screen renders it, and
+                    // Active::RevealIntro (not Active::Info) carries its
+                    // distinct Ok dispatch below.
+                    info_.SetupMessage("Reveal Traitor", shopDialogue_.groups[9][66]);
+                    active_ = Active::RevealIntro;
                     return OptionsMenuAction::None;
                 case 9:  // "Quit Game": `this.confirmQuitUI = this.
                          // newConfirmQuitUI(uic); this.setCurrentDisplay(
@@ -522,6 +580,101 @@ OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData
             // restart -- see ShowNoSavedGame's own doc comment.
             active_ = Active::Options;
             return OptionsMenuAction::None;
+        case Active::RevealIntro: {
+            // secondaryParam==68: NO command check in the original
+            // (`else if (uic.secondaryParam == 68) { this.RevealUI =
+            // this.newRevealUI(); this.setCurrentDisplay(this.RevealUI);
+            // }`) -- but GenericInfoUI (mode 4) has only its own Ok
+            // command attached, so Ok is the only command that can ever
+            // arrive here anyway; ported as Select. newRevealUI(): mode 5,
+            // `setupPromptList("Reveal Traitor", Shop.dialogue[9][67],
+            // {"Yes", "No"})` then `removeCommand(cancelCommand)` -- there
+            // is NO way to Cancel out of this screen, "Yes" or "No" are
+            // the only exits (the same real "no way to back out" quirk as
+            // the quit confirmation), and backTarget is OptionsUI. A
+            // FRESH Screen every entry (`this.RevealUI = this.
+            // newRevealUI()`), so a full replacement here too, the same
+            // reasoning as RebuildInventoryList.
+            revealConfirm_ = Screen(ScreenMode::PromptList);
+            revealConfirm_.SetupPromptList("Reveal Traitor", shopDialogue_.groups[9][67], {"Yes", "No"});
+            revealConfirm_.RemoveCommand(CommandId::Cancel);
+            active_ = Active::RevealConfirm;
+            return OptionsMenuAction::None;
+        }
+        case Active::RevealConfirm: {
+            // secondaryParam==65: `if (var1 == selectCommand) { if
+            // (selectedIndexOrMinusOne() == 0) { this.RevealUI = this.
+            // newRevealWhomUI(); this.setCurrentDisplay(this.RevealUI); }
+            // else { this.setCurrentDisplay(uic.backTarget /* OptionsUI
+            // */); } }`. Index 0 is "Yes" -- anything else (i.e. "No") is
+            // the decline path straight back to Options.
+            int idx = revealConfirm_.SelectedIndexOrMinusOne();
+            if (idx == 0) {
+                // newRevealWhomUI(): mode 5, "Who is the Traitor?" over the
+                // 4 suspect names (Cancel present this time), backTarget
+                // OptionsUI. Fresh Screen per entry, same as revealConfirm_
+                // above.
+                revealWhom_ = Screen(ScreenMode::PromptList);
+                revealWhom_.SetupPromptList("Reveal Traitor", "Who is the Traitor?",
+                                           {kSuspectNames[0], kSuspectNames[1], kSuspectNames[2], kSuspectNames[3]});
+                active_ = Active::RevealWhom;
+            } else {
+                active_ = Active::Options;
+            }
+            return OptionsMenuAction::None;
+        }
+        case Active::RevealWhom: {
+            // secondaryParam==66: `if (var1 == selectCommand) { ... }` --
+            // the guess itself. The result message is ALWAYS
+            // dialogue[9][68] + "\n" + dialogue[9][69] + "\n" plus a
+            // third, guess-dependent line; on a correct guess the
+            // original also sets newGamePlus and awards the StarFrost
+            // item (PlayerInventory::GrantStarFrostItem, taking its spawn
+            // id from `nextItemSpawnId` -- main.cpp's own
+            // nextDropSpawnId); on a wrong guess the third line is
+            // dialogue[9][72] with <TAG> replaced by the REAL traitor's
+            // own name (Shop.NAMES[5 + traitorIndex], kSuspectNames here)
+            // -- the quiz tells you who it actually was. A real quirk
+            // preserved as found: EITHER way the player is then
+            // teleported back to the hub (`character.
+            // resetToHubPosition(false)` runs outside the if/else), so
+            // even a wrong guess yanks you home.
+            int guess = revealWhom_.SelectedIndexOrMinusOne();
+            std::string message = shopDialogue_.groups[9][68] + "\n" + shopDialogue_.groups[9][69] + "\n";
+            if (guess == player.traitorIndex) {
+                player.newGamePlus = true;
+                PlayerInventory::GrantStarFrostItem(player, items, nextItemSpawnId);
+                message += shopDialogue_.groups[9][70];
+            } else {
+                message += ReplaceFirstTag(shopDialogue_.groups[9][72], "<TAG>",
+                                          kSuspectNames[static_cast<size_t>(player.traitorIndex)]);
+            }
+            info_.SetupMessage("Reveal Traitor", message);
+            PlayerMovement::ResetToHubPosition(player, false, levels, world);
+            active_ = Active::RevealResult;
+            return OptionsMenuAction::None;
+        }
+        case Active::RevealResult:
+            // secondaryParam==67: NO command check in the original either
+            // (`else if (uic.secondaryParam == 67) { this.character.
+            // ambushTimer = 1; this.character.specialEncounterResolved =
+            // true; this.setCurrentDisplay(this.gameCanvas); }`) -- Ok is
+            // the only command attached to the mode-4 GenericInfoUI. This
+            // is the ONLY assignment of ambushTimer anywhere in the whole
+            // game (the one CLASS_MAP.md had mis-resolved as dead code
+            // before M38's dispatch fix -- see M43's roadmap entry): it
+            // arms GameCanvas.tickPerSecond's still-unported "overstayed
+            // in one place" ambush spawner. specialEncounterResolved
+            // already round-trips through the save format (M12's packed
+            // traitor byte), but ambushTimer/newGamePlus/
+            // starFrostBonusActive are all transient -- see player_state.h.
+            // Then `setCurrentDisplay(this.gameCanvas)`: back to the game,
+            // with the persistent OptionsUI list ready for the next time
+            // the Options menu is opened.
+            player.ambushTimer = 1;
+            player.specialEncounterResolved = true;
+            active_ = Active::Options;
+            return OptionsMenuAction::ReturnToGame;
     }
     return OptionsMenuAction::None;
 }
@@ -583,6 +736,24 @@ OptionsMenuAction OptionsMenu::OnCancel() {
             // adds an Ok command ONLY -- there is no Cancel/back command on
             // either to press, so this is a real no-op exactly like
             // Active::Info's above.
+            return OptionsMenuAction::None;
+        case Active::RevealIntro:
+        case Active::RevealResult:
+            // Mode-4 GenericInfoUI again -- Ok only, no Cancel/back
+            // command to press, exactly like Active::Info/SaveError/
+            // NoSavedGame above.
+            return OptionsMenuAction::None;
+        case Active::RevealConfirm:
+            // `newRevealUI()` explicitly removed its own Cancel command --
+            // the same real "no way to back out" quirk as Active::QuitConfirm
+            // above (and M38's MenuFlow quit confirmation before it): the
+            // only exits are selecting "Yes" or "No".
+            return OptionsMenuAction::None;
+        case Active::RevealWhom:
+            // The top-level `if (var1 == cancelCommand && uic.backTarget !=
+            // null)` check: `newRevealWhomUI()`'s own backTarget is
+            // OptionsUI (`var1.v = this.OptionsUI`).
+            active_ = Active::Options;
             return OptionsMenuAction::None;
     }
     return OptionsMenuAction::None;

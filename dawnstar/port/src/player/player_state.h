@@ -155,9 +155,34 @@ struct PlayerState {
     // --- M14: touched by PlayerCombatStats::GainSkillExp. Consumed
     // elsewhere by ESGame's level-up UI, not ported yet.
     bool levelUpPending = false;
-    // Set once grantStarFrostItem has run (that method isn't ported
-    // yet); read by SkillValue's +4 bonus.
+    // Set once PlayerInventory::GrantStarFrostItem has run (M43, the
+    // Reveal Traitor quiz's correct-guess award -- Player.java's own
+    // grantStarFrostItem()); read by SkillValue's +4 bonus. Like
+    // newGamePlus/ambushTimer below it is NOT part of either save format
+    // (Player.java never serializes it), so a save/load cycle silently
+    // loses the +4 while the StarFrost item itself stays -- preserved
+    // transient behavior, checked by m43_reveal_traitor_smoke.cpp.
+    // GameCanvas.java's own death branch also clears it back to false
+    // (line ~1337); that branch isn't ported yet either.
     bool starFrostBonusActive = false;
+
+    // --- M43: Player.java's newGamePlus -- set ONLY by ESGame's Reveal
+    // Traitor result (secondaryParam==66, a correct guess), read only by
+    // GameCanvas.tickPerSecond's ambush-spawner branch to pick the
+    // alternate checkpoint schedule (that per-second tick itself still
+    // unported -- see docs/PORT_ROADMAP.md's M43 entry). NOT part of
+    // either save format, so a save/load cycle silently loses it --
+    // preserved transient behavior.
+    bool newGamePlus = false;
+    // --- M43: Player.java's ambushTimer -- the per-second "overstayed in
+    // one place" ambush counter (-1 = inactive). Set to 1 ONLY by
+    // secondaryParam==67's dispatch (the Reveal result screen's own Ok --
+    // the ONLY assignment anywhere in the game, the one CLASS_MAP.md had
+    // mis-resolved as dead code before M38's `.mode`->`.secondaryParam`
+    // fix made it reachable; see M43's roadmap entry), then incremented
+    // per second by tickPerSecond's unported ambush branch. Transient
+    // like newGamePlus above (never serialized).
+    int ambushTimer = -1;
 
     // --- M28: GameCanvas.npcInSight (see player/player_movement.h's
     // RefreshNpcInSight). This is a GameCanvas *static* field in the

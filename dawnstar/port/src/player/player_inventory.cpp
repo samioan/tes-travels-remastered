@@ -113,6 +113,54 @@ bool PlayerInventory::RemoveSlot(PlayerState& p, const ItemDatabase& items, int 
     return true;
 }
 
+void PlayerInventory::GrantStarFrostItem(PlayerState& p, const ItemDatabase& items, int16_t& nextItemSpawnId) {
+    p.starFrostBonusActive = true;
+    // Item.nextSpawnId(): handed out with this port's established
+    // post-increment-from-1 counter convention (see this method's own
+    // header doc comment), and reused for BOTH add attempts exactly like
+    // Player.java's own single `short spawnId` local.
+    int16_t spawnId = nextItemSpawnId++;
+    bool added = AddItem(p, 100, spawnId, 0);
+    if (!added) {
+        int lowestValue = 10000;
+        int evictSlot = -1;
+        int starFrostSlot = -1;
+
+        for (int slot = 0; slot < p.inventoryCount; slot++) {
+            int itemId = std::abs(static_cast<int>(p.inventoryItemIds[static_cast<size_t>(slot)]));
+            // The FIRST id-87 slot wins outright, before any cheaper item
+            // even gets considered -- Player.java's own `break`, preserved
+            // exactly (see the header doc comment).
+            if (itemId == 87) {
+                starFrostSlot = slot;
+                break;
+            }
+
+            int value = items.sellPrice[static_cast<size_t>(itemId - 1)];
+            if (!IsEquipped(p, items, slot) && value < lowestValue && value > 0) {
+                evictSlot = slot;
+                lowestValue = value;
+            }
+        }
+
+        if (starFrostSlot > -1) {
+            RemoveSlot(p, items, starFrostSlot);
+        } else if (evictSlot > -1) {
+            // The original calls removeInventorySlot(evictSlot) even when
+            // it's still -1 (every slot equipped/zero-priced), which would
+            // throw ArrayIndexOutOfBoundsException -- guarded here instead,
+            // see the header doc comment.
+            RemoveSlot(p, items, evictSlot);
+        }
+
+        added = AddItem(p, 100, spawnId, 0);
+        // Player.java's own `System.out.println("Still can't add
+        // StarFrost")` tail on a second failure isn't ported (no stdout
+        // channel any module here uses).
+        (void)added;
+    }
+}
+
 bool PlayerInventory::EquipLastPickedUpItem(PlayerState& p, const ItemDatabase& items, bool autoUnequipConflict) {
     int slot = p.inventoryCount - 1;
     return Equip(p, items, slot, autoUnequipConflict);

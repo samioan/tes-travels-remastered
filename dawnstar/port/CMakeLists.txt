@@ -384,3 +384,12 @@ target_link_libraries(inventory_skills_spells_smoke PRIVATE dawnstar_render dawn
 # reasoning as dawnstar_combat's own CMake comment above.
 add_executable(game_save_smoke src/tests/m42_game_save_smoke.cpp)
 target_link_libraries(game_save_smoke PRIVATE dawnstar_save dawnstar_render)
+
+# M43 milestone smoke test -- see src/tests/m43_reveal_traitor_smoke.cpp.
+# Links dawnstar_player too (this test's own direct PlayerSave/
+# PlayerInventory calls) on top of dawnstar_render (OptionsMenu itself,
+# whose transitive set already includes dawnstar_player anyway) -- made
+# explicit for the direct calls, same reasoning as m36's own extra
+# dawnstar_player.
+add_executable(reveal_traitor_smoke src/tests/m43_reveal_traitor_smoke.cpp)
+target_link_libraries(reveal_traitor_smoke PRIVATE dawnstar_render dawnstar_player)

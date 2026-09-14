@@ -275,12 +275,16 @@ int main(int argc, char** argv) {
         PlayerState player = dawnstar::PlayerCreation::CreateCharacter(sorcererIndex, "Caster", charData, items, rng);
         Check(player.inventoryCount > 0, "a fresh Sorcerer should start with at least one inventory item");
 
+        // M43: OnSelect's grown `nextItemSpawnId` parameter -- a plain
+        // stand-in for main.cpp's own nextDropSpawnId, started at the same
+        // 1 this test doesn't stress (m43_reveal_traitor_smoke.cpp does).
+        int16_t nextItemSpawnId = 1;
         OptionsMenu menu(helpText, shopDialogue);
         Backbuffer bb;
 
         // --- A: Options -> "Inventory" (index 1) -> the real item list. ---
         SelectOptionsIndex(menu, 1);
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "selecting Inventory should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -292,7 +296,7 @@ int main(int argc, char** argv) {
 
         // --- B: select the first item (index 0) -> the real Item screen
         // (tooltip + Drop/[Equip-or-Unequip]/[Learn]/[Use] actions). ---
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "selecting an inventory item should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -328,14 +332,14 @@ int main(int argc, char** argv) {
         Check(equipSlot >= 0, "a Sorcerer's own real starting gear should include at least one equip/unequip-gated item");
         bool wasEquipped = PlayerInventory::IsEquipped(player, items, equipSlot);
         SelectOptionsIndex(menu, 1);
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Options -> Inventory
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Options -> Inventory
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < equipSlot; i++) menu.OnDown();
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Inventory -> Item(equipSlot)
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Inventory -> Item(equipSlot)
         // Drop is always index 0; Equip/Unequip is always index 1 when
         // present (RebuildInventoryItem's own conditional order).
         menu.OnDown();
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "toggling Equip/Unequip should not itself be a main.cpp-level action");
         Check(PlayerInventory::IsEquipped(player, items, equipSlot) != wasEquipped,
               "selecting Equip/Unequip should really flip the item's equipped state");
@@ -364,11 +368,11 @@ int main(int argc, char** argv) {
         int countBeforeDrop = player.inventoryCount;
         menu.OnCancel();  // Inventory -> Options (scenario D's own finish already left this on Inventory)
         SelectOptionsIndex(menu, 1);
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Options -> Inventory (fresh rebuild)
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Options -> Inventory (fresh rebuild)
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < dropSlot; i++) menu.OnDown();
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Inventory -> Item(dropSlot)
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Inventory -> Item(dropSlot)
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "Drop (index 0) is not itself a main.cpp-level action");
         Check(player.inventoryCount == countBeforeDrop - 1, "Drop should remove the item from the inventory");
         auto& dropped = world.droppedItems[static_cast<size_t>(player.currentLevel - 1)];
@@ -390,11 +394,11 @@ int main(int argc, char** argv) {
         int droppedCountBefore = static_cast<int>(dropped.size());
         menu.OnCancel();  // Options
         SelectOptionsIndex(menu, 1);
-        menu.OnSelect(player, charData, items, spells, levels, world);
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < starFrostSlot; i++) menu.OnDown();
-        menu.OnSelect(player, charData, items, spells, levels, world);
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Drop
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Drop
         Check(static_cast<int>(dropped.size()) == droppedCountBefore,
               "dropping StarFrost (id 101) should NOT add a dropped-item record -- a real, preserved quirk");
 
@@ -418,16 +422,16 @@ int main(int argc, char** argv) {
         int scrollSlot = player.inventoryCount - 1;
         menu.OnCancel();  // Options (from scenario E's Inventory)
         SelectOptionsIndex(menu, 1);
-        menu.OnSelect(player, charData, items, spells, levels, world);
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < scrollSlot; i++) menu.OnDown();
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Inventory -> Item(scrollSlot)
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Inventory -> Item(scrollSlot)
         int countBeforeLearn = player.inventoryCount;
         // Drop(0) always present; Equip/Unequip absent for a category-12
         // scroll (CanEquipOrUnequip is category 1-10/15 only); Learn is
         // therefore index 1.
         menu.OnDown();
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "Learn is not itself a main.cpp-level action");
         Check((player.knownSpellsMask & (1u << (learnSpellId - 1))) != 0,
               "Learn should really set the corresponding knownSpellsMask bit");
@@ -442,14 +446,14 @@ int main(int argc, char** argv) {
         int warpSlot = player.inventoryCount - 1;
         menu.OnCancel();  // Options
         SelectOptionsIndex(menu, 1);
-        menu.OnSelect(player, charData, items, spells, levels, world);
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < warpSlot; i++) menu.OnDown();
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Inventory -> Item(warpSlot)
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Inventory -> Item(warpSlot)
         // Drop(0); no Equip/Unequip (category 13); no Learn; Use is
         // index 1.
         menu.OnDown();
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::UseInventoryItem,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::UseInventoryItem,
               "selecting Use on a real gift item should ask main.cpp to perform the actual UseItem call");
         Check(menu.PendingUseItemSlot() == warpSlot, "PendingUseItemSlot should be the slot Use was chosen for");
         CombatResolution::UseItem(player, menu.PendingUseItemSlot(), nullptr, items, monsterDb, levels, world, rng);
@@ -468,12 +472,12 @@ int main(int argc, char** argv) {
         PlayerInventory::AddItem(player, 96, 0, 0);
         int campItemSlot = player.inventoryCount - 1;
         SelectOptionsIndex(menu, 1);
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Options -> Inventory
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Options -> Inventory
         for (int i = 0; i < 10; i++) menu.OnUp();
         for (int i = 0; i < campItemSlot; i++) menu.OnDown();
-        menu.OnSelect(player, charData, items, spells, levels, world);  // Inventory -> Item(campItemSlot)
+        menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId);  // Inventory -> Item(campItemSlot)
         menu.OnDown();  // Use (index 1: Drop(0), no Equip/Learn, Use(1))
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::UseInventoryItem,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::UseInventoryItem,
               "selecting Use on item 96 should also ask main.cpp to perform the real UseItem call");
         int countBeforeCampUse = player.inventoryCount;
         CombatResolution::UseItem(player, menu.PendingUseItemSlot(), nullptr, items, monsterDb, levels, world, rng);
@@ -488,7 +492,7 @@ int main(int argc, char** argv) {
         // --- I: Skills. ---
         menu.OnCancel();  // Inventory -> Options
         SelectOptionsIndex(menu, 3);
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "selecting Skills should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -499,7 +503,7 @@ int main(int argc, char** argv) {
               "the Skills list's own first item should match the real, independently-derived summary");
 
         int firstSkillIndex = ExpectedNthKnownSkillIndex(player, 0);
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "selecting a skill should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -508,7 +512,7 @@ int main(int argc, char** argv) {
         std::vector<std::string> skillTooltipLines = MessagePopup::WordWrap(expectedSkillTooltip, Screen::width() - 5 - 5);
         Check(TextRenderedAt(bb, 5, 20, skillTooltipLines[0], kItemTextColor),
               "the Skill Info screen should match the real, independently-derived skillTooltip() text");
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "Ok on Skill Info is not a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -520,7 +524,7 @@ int main(int argc, char** argv) {
 
         // --- J: Spells. ---
         SelectOptionsIndex(menu, 4);
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "selecting Spells should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -531,7 +535,7 @@ int main(int argc, char** argv) {
               "the Spells list's own first item should match the real, independently-derived summary");
 
         int firstSpellIndex0 = ExpectedNthKnownSpellId(player, spells, 0);
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "selecting a spell should not itself be a main.cpp-level action");
         bb.Fill(0);
         menu.Render(bb);
@@ -545,7 +549,7 @@ int main(int argc, char** argv) {
 
         // "Ready Spell" should set selectedSpellId and return to a
         // freshly-rebuilt Spells list with the same slot still selected.
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "Ready Spell is not itself a main.cpp-level action");
         Check(player.selectedSpellId == static_cast<int8_t>(firstSpellIndex0 + 1),
               "Ready Spell should set selectedSpellId to the real 1-based spell id");
@@ -559,7 +563,7 @@ int main(int argc, char** argv) {
 
         // Cancel from Spell Info returns to Spells (not Options); Cancel
         // from Spells returns to Options.
-        Check(menu.OnSelect(player, charData, items, spells, levels, world) == OptionsMenuAction::None,
+        Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
               "re-selecting a known spell should not itself be a main.cpp-level action");
         Check(menu.OnCancel() == OptionsMenuAction::None, "Cancel on Spell Info is not a main.cpp-level action");
         bb.Fill(0);

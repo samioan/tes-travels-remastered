@@ -505,7 +505,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
                 bool selectDown = KeyPressed(VK_RETURN);
                 if (selectDown && !optionsMenuSelectKeyWasDown) {
-                    switch (optionsMenu.OnSelect(optionsPlayer, charData, items, spells, levels, world)) {
+                    // M43: nextDropSpawnId is handed through so the Reveal
+                    // Traitor quiz's correct-guess StarFrost award
+                    // (PlayerInventory::GrantStarFrostItem) draws its spawn
+                    // id from the same live Item.nextSpawnId()-stand-in
+                    // counter every other item-granting call site here
+                    // (combat's death drops) already uses.
+                    switch (optionsMenu.OnSelect(optionsPlayer, charData, items, spells, levels, world,
+                                                  nextDropSpawnId)) {
                         case dawnstar::OptionsMenuAction::ReturnToGame:
                             inOptionsMenu = false;
                             break;

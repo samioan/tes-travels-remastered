@@ -528,11 +528,21 @@ directly, but summarized here:
   the exact per-column meaning of each isn't pinned down. `UNUSED_TABLE`
   (was `m[][]`) is confirmed dead code (declared, never read).
 - The ambush-system trigger condition (`Player.ambushTimer >= 0`, was
-  `Q >= 0`). **Resolved as dead code** while renaming `Player`: nowhere
-  in the entire codebase is `ambushTimer` ever assigned anything other
-  than its `-1` field initializer, so `GameCanvas.tickPerSecond`'s whole
-  "overstayed in one place" ambush-spawner branch is unreachable in this
-  build.
+  `Q >= 0`). Previously "resolved" here as dead code ("nowhere in the
+  entire codebase is ambushTimer ever assigned anything other than its
+  -1 field initializer") -- **that resolution was wrong**, a consequence
+  of the same pre-M38 mis-renaming that had ESGame.commandAction1
+  comparing `Screen.mode` where it should compare `secondaryParam`
+  (fixed by the rename in `../src/ESGame.java`): the
+  secondaryParam==67 branch (the "Reveal Traitor" result screen's own
+  Ok, ESGame.java line ~1254) really does assign
+  `this.character.ambushTimer = 1`, making `GameCanvas.tickPerSecond`'s
+  whole "overstayed in one place" ambush-spawner branch (two different
+  elapsed-second checkpoint schedules selected by `Player.newGamePlus`,
+  culminating in the type-42 end-game monster at second 140) reachable
+  original behavior. M43 of the PC port sets the field faithfully (see
+  `../docs/PORT_ROADMAP.md`); the per-second tick that consumes it is
+  still unported there.
 - `Player.traitorSuspicionCount` (was `unconfirmedB`, was `B`).
   **Resolved** while renaming `ESGame`: counts (capped at 3) how many
   times the player has asked the actual traitor's shop
