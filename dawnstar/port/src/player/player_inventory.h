@@ -61,6 +61,17 @@ public:
     // Player.java's removeInventorySlot(). False if slot >= inventoryCount.
     static bool RemoveSlot(PlayerState& p, const ItemDatabase& items, int slot);
 
+    // M44: Player.java's findInventorySlotOf(itemId) -- the slot currently
+    // holding `itemId` in its EQUIPPED (negative-encoded) form, or -1. A
+    // real, easy-to-miss quirk preserved exactly: the original builds
+    // `negId = -Math.abs(itemId)` and compares THAT against every slot, so
+    // a merely-owned (positive) copy never matches -- only an equipped one
+    // does. tickPerSecond's effect-6 expiry relies on this (spell 6's
+    // "Safe Camping" grant path auto-equips the item-101 StarFrost it
+    // adds, so the expiry normally finds it -- but an UNEQUIPPED StarFrost
+    // survives the expiry instead, preserved as found).
+    static int FindSlotOf(const PlayerState& p, int itemId);
+
     // M43: Player.java's grantStarFrostItem() -- the "Reveal Traitor"
     // quiz's correct-guess award. Sets starFrostBonusActive (SkillValue's
     // flat +4, M14), takes one spawn id from `nextItemSpawnId` (main.cpp's

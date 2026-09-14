@@ -113,6 +113,19 @@ bool PlayerInventory::RemoveSlot(PlayerState& p, const ItemDatabase& items, int 
     return true;
 }
 
+int PlayerInventory::FindSlotOf(const PlayerState& p, int itemId) {
+    // Java's own `int negId = -Math.abs(itemId)` compared against each
+    // (byte-promoted-to-int) slot -- see this method's own header doc
+    // comment for why only the equipped (negative) form can ever match.
+    int negId = -std::abs(itemId);
+    for (int slot = 0; slot < p.inventoryCount; slot++) {
+        if (static_cast<int>(p.inventoryItemIds[static_cast<size_t>(slot)]) == negId) {
+            return slot;
+        }
+    }
+    return -1;
+}
+
 void PlayerInventory::GrantStarFrostItem(PlayerState& p, const ItemDatabase& items, int16_t& nextItemSpawnId) {
     p.starFrostBonusActive = true;
     // Item.nextSpawnId(): handed out with this port's established

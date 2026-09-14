@@ -7,6 +7,7 @@
 #include "player/player_inventory.h"
 #include "player/player_movement.h"
 #include "player/player_spellcasting.h"
+#include "util/text.h"
 
 namespace dawnstar {
 
@@ -122,26 +123,10 @@ std::string BuildClueEntry(const PlayerState& player, const ShopDialogue& dialog
 // reveal-traitor role). ESGame.java builds both arrays inline as the
 // same literals; kept here as one shared table rather than two duplicated
 // literal lists, the same reuse-over-duplication call M16/M17 already
-// made for the inventory/starting-spell helpers.
+// made for the inventory/starting-spell helpers. (Util.replace itself now
+// lives in util/text.h, promoted there from this file's own former
+// file-local helper once M44's Game Over chain needed it too.)
 const char* const kSuspectNames[4] = {"Alhavara", "Beatrice", "Chung", "Delacroix"};
-
-// Util.java's own replace(source, tag, value) (M43, its first real ported
-// call site): replaces only the FIRST occurrence of `tag` -- Util.java's
-// own doc comment notes that callers substituting several distinct
-// placeholders must call it once per placeholder in order, relying on
-// that. Ported as a small file-local helper rather than a new util module
-// because nothing else in this port has needed it yet; the two other
-// original call sites that substitute a suspect name (newGameOverUI's
-// dialogue[9][73] text, secondaryParam==201, and the Clue Log's own
-// dialogue[9][5+RUMOR_STRING_OFFSET...] lines) read their <TAG>-bearing
-// text straight from npcstrings.dat with the placeholder already
-// substituted in the data itself.
-std::string ReplaceFirstTag(const std::string& source, const std::string& tag, const std::string& value) {
-    size_t at = source.find(tag);
-    if (at == std::string::npos) return source;
-    return source.substr(0, at) + value + source.substr(at + tag.size());
-}
-
 
 }  // namespace
 

@@ -2810,21 +2810,110 @@ milestone rather than just read-through.
       rebuild zero warnings; all 41 smoke tests pass; `dawnstar_port.exe`
       launches and stays up.
 
+- [x] **M44 -- run()'s timed tail: tickStatusCountdowns + tickPerSecond,
+      the now-live ambush spawner, and the real Game Over chain** (this
+      session). `passive/passive_tick.h`/`.cpp` (a new `dawnstar_passive`
+      library, the same "own small module, no cycle" shape as
+      combat/interact/camp) ports the whole timed tail of
+      `../src/GameCanvas.java`'s run() loop (lines ~1407-1420), which the
+      port until now had no counterpart of at all -- no per-second
+      anything existed in main.cpp.
+
+      `PassiveTick::TickStatusCountdowns` ports tickStatusCountdowns():
+      the per-iteration millisecond countdown of the 3 timed ailment
+      timers (trollThirst/glacierCurse/terrified, bits 3/4/6 -- M16's
+      combat ailment infliction sets them to 30000ms), Terrified gated on
+      `monsterAttacking`.
+
+      `PassiveTick::TickPerSecond` ports tickPerSecond() block by block:
+      Troll Thirst's UNCLAMPED per-second HP drain (2*maxHP/100, HP can
+      go negative -- the death system's business, not this tick's);
+      Glacier Curse's real quirk where Magicka regen of maxMagicka/10
+      OVERFLOWS into a reset-to-0 plus an HP drain instead of clamping;
+      the effectDurations[] per-second countdown, whose one special case
+      (index 5, effect 6 "Safe Camping" expiring) removes the item-101
+      StarFrost via the new `PlayerInventory::FindSlotOf` (Player.java's
+      findInventorySlotOf); and the ambush spawner M43 armed -- both
+      `newGamePlus`-selected checkpoint schedules, elapsed 140 always
+      spawning the literal type-42 end-game monster, the exact
+      `1+Util.randomInt(17)` X-then-Y retry-roll order, the "Enemy
+      arrived!" popup, and the >5-monsters-per-level Game Over trigger.
+
+      **Two real original-game findings, preserved as found rather than
+      "fixed" and confirmed against the source:**
+      - tickPerSecond's per-level scratch-cooldown block (lines
+        1872-1888) is a genuine NO-OP: it decodes every record into a
+        throwaway `Monster` copy and decrements THAT copy's cooldown
+        bytes, never storing the mutated record back -- so no monster's
+        cooldown is ever actually decremented by this tick (compare M36's
+        real store-backed tick). Documented in passive_tick.cpp's own
+        comment; nothing observable to port.
+      - tickStatusCountdowns's expiry arms (`Util.setBit(3/4/6, ...)`)
+        write the SAME bits their own `hasAilment(4)/(5)/(7)` branch
+        conditions already require (Util.setBit is 0-based, hasAilment(n)
+        reads bit n-1) -- idempotent no-ops, so the three timed ailments
+        never expire on their own; the countdown's only real effect is
+        zeroing the timers. The earlier "applies the matching debuff bit
+        once each expires" reading (including the renamed source's own
+        comment) was wrong; the `../src/GameCanvas.java` comment is
+        corrected too, and the redundant bit-ORs are kept in the port
+        exactly as written.
+      Plus one more small one: `findInventorySlotOf(101)` only ever
+      matches the EQUIPPED (negative-encoded) form, so an unequipped
+      StarFrost survives the effect-6 expiry -- preserved (and now
+      checked in the test).
+
+      **The Game Over chain, real at last:** TickPerSecond's
+      `PerSecondResult::EndOfGame` (a checkpoint spawn pushing the level
+      past 5 monsters) makes main.cpp play ESGame's own
+      `endOfGameUI = newGameOverUI()` + `setCurrentDisplay` -- the real
+      mode-4 "Game Over" Screen with dialogue[9][73]'s <TAG> substituted
+      by the real traitor's name, then (any command -- the original's
+      200/201 dispatch has no command check) the "Exiting" Screen
+      (GenericInfoUI 399, the concatenated `ESGame.copyString` notice,
+      its only command swapped from Ok to Exit), then `exit()`.
+      `util/text.h` is new, holding `ReplaceFirstTag` (Util.replace,
+      promoted from options_menu.cpp's former file-local copy once two
+      consumers existed) and `ESGame.copyString` (kCopyStringParts +
+      the concatenation idiom) for this chain and the future boot
+      splash. Like every other Screen display, the Game Over early-return
+      genuinely PAUSES the whole tick loop -- matching the original's
+      `activeScreen != null` branch, which stops tickPerSecond itself
+      (the ambush clock freezes while the screen shows).
+
+      main.cpp's loop grew the tail itself: `elapsed` computed against
+      the previous tick's `now` (run()'s own prevNow idiom),
+      TickStatusCountdowns every tick, then the `secondAccum`
+      accumulation and -- past 1000ms -- TickPerSecond, OUTSIDE the
+      camp gate exactly like the original's own position outside its
+      `if (runTick)`, so the ambush clock (and the ailment countdowns)
+      keep running while camping too.
+
+      Verified via the new `passive_tick_smoke.exe` (40+ checks across
+      six sections) against the real generated 37-level world and real
+      data: the three timers' countdown/clamp/gate/idempotency; the two
+      ailment drain blocks (including the negative-HP and
+      overflow-resets-Magicka quirks); the effect countdown with both
+      the equipped-StarFrost removal and the unequipped-survives quirk;
+      the scratch no-op (a hand-built "live" record provably unchanged);
+      and the ambush -- inactive-timer gate, the two schedules
+      independently transcribed and proven different (elapsed 5
+      non-NGP-only, elapsed 3 NGP-only), elapsed 140's literal type-42
+      spawn, the popup, the mutually-exclusive EndOfGame branch, and the
+      exact landing tile AND rolled monster type predicted by a
+      twin-seeded replay of the original's own roll order (m22's oracle
+      technique). Full clean rebuild zero warnings; all 42 smoke tests
+      pass; `dawnstar_port.exe` launches and stays up.
+
 ## Milestones next
 
-- [ ] **M44 and beyond (not yet planned in detail):** NPC dialogue
+- [ ] **M45 and beyond (not yet planned in detail):** NPC dialogue
       (needs `Shop.dialogue()`'s real line-selection logic -- M39
       only reused the raw npcstrings.dat text `ShopDialogue` already loads,
       for Clue Log, not that selection logic itself); shops (which would
       also let `OtherStateInfo`'s own 26 saved `Shop.*` values, and the two
       global spawn-id counters M42 saves but nothing yet advances, become
-      live rather than format-only); `GameCanvas.tickPerSecond`'s own
-      once-per-real-second passive tick, including the now-armed
-      "overstayed in one place" ambush spawner M43's secondaryParam==67
-      result sets up (nothing consumes `ambushTimer`/`newGamePlus` in this
-      port yet, and its two `newGamePlus`-selected checkpoint schedules
-      culminate in the type-42 end-game monster at elapsed second 140);
-      `LoadingScreen.java`'s own modes 1/2
+      live rather than format-only); `LoadingScreen.java`'s own modes 1/2
       splash sequence, if the boot flow is ever reproduced. Gets its own
       milestone(s) once the shape of "how much fits in one slice" is
       clearer -- following `shadowkey-decomp`'s pattern of not over-planning

@@ -21,7 +21,13 @@
 // own progress bar at every reported percent -- the port's stand-in for
 // the original's own background Thread + repaint()/serviceRepaints()
 // pair, and the same ESGame-level-not-Screen-level split (see
-// OptionsMenuAction::SaveGame/LoadGame's own doc comment).
+// OptionsMenuAction::SaveGame/LoadGame's own doc comment). M43 handed
+// the Reveal Traitor quiz its own live item spawn-id counter
+// (nextDropSpawnId, for the StarFrost grant). M44 added run()'s own
+// per-tick timed tail: TickStatusCountdowns + the secondAccum-gated
+// PassiveTick::TickPerSecond (the passive regen/drain, effect countdown,
+// and the ambush spawner M43's Reveal Traitor result arms), plus the real
+// "Game Over" -> "Exiting" -> exit chain its EndOfGame result plays.
 #include <windows.h>
 
 #include <array>
@@ -48,6 +54,7 @@
 #include "graphics/backbuffer.h"
 #include "graphics/bitmap_font.h"
 #include "interact/interact_tick.h"
+#include "passive/passive_tick.h"
 #include "platform/win32/window.h"
 #include "player/player_creation.h"
 #include "player/player_movement.h"
@@ -60,11 +67,13 @@
 #include "render/minimap_renderer.h"
 #include "render/visible_object_renderer.h"
 #include "save/game_save.h"
+#include "ui/screen.h"
 #include "ui/character_creation_flow.h"
 #include "ui/loading_screen.h"
 #include "ui/menu_flow.h"
 #include "ui/options_menu.h"
 #include "util/java_random.h"
+#include "util/text.h"
 #include "world/dungeon_generator.h"
 #include "world/dungeon_view.h"
 
@@ -189,6 +198,30 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // real (VisibleObjects::AnyMonsterAttacking) -- every prior
     // milestone's CampTick::TryEnterCamp call passed a hardcoded false.
     bool monsterAttacking = false;
+    // M44: GameCanvas.run()'s own tail bookkeeping -- run()'s own `long
+    // now` / `long secondAccum` locals (lines ~1251-1252), consumed by the
+    // tick tail below. lastTickNowMs mirrors the original's `prevNow`
+    // (the previous iteration's `now`, which the tail computes this
+    // iteration's `elapsed` against); initialized from the same
+    // GetTickCount64() source the tick itself samples from, at the point
+    // run() itself samples its pre-loop `now`.
+    int64_t lastTickNowMs = static_cast<int64_t>(GetTickCount64());
+    int64_t secondAccumMs = 0;
+    // M44: the ambush Game Over chain -- ESGame's own `endOfGameUI =
+    // newGameOverUI()` plus the secondaryParam==200/201 -> "Exiting"
+    // (399) -> exit() dispatch, played by main.cpp here (this port's
+    // ESGame stand-in), exactly like the Options menu's own
+    // main.cpp-performed actions. The inGameOver early-return below also
+    // genuinely PAUSES the whole tick loop, the same way inMenu/
+    // inOptionsMenu do -- matching the original's own `activeScreen !=
+    // null` branch, which stops tickPerSecond itself (the ambush clock
+    // freezes while the Game Over screen shows).
+    bool inGameOver = false;
+    bool gameOverExiting = false;
+    bool gameOverSelectKeyWasDown = false;
+    bool gameOverCancelKeyWasDown = false;
+    dawnstar::Screen gameOverScreen(dawnstar::ScreenMode::PlainList);
+    dawnstar::Screen gameOverExitingScreen(dawnstar::ScreenMode::PlainList);
     // GameCanvas.campStartTime -- a GameCanvas field, not one of
     // Player's own, same reasoning as lastAttackTimeMs below.
     int64_t campStartTimeMs = 0;
@@ -474,6 +507,51 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 ccBackspaceKeyWasDown = backspaceDown;
 
                 characterCreationFlow.Render(backbuffer);
+                window.Present(backbuffer);
+                return;
+            }
+
+            // M44: the ambush Game Over chain (reachable only from the
+            // tick tail's EndOfGame result below, i.e. only once
+            // `playerSlot` holds a live, playing character). The whole
+            // early-return shape mirrors inMenu/inOptionsMenu above --
+            // and, like those, it also genuinely PAUSES the whole tick
+            // loop, matching the original's own `activeScreen != null`
+            // branch (tickPerSecond stops, so the ambush clock freezes
+            // while the screen shows).
+            if (inGameOver) {
+                // secondaryParam==200/201's own dispatch has NO command
+                // check (`else if (uic.secondaryParam == 200 ||
+                // uic.secondaryParam == 201) { GenericInfoUI.
+                // setSecondaryParam(399); ... }`) -- Ok is the only
+                // command attached to the mode-4 Game Over screen, but
+                // ANY command that ever arrives advances the chain;
+                // 399's own `this.exit()` has no check either. The full
+                // chain: Game Over -> "Exiting" (GenericInfoUI 399, the
+                // concatenated ESGame.copyString notice, its own only
+                // command swapped from Ok to Exit) -> exit.
+                bool selectDown = KeyPressed(VK_RETURN);
+                bool cancelDown = KeyPressed(VK_ESCAPE);
+                bool anyCommand = (selectDown && !gameOverSelectKeyWasDown) ||
+                                  (cancelDown && !gameOverCancelKeyWasDown);
+                gameOverSelectKeyWasDown = selectDown;
+                gameOverCancelKeyWasDown = cancelDown;
+
+                if (anyCommand) {
+                    if (!gameOverExiting) {
+                        gameOverExitingScreen.SetupMessage("Exiting", dawnstar::CopyStringText());
+                        gameOverExiting = true;
+                    } else {
+                        // secondaryParam==399's own dispatch: `this.exit();`
+                        window.Close();
+                    }
+                }
+
+                if (gameOverExiting) {
+                    gameOverExitingScreen.Paint(backbuffer);
+                } else {
+                    gameOverScreen.Paint(backbuffer);
+                }
                 window.Present(backbuffer);
                 return;
             }
@@ -906,6 +984,48 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     // run()'s own unconditional per-tick auto-hide
                     // timeout check -- M30.
                     dawnstar::MessagePopup::Tick(messagePopup, nowMs);
+                }
+
+                // GameCanvas.run()'s own per-iteration timed tail (lines
+                // ~1407-1420): tickStatusCountdowns(elapsed), then the
+                // secondAccum accumulation, then -- once past 1000ms --
+                // tickPerSecond(). Runs on EVERY tick, outside runTick's
+                // gate exactly like the original's own position outside
+                // its `if (runTick)`, so the ambush clock (and the three
+                // ailment countdowns) keep running while camping too.
+                // `monsterAttacking` reads whatever the LAST render
+                // step's paintVisibleObjects()-equivalent computed, the
+                // same one-tick lag the campRequested dispatch above has
+                // -- and the same lag the original's own repaint-then-
+                // countdown ordering produces.
+                int64_t elapsedMs = nowMs - lastTickNowMs;
+                lastTickNowMs = nowMs;
+                dawnstar::PassiveTick::TickStatusCountdowns(player, elapsedMs, monsterAttacking);
+                secondAccumMs += elapsedMs;
+                if (secondAccumMs > 1000) {
+                    secondAccumMs -= 1000;
+                    // tickPerSecond()'s own ambush tail: a checkpoint
+                    // monster spawned into a level already holding > 5
+                    // monsters triggers ESGame's own `endOfGameUI =
+                    // newGameOverUI()` + `setCurrentDisplay` -- the real
+                    // "Game Over" chain (secondaryParam 201), played here
+                    // by this port's ESGame stand-in exactly like the
+                    // Options menu's other main.cpp-performed actions.
+                    if (dawnstar::PassiveTick::TickPerSecond(player, levels, world, items, monsters, globalRng,
+                                                              nextMonsterSpawnId, nowMs,
+                                                              messagePopup) ==
+                        dawnstar::PassiveTick::PerSecondResult::EndOfGame) {
+                        // newGameOverUI(): Screen(4, 201) + setupMessage(
+                        // "Game Over", Util.replace(dialogue[9][73],
+                        // "<TAG>", Shop.NAMES[5 + traitorIndex])) -- the
+                        // quiz's real traitor, same as the Clue Log's own
+                        // suspect names.
+                        gameOverScreen.SetupMessage(
+                            "Game Over", dawnstar::ReplaceFirstTag(shopDialogue.groups[9][73], "<TAG>",
+                                                                    kShopNames[5 + player.traitorIndex]));
+                        inGameOver = true;
+                        gameOverExiting = false;
+                    }
                 }
             }
 

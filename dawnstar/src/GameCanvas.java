@@ -1799,9 +1799,17 @@ public class GameCanvas extends FullCanvas implements Runnable {
    }
 
    // Counts down 3 of Player's timed status ailments (bits 3/4/6 of
-   // Player.ailmentMask) and applies the matching debuff bit once each
-   // expires. The bit-6 ailment (Terrified) only counts down while a
-   // monster is actively attacking (monsterAttacking).
+   // Player.ailmentMask) and zeroes each once it expires. The bit-6
+   // ailment (Terrified) only counts down while a monster is actively
+   // attacking (monsterAttacking).
+   //
+   // REAL FINDING, confirmed against Util.setBit (0-based) vs
+   // hasAilment (bit n-1): the expiry arms write the SAME bits their own
+   // hasAilment(4)/(5)/(7) branch conditions already require, so they
+   // are idempotent no-ops -- these three ailments never expire on
+   // their own, and this method's only observable effect is zeroing the
+   // timers. (The earlier "applies the matching debuff bit once each
+   // expires" reading of the expiry writes was wrong; kept as found.)
    private void tickStatusCountdowns(long elapsed) {
       if (this.player.hasAilment(4)) {
          this.player.trollThirstTimer = (short)(this.player.trollThirstTimer - elapsed);

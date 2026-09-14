@@ -159,6 +159,19 @@ add_library(dawnstar_camp STATIC
 target_include_directories(dawnstar_camp PUBLIC src)
 target_link_libraries(dawnstar_camp PUBLIC dawnstar_player dawnstar_dungeon dawnstar_render)
 
+# M44: GameCanvas.run()'s own timed tail (tickStatusCountdowns +
+# tickPerSecond/the ambush spawner), needing dawnstar_player
+# (PlayerCombatStats::HasAilment, PlayerInventory::FindSlotOf/RemoveSlot)
+# + dawnstar_dungeon (DungeonRuntime::TrySpawnMonsterNear) +
+# dawnstar_render (the "Enemy/arrived!" popup) at once -- same "own small
+# module, no cycle" shape as dawnstar_combat/dawnstar_interact/
+# dawnstar_camp above. See docs/PORT_ROADMAP.md's M44 entry.
+add_library(dawnstar_passive STATIC
+  src/passive/passive_tick.cpp
+)
+target_include_directories(dawnstar_passive PUBLIC src)
+target_link_libraries(dawnstar_passive PUBLIC dawnstar_player dawnstar_dungeon dawnstar_render)
+
 # M22/M24: the live per-level monster/chest/dropped-item registry (needs
 # both World and Monster), now also populated from world generation
 # itself -- see docs/PORT_ROADMAP.md and src/dungeon/.
@@ -205,7 +218,7 @@ add_executable(dawnstar_port WIN32
   src/platform/win32/window.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
-target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_save)
+target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_passive dawnstar_save)
 if(WIN32)
   target_compile_definitions(dawnstar_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_link_libraries(dawnstar_port PRIVATE user32 gdi32)
@@ -393,3 +406,11 @@ target_link_libraries(game_save_smoke PRIVATE dawnstar_save dawnstar_render)
 # dawnstar_player.
 add_executable(reveal_traitor_smoke src/tests/m43_reveal_traitor_smoke.cpp)
 target_link_libraries(reveal_traitor_smoke PRIVATE dawnstar_render dawnstar_player)
+
+# M44 milestone smoke test -- see src/tests/m44_passive_tick_smoke.cpp.
+# Links dawnstar_passive (PassiveTick itself) + dawnstar_dungeon
+# (DungeonRuntime::TrySpawnMonsterNear, for the test's own twin-replay
+# oracle) + dawnstar_render (Backbuffer/MessagePopup) -- dawnstar_player/
+# dawnstar_monster come transitively.
+add_executable(passive_tick_smoke src/tests/m44_passive_tick_smoke.cpp)
+target_link_libraries(passive_tick_smoke PRIVATE dawnstar_passive dawnstar_dungeon dawnstar_render)
