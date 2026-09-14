@@ -204,17 +204,18 @@ int main(int argc, char** argv) {
         menu.Render(bb);
         Check(TitleShownIs(bb, "Options"), "Ok on Stats should return to Options");
 
-        // --- C: deferred no-ops (Save Game/Load Game/Reveal Traitor --
-        // see OptionsMenu's own header doc comment on why each still
-        // needs a whole system this port hasn't built yet; Inventory/
-        // Skills/Spells became real in M41, see
-        // m41_inventory_skills_spells_smoke.cpp instead). Each iteration
+        // --- C: deferred no-ops (only "Reveal Traitor" is left -- see
+        // OptionsMenu's own header doc comment on why it still needs a
+        // whole system this port hasn't built yet; Inventory/Skills/Spells
+        // became real in M41, see m41_inventory_skills_spells_smoke.cpp,
+        // and Save Game/Load Game in M42, see m42_game_save_smoke.cpp
+        // instead). Each iteration
         // forces the selection back to a known index (0) first via
         // repeated OnUp() calls, then steps down to the target index --
         // same "real Screen instances persist their own selectedIndex
         // across visits rather than resetting" precedent M38's own test
         // already established. ---
-        for (int idx : {5, 6, 8}) {
+        for (int idx : {8}) {
             // Navigate Options back to a known index (0) first, then
             // step down to `idx`.
             for (int i = 0; i < 10; i++) menu.OnUp();

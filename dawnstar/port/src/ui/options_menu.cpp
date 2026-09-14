@@ -125,6 +125,9 @@ OptionsMenu::OptionsMenu(HelpText helpText, ShopDialogue shopDialogue)
       helpTopics_(ScreenMode::HighlightedList),
       info_(ScreenMode::PlainList),
       quitConfirm_(ScreenMode::PromptList),
+      // M42: ESGame's own `noSavedGameUI = new Screen(this, 4, 305)` --
+      // mode 4 (PlainList), built once, message set in the body below.
+      noSavedGame_(ScreenMode::PlainList),
       // M41: InventoryUI/SkillsListUI/SpellsListUI/InventoryItemUI/
       // SpellInfoUI are all mode 5 (PromptList) in the original -- these
       // placeholder constructions are never actually shown; each is
@@ -156,6 +159,10 @@ OptionsMenu::OptionsMenu(HelpText helpText, ShopDialogue shopDialogue)
     // M38's `MenuFlow`, which established this exact same real bug).
     quitConfirm_.SetupPromptList("Quit?", "Are you sure?", {"Yes", "No"});
     quitConfirm_.RemoveCommand(CommandId::Cancel);
+    // ESGame.allocateAllUIs()'s own `noSavedGameUI.setupMessage(...)` --
+    // see ShowNoSavedGame's own doc comment on why its Ok actually returns
+    // to the Options menu rather than to the main menu its own text claims.
+    noSavedGame_.SetupMessage("Unavailable", "No game is available for loading. Press OK to return to main menu.");
 }
 
 Screen& OptionsMenu::ActiveScreen() {
@@ -180,6 +187,14 @@ Screen& OptionsMenu::ActiveScreen() {
             return spellsList_;
         case Active::SpellInfo:
             return spellInfo_;
+        case Active::SaveError:
+            // The SAME shared info_ Screen object -- ESGame has exactly one
+            // GenericInfoUI, reused for the Save Error message too (see
+            // ShowSaveError's own doc comment); only its secondaryParam, and
+            // therefore its Ok dispatch, differs.
+            return info_;
+        case Active::NoSavedGame:
+            return noSavedGame_;
     }
     return options_;
 }
@@ -306,10 +321,29 @@ OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData
                     RebuildSpellsList(player, spells);
                     active_ = Active::SpellsList;
                     return OptionsMenuAction::None;
-                case 5:  // "Save Game" -- deferred no-op.
-                    return OptionsMenuAction::None;
-                case 6:  // "Load Game" -- deferred no-op.
-                    return OptionsMenuAction::None;
+                case 5:  // "Save Game": secondaryParam==31's own case 5 --
+                         // `saveGameUI = new LoadingScreen(this, 10, 303);
+                         // saveGameUI.unusedHook2(); helperThreadState = 5;
+                         // setCurrentDisplay(saveGameUI); var54.start();`
+                         // All ESGame-level display/thread work, and the
+                         // real save itself runs on that new thread -- see
+                         // OptionsMenuAction's own doc comment on why this
+                         // class only reports it. OptionsUI's own state is
+                         // untouched (the original never reassigns it here
+                         // either), so a failed save's Ok-exit or a
+                         // successful save's return to the game view both
+                         // leave this menu exactly as it was.
+                    return OptionsMenuAction::SaveGame;
+                case 6:  // "Load Game": case 6 -- `System.gc();
+                         // gameCanvas.stopGameThread(); loadGameUI = new
+                         // LoadingScreen(this, 9, 302);
+                         // loadGameUI.unusedHook2(); helperThreadState = 6;
+                         // noSavedGameUI.backTarget = this.OptionsUI;
+                         // setCurrentDisplay(loadGameUI); var66.start();`
+                         // Same split as case 5; the noSavedGameUI
+                         // backTarget assignment is what ShowNoSavedGame's
+                         // own Ok dispatch below relies on.
+                    return OptionsMenuAction::LoadGame;
                 case 7:  // "Help": `this.helpUI.backTarget = this.
                          // OptionsUI; this.setCurrentDisplay(this.helpUI);`
                     active_ = Active::Help;
@@ -475,6 +509,19 @@ OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData
             currentSpellIndex_ = -1;
             return OptionsMenuAction::None;
         }
+        case Active::SaveError:
+            // secondaryParam==499's own Ok dispatch: `this.exit();` --
+            // unconditional, with no command check and no backTarget read
+            // at all (see ShowSaveError's own doc comment).
+            return OptionsMenuAction::Exit;
+        case Active::NoSavedGame:
+            // secondaryParam==305's own Ok dispatch: backTarget is
+            // OptionsUI here (case 6 set it just before showing the
+            // LoadingScreen), so `gameCanvas.startGameThread()` +
+            // `setCurrentDisplay(OptionsUI)`. This port needs no thread
+            // restart -- see ShowNoSavedGame's own doc comment.
+            active_ = Active::Options;
+            return OptionsMenuAction::None;
     }
     return OptionsMenuAction::None;
 }
@@ -530,8 +577,38 @@ OptionsMenuAction OptionsMenu::OnCancel() {
             // newSpellInfoUI()).
             active_ = Active::SpellsList;
             return OptionsMenuAction::None;
+        case Active::SaveError:
+        case Active::NoSavedGame:
+            // Both are mode-4 (PlainList) Screens, whose own constructor
+            // adds an Ok command ONLY -- there is no Cancel/back command on
+            // either to press, so this is a real no-op exactly like
+            // Active::Info's above.
+            return OptionsMenuAction::None;
     }
     return OptionsMenuAction::None;
+}
+
+void OptionsMenu::ShowSaveError() {
+    // ESGame.run()'s own helperThreadState==5 else-branch:
+    // `GenericInfoUI.setSecondaryParam(499)` + `setupMessage("Save Error",
+    // ...)` + `setCurrentDisplay(GenericInfoUI)`. `infoBackTarget_` is
+    // deliberately left alone -- the original never sets
+    // GenericInfoUI.backTarget for this screen, and 499's own dispatch
+    // exits unconditionally without ever reading it (see this class's own
+    // header doc comment).
+    info_.SetupMessage("Save Error",
+                       "There was an error in saving your character record. Your previous character record is still "
+                       "saved. Try turning your phone off then on again to clear the memory.");
+    active_ = Active::SaveError;
+}
+
+void OptionsMenu::ShowNoSavedGame() {
+    // ESGame.run()'s own helperThreadState==6 else-branch:
+    // `setCurrentDisplay(this.noSavedGameUI)` -- the screen itself was
+    // already built once in the constructor above, and its backTarget
+    // (OptionsUI) was set by case 6 before the LoadingScreen was shown, so
+    // there is nothing left to configure here.
+    active_ = Active::NoSavedGame;
 }
 
 void OptionsMenu::Render(Backbuffer& bb) const { ActiveScreen().Paint(bb); }

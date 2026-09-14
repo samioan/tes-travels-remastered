@@ -2560,15 +2560,161 @@ milestone rather than just read-through.
       Info) confirming all seven are legible and correct -- before the
       diagnostic was removed.
 
+- [x] **M42 -- the real Options-menu "Save Game"/"Load Game" actions**
+      (this session). Turns the two remaining M39 deferred no-ops into the
+      real thing: `ESGame`'s own `saveGameState()`/`loadGameState()` and
+      every helper those two call -- `writeMasterListsToRecordStore()`,
+      `readMasterListRecords()`, `writeOtherStateInfoToBytes()`,
+      `readOtherStateInfo()`, `maxWriteSize()`, `getRSNameNotInUse()`,
+      `getLastGoodRSName()`, `cleanupRecordStores()`, `resumeGame()`,
+      `openAndRepopulateDungeons()`, and `getGameAdvancementLevel()` --
+      plus `LoadingScreen.java`'s own modes 8-11 progress bars that the
+      original shows while they run.
+
+      Two new modules. `save/game_save.h`/`.cpp` (a new `dawnstar_save`
+      CMake library, linking `dawnstar_player` for M13's already-real
+      `PlayerSave::ToBytes`/`FromBytes` and pulling `WorldRegistry`/
+      `DungeonRuntime::RefreshTileFlags`/`MonsterRuntime`'s own byte codecs
+      transitively; nothing links back against it, so no cycle) and
+      `ui/loading_screen.h`/`.cpp` (added to the existing `dawnstar_render`,
+      needing nothing beyond the `Backbuffer`/`BitmapFont` already there).
+
+      THE RECORD-STORE SUBSTITUTION -- a port decision, not a
+      simplification of anything recoverable: the original persists through
+      MIDP's `javax.microedition.rms.RecordStore`, a phone-private database
+      of named stores each holding an ordered list of opaque `byte[]`
+      records, with `listRecordStores()`/`getLastModified()`/
+      `deleteRecordStore()` and no filesystem at all. This port has no RMS,
+      so one store == one plain file in a caller-supplied directory and one
+      record == a 4-byte big-endian length prefix followed by that many raw
+      bytes (`SerializeRecordStore`/`DeserializeRecordStore`, a format this
+      port defines rather than recovers, kept private in an anonymous
+      namespace). That substitutes only the unreachable container layer:
+      the record ORDER (`maxWriteSize`'s own record first, then the 37
+      `es_ML_<n>` monster-list records in ascending level order then the 37
+      `es_CHEST_ML_<n>` chest-list records, 111 in all), each record's own
+      CONTENT (the 38-byte other-state record's exact field order/width;
+      `Monster.writeTo()`'s own 28-byte layout; M23's own chest and M24's
+      own dropped-item codecs reused as-is, not re-derived), the single
+      512-byte `Player.toBytes()` record, the `Util.randomInt(10000)`
+      1..10000-inclusive naming re-roll, `getLastModified()`'s own
+      newest-wins strict `>` tie-break, and `cleanupRecordStores()`'s own
+      keep-only-the-newest single-save-slot behavior are all preserved.
+      `Item.nextSpawnId`/`Monster.nextSpawnIdCounter` are saved and loaded
+      faithfully, but nothing in this port advances them yet (the modules
+      that would take their spawn id as an explicit parameter instead --
+      see `OtherStateInfo`'s own comment), so that pair is real format
+      fidelity whose live wiring arrives with whichever milestone ports
+      those call sites.
+
+      `OtherStateInfo` is the one place a still-unported class shows up:
+      `Shop.java` itself has no counterpart here yet, so the 26 `Shop.*`
+      statics the original persists ride along as one flat struct. That's a
+      container decision, not a format simplification -- every one of the 26
+      is written and read back in the exact order/width the original uses.
+      Its `Reset()` reproduces `Shop.reset()`'s own post-condition (all 9
+      `firstVisit` entries true, everything else zero/false) rather than
+      value-initializing to all-false, and main.cpp calls it both at startup
+      and after `CreateCharacter` -- because that function's own tail is
+      `Player.resetState()`, whose last act is `Shop.reset()`
+      (`../src/Player.java` line 2576).
+
+      `LoadingScreen` ports ONLY modes 8-11, the plain "<action>... Please
+      Wait" bars, which is the whole of what Save/Load actually use. Modes
+      1/2 and everything that comes with them are DELIBERATELY not ported:
+      `runSplashSequence()`'s own startup timing loop, `startThread()`/
+      `stopThread()`/`run()`/`waitAtLeast()`, and `renderSplash()` -- that
+      whole sequence is `ESGame`'s own boot flow, which this port doesn't
+      reproduce (main.cpp goes straight to M38's own `MenuFlow`), and it
+      needs four images this port never loads plus `ESGame.copyString`.
+      It's also a standalone class rather than a `Screen` subclass as in the
+      original: mode 8-11's own `renderProgress()` reads NOTHING from
+      Screen's state -- no title, no items, no soft-key commands, no scroll
+      position -- so inheriting Screen's ~20 fields would carry nothing but
+      dead weight.
+
+      Two real, easy-to-miss quirks reproduced exactly, both in the failure
+      paths `ESGame.run()`'s own helperThreadState==5/6 else-branches show:
+      a FAILED SAVE shows `GenericInfoUI` at secondaryParam 499, whose own
+      Ok dispatch is an unconditional `this.exit()` -- pressing Ok on
+      "Save Error" EXITS THE GAME, so `OptionsMenu::OnSelect` returns
+      `OptionsMenuAction::Exit` rather than returning to whatever screen
+      last opened the shared info Screen (which is what `Active::Info`
+      would do, and what 499's own dispatch deliberately does NOT). And a
+      FAILED LOAD's own `noSavedGameUI` message says "Press OK to return to
+      main menu" while its secondaryParam==305 dispatch actually returns to
+      the OPTIONS menu -- because secondaryParam==31's own case 6 set that
+      `backTarget` to `OptionsUI` right before showing the LoadingScreen
+      (the main-menu Load Game path, unported here, is the one that sets it
+      to `mainMenuUI`, at `ESGame.java`'s own line 555). `OptionsMenu` grew
+      exactly two new states for these: `Active::SaveError` reusing the SAME
+      shared `info_` Screen Stats/Clue Log/Help already use (`ESGame` has
+      exactly one `GenericInfoUI`), and `Active::NoSavedGame` on a new
+      persistent `noSavedGame_` member -- persistent, not `Rebuild*`-style
+      fresh, because `allocateAllUIs()` builds it once with a fixed message.
+
+      Same ESGame-level-not-Screen-level split M41's `UseInventoryItem`
+      established: `OnSelect` stops short and returns the new
+      `OptionsMenuAction::SaveGame`/`LoadGame`, and main.cpp performs the
+      real work itself -- driving `GameSave::SaveGameState`/`LoadGameState`
+      (then `ResumeGame`, which the original calls from `run()` right AFTER
+      `loadGameState()` returns true, not from inside it) while presenting
+      the LoadingScreen at every reported percent. That synchronous
+      render-and-present-per-percent callback is this port's stand-in for
+      the original's own background `Thread` + `repaint()`/
+      `serviceRepaints()` pair; the LoadingScreen swap itself is likewise
+      main.cpp's job, which is why the Options list is still what's showing
+      immediately after `OnSelect` returns.
+
+      Verified via the new `game_save_smoke.exe` (88 checks across eight
+      sections) against a real generated 37-level world (540 monsters, 180
+      chests registered), a real Sorcerer character (M11), and real
+      `dungeon.dat`/`npcstrings.dat` data: the 38-byte other-state record's
+      exact layout re-encoded independently; `maxWriteSize()` over that real
+      world; the full 111-record store layout and both master-list write
+      loops; `saveGameState()`/`loadGameState()` end to end through real
+      files, including the round-trip of all 540 monsters/180 chests, the
+      single-save-slot cleanup, and every failure path (no store at all, a
+      truncated file, a garbage file, a bad monster `dungeonLevel`);
+      `getRSNameNotInUse()`'s own re-roll against a twin `JavaRandom`
+      seeded identically; and the original's own hardcoded 1500-byte read
+      buffer, measured against the real world's largest actual record (424
+      bytes for a monster list) to confirm the original could load this
+      save and to pin down what overflow would actually take (54+ monsters
+      on one level). `LoadingScreen`'s own `renderProgress()` is checked
+      pixel-exactly for all four modes x three percents, and the two new
+      Options screens for their real titles, their mode-4 no-op Cancel, and
+      their two divergent Ok behaviors. Every expected value is
+      independently re-derived from `../src/ESGame.java`, `../src/Monster.
+      java`, and `../src/LoadingScreen.java` directly -- with this file's
+      own independent big-endian encoders, so the test can't merely be
+      checking the implementation's arithmetic against itself -- the same
+      standard M38-M41's own tests hold to. M39's own
+      `options_menu_smoke.cpp` was updated to drop Save Game/Load Game from
+      its "still a deferred no-op" list, leaving only "Reveal Traitor"
+      there. All checks passed (both test files). Full clean rebuild zero
+      warnings; all 40 smoke tests pass. Also rendered 7 real frames via a
+      temporary diagnostic (all four LoadingScreen modes at several
+      percents, plus both failure screens) and verified each
+      programmatically -- the 2510210 background, the action line centered
+      at y=30, "Please Wait" at y=45, the white 90x20 outline box at
+      x=43..132/y=60..79, the blue bar inset 1px at y=61..78 with width
+      exactly `percent * 88 / 100` under C++ integer division, and both
+      message screens' own centered titles, 12px-pitch wrapped body lines
+      and soft-key bars -- before the diagnostic was removed.
+
 ## Milestones next
 
-- [ ] **M42 and beyond (not yet planned in detail):** "Save Game"/"Load
-      Game" (real file I/O, `LoadingScreen`'s own background-thread
-      machinery); "Reveal Traitor"'s own multi-screen mini-quiz (needs
-      `grantStarFrostItem()`, still unported); NPC dialogue (needs `Shop.
-      dialogue()`'s real line-selection logic -- M39 only reused the raw
-      npcstrings.dat text `ShopDialogue` already loads, for Clue Log, not
-      that selection logic itself); shops. Gets its own milestone(s)
-      once the shape of "how much fits in one slice" is clearer --
-      following `shadowkey-decomp`'s pattern of not over-planning
+- [ ] **M43 and beyond (not yet planned in detail):** "Reveal Traitor"'s
+      own multi-screen mini-quiz (needs `grantStarFrostItem()`, still
+      unported) -- the last deferred no-op left in the Options menu; NPC
+      dialogue (needs `Shop.dialogue()`'s real line-selection logic -- M39
+      only reused the raw npcstrings.dat text `ShopDialogue` already loads,
+      for Clue Log, not that selection logic itself); shops (which would
+      also let `OtherStateInfo`'s own 26 saved `Shop.*` values, and the two
+      global spawn-id counters M42 saves but nothing yet advances, become
+      live rather than format-only); `LoadingScreen.java`'s own modes 1/2
+      splash sequence, if the boot flow is ever reproduced. Gets its own
+      milestone(s) once the shape of "how much fits in one slice" is
+      clearer -- following `shadowkey-decomp`'s pattern of not over-planning
       milestones far in advance of actually reaching them.

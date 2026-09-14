@@ -28,7 +28,20 @@ namespace dawnstar {
 // the same "return what happened, let main.cpp perform the actual
 // real-world effect" shape MenuFlowAction/CharacterCreationAction's own
 // doc comments already establish, just with an extra round-trip.
-enum class OptionsMenuAction { None, ReturnToGame, Exit, UseInventoryItem };
+//
+// M42's SaveGame/LoadGame are handed back for a DIFFERENT reason, and not
+// a dependency-cycle one: in the original, secondaryParam==31's own case
+// 5/6 do all their work in `ESGame.commandAction()` itself, not in any
+// Screen -- they construct a fresh `LoadingScreen`, set
+// `noSavedGameUI.backTarget`, swap the current display to it, set
+// `helperThreadState = 5`/`6`, and start a background `Thread` that then
+// runs `saveGameState()`/`loadGameState()` (case 6 also does
+// `System.gc()` + `gameCanvas.stopGameThread()` first). OptionsMenu is
+// this port's counterpart of the Screen, not of ESGame, so performing the
+// save/load here would put ESGame-level display/thread orchestration (and
+// real file I/O) inside a UI class. Returning the action keeps the split
+// exactly where the original has it.
+enum class OptionsMenuAction { None, ReturnToGame, Exit, UseInventoryItem, SaveGame, LoadGame };
 
 // M39: the real IN-GAME options menu (`../src/ESGame.java`'s own
 // `OptionsUI`, secondaryParam 31, opened by `GameCanvas.openOptionsMenu()`
@@ -87,12 +100,16 @@ enum class OptionsMenuAction { None, ReturnToGame, Exit, UseInventoryItem };
 // comments for why "Use" alone needs an extra round-trip through
 // main.cpp.
 //
-// Deliberately DEFERRED as real, silent no-ops (same "Continue Game"
-// precedent M38 already established), since each needs a whole system
-// this port hasn't built yet: "Save Game"/"Load Game" (real file I/O
-// plus `LoadingScreen`'s own background-thread machinery -- `PlayerSave`
-// only (de)serializes to/from an in-memory buffer so far, see
-// docs/PORT_ROADMAP.md's M12/M17 entries); "Reveal Traitor" (secondaryParam
+// M42 additionally reproduces "Save Game"/"Load Game" (secondaryParam==31's
+// own case 5/6) -- no longer the silent no-ops M39 left them as. See
+// OptionsMenuAction's own doc comment above for why OnSelect only RETURNS
+// them, save/game_save.h for the real persistence behind them, and
+// ui/loading_screen.h for the "Saving Game"/"Loading Game" progress bar
+// main.cpp shows while that runs.
+//
+// Still deliberately DEFERRED as a real, silent no-op (same "Continue Game"
+// precedent M38 already established), since it needs a whole system
+// this port hasn't built yet: "Reveal Traitor" (secondaryParam
 // 68/65/66's own multi-screen "who is the traitor?" mini-quiz, which on a
 // correct guess calls `grantStarFrostItem()` and sets `newGamePlus`/
 // `ambushTimer` -- none of which are ported: see player/player_state.h's
@@ -139,11 +156,51 @@ public:
     // same slot still selected.
     OptionsMenuAction FinishUseItem(PlayerState& player, const ItemDatabase& items);
 
+    // M42: the two failure screens ESGame's own `run()` shows when a
+    // save/load actually fails -- both called by main.cpp AFTER it has run
+    // the real GameSave call, since only then is the outcome known.
+    //
+    // ShowSaveError() is `run()`'s helperThreadState==5 else-branch:
+    // `GenericInfoUI.setSecondaryParam(499); setupMessage("Save Error",
+    // "There was an error in saving your character record. Your previous
+    // character record is still saved. Try turning your phone off then on
+    // again to clear the memory."); setCurrentDisplay(GenericInfoUI);` --
+    // i.e. the SAME shared info Screen Stats/Clue Log/Help already use
+    // (ESGame has exactly one GenericInfoUI), reused here as Active::
+    // SaveError rather than as Active::Info because its own secondaryParam
+    // dispatches differently: `else if (uic.secondaryParam == 499) {
+    // this.exit(); }` -- pressing Ok on a Save Error EXITS THE GAME. A
+    // real, easy-to-miss behavior (and consistent with the message's own
+    // "turn your phone off then on again" advice), reproduced as
+    // OptionsMenuAction::Exit rather than as a return to whatever screen
+    // last opened info_ (which is what Active::Info would do, and what
+    // 499's own unconditional exit() deliberately does NOT).
+    void ShowSaveError();
+
+    // ShowNoSavedGame() is `run()`'s helperThreadState==6 else-branch:
+    // `setCurrentDisplay(this.noSavedGameUI)` -- a SEPARATE Screen from
+    // GenericInfoUI (`new Screen(this, 4, 305)` + `setupMessage(
+    // "Unavailable", "No game is available for loading. Press OK to return
+    // to main menu.")`, both built once in allocateAllUIs(), hence a
+    // persistent member here rather than a rebuilt one). Its own Ok
+    // dispatch is secondaryParam==305: `if (uic.backTarget ==
+    // this.OptionsUI) { this.gameCanvas.startGameThread(); }
+    // setCurrentDisplay(uic.backTarget);` -- and case 6 set that backTarget
+    // to OptionsUI right before showing the LoadingScreen, so Ok returns
+    // here, to the Options menu. Two real quirks worth noting: the message
+    // says "return to main menu" while the code actually returns to the
+    // Options menu (the main-menu Load Game path -- unported here -- is the
+    // one that sets backTarget to mainMenuUI, at ESGame.java's own
+    // line 555), and the game thread is only restarted for the OptionsUI
+    // case (this port needs no equivalent: main.cpp's own inOptionsMenu
+    // early-return already pauses/resumes the whole tick).
+    void ShowNoSavedGame();
+
     void Render(Backbuffer& bb) const;
 
 private:
     enum class Active { Options, ClueLog, Help, Info, QuitConfirm, InventoryList, InventoryItem, SkillsList,
-                         SpellsList, SpellInfo };
+                         SpellsList, SpellInfo, SaveError, NoSavedGame };
 
     Screen& ActiveScreen();
     const Screen& ActiveScreen() const;
@@ -175,6 +232,11 @@ private:
     Screen helpTopics_;
     Screen info_;
     Screen quitConfirm_;
+    // M42: ESGame's own `noSavedGameUI` -- built ONCE in allocateAllUIs()
+    // with a fixed message (see ShowNoSavedGame's own doc comment), so a
+    // persistent member like options_/clueLog_/helpTopics_ above rather
+    // than a Rebuild*-style fresh one.
+    Screen noSavedGame_;
 
     // M41: unlike options_/clueLog_/helpTopics_ above (each a single
     // real Screen instance Player.java's own ESGame constructs ONCE and

@@ -74,7 +74,9 @@ target_link_libraries(dawnstar_world PUBLIC dawnstar_assets)
 # transitive-availability reasoning as options_menu.cpp above. M41's real
 # Inventory/Skills/Spells actions need player/player_inventory.h/
 # player/player_spellcasting.h on top of that -- also already available
-# transitively via dawnstar_player.
+# transitively via dawnstar_player. M42's src/ui/loading_screen.cpp
+# (LoadingScreen.java's modes 8-11 progress bars) needs nothing further
+# either -- Backbuffer + BitmapFont, both already in this library.
 add_library(dawnstar_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -88,6 +90,7 @@ add_library(dawnstar_render STATIC
   src/ui/options_menu.cpp
   src/ui/name_entry.cpp
   src/ui/character_creation_flow.cpp
+  src/ui/loading_screen.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
 target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon)
@@ -165,6 +168,25 @@ add_library(dawnstar_dungeon STATIC
 target_include_directories(dawnstar_dungeon PUBLIC src)
 target_link_libraries(dawnstar_dungeon PUBLIC dawnstar_world dawnstar_monster)
 
+# M42: the real character+world save/load persistence -- ESGame.java's own
+# saveGameState()/loadGameState() plus every helper those two call
+# (writeMasterListsToRecordStore/readMasterListRecords/
+# writeOtherStateInfoToBytes/readOtherStateInfo/maxWriteSize/
+# getRSNameNotInUse/getLastGoodRSName/cleanupRecordStores/resumeGame/
+# openAndRepopulateDungeons/getGameAdvancementLevel), with MIDP's
+# RecordStore substituted by one plain file per store -- see src/save/'s
+# own header comment and docs/PORT_ROADMAP.md's M42 entry. Needs
+# dawnstar_player (PlayerSave::ToBytes/FromBytes + PlayerState) and,
+# transitively through it, dawnstar_dungeon (WorldRegistry/
+# DungeonRuntime::RefreshTileFlags) and dawnstar_monster
+# (MonsterRuntime::ReadFrom/WriteTo/ToBytes/FromBytes). Nothing depends
+# back on dawnstar_save, so no cycle results.
+add_library(dawnstar_save STATIC
+  src/save/game_save.cpp
+)
+target_include_directories(dawnstar_save PUBLIC src)
+target_link_libraries(dawnstar_save PUBLIC dawnstar_player)
+
 # M1/M20: real tick loop + backbuffer + present, now wired to the real
 # asset/world/player/render pipeline -- see docs/PORT_ROADMAP.md and
 # src/engine/, src/graphics/, src/platform/win32/, src/main.cpp. M32
@@ -172,13 +194,18 @@ target_link_libraries(dawnstar_dungeon PUBLIC dawnstar_world dawnstar_monster)
 # PlayerAttack/MonsterRuntime::OnDeath directly from main.cpp's own
 # tick-dispatch orchestration. M33 additionally wires spellcasting the
 # same way (CombatTick::ProcessSpellCast/CycleSpell). M35 adds
-# dawnstar_camp (CampTick::TryEnterCamp/TickCampState).
+# dawnstar_camp (CampTick::TryEnterCamp/TickCampState). M42 adds
+# dawnstar_save: the Options menu's real "Save Game"/"Load Game" actions
+# run GameSave::SaveGameState/LoadGameState/ResumeGame from main.cpp's own
+# display orchestration (see ui/options_menu.h's own
+# OptionsMenuAction::SaveGame/LoadGame doc comment on why that's ESGame's
+# job, not the Screen's).
 add_executable(dawnstar_port WIN32
   src/main.cpp
   src/platform/win32/window.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
-target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp)
+target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_save)
 if(WIN32)
   target_compile_definitions(dawnstar_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_link_libraries(dawnstar_port PRIVATE user32 gdi32)
@@ -350,3 +377,10 @@ target_link_libraries(character_creation_flow_smoke PRIVATE dawnstar_render)
 # comment above.
 add_executable(inventory_skills_spells_smoke src/tests/m41_inventory_skills_spells_smoke.cpp)
 target_link_libraries(inventory_skills_spells_smoke PRIVATE dawnstar_render dawnstar_combat)
+
+# M42 milestone smoke test -- see src/tests/m42_game_save_smoke.cpp. Needs
+# dawnstar_save (GameSave/OtherStateInfo themselves) on top of
+# dawnstar_render (LoadingScreen's own pixel layout) -- no cycle, same
+# reasoning as dawnstar_combat's own CMake comment above.
+add_executable(game_save_smoke src/tests/m42_game_save_smoke.cpp)
+target_link_libraries(game_save_smoke PRIVATE dawnstar_save dawnstar_render)

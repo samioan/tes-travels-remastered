@@ -15,7 +15,13 @@
 // "Skills"/"Spells" actions real (previously silent no-ops) -- "Use"
 // alone needs a real CombatResolution::UseItem call this file performs
 // itself, via the new OptionsMenuAction::UseInventoryItem round-trip
-// (see ui/options_menu.h's own class comment).
+// (see ui/options_menu.h's own class comment). M42 made "Save Game"/
+// "Load Game" real too: this file runs GameSave::SaveGameState/
+// LoadGameState/ResumeGame itself while presenting ui/loading_screen.h's
+// own progress bar at every reported percent -- the port's stand-in for
+// the original's own background Thread + repaint()/serviceRepaints()
+// pair, and the same ESGame-level-not-Screen-level split (see
+// OptionsMenuAction::SaveGame/LoadGame's own doc comment).
 #include <windows.h>
 
 #include <array>
@@ -53,7 +59,9 @@
 #include "render/message_popup.h"
 #include "render/minimap_renderer.h"
 #include "render/visible_object_renderer.h"
+#include "save/game_save.h"
 #include "ui/character_creation_flow.h"
+#include "ui/loading_screen.h"
 #include "ui/menu_flow.h"
 #include "ui/options_menu.h"
 #include "util/java_random.h"
@@ -312,6 +320,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // doc comment on CreateCharacter's `globalRng` parameter.
         dawnstar::JavaRandom globalRng(static_cast<int64_t>(GetTickCount64()));
 
+        // M42: ESGame's own `Shop.*` static state (Item.nextSpawnId,
+        // Monster.nextSpawnIdCounter, the 9 firstVisit / 4 interactionCount /
+        // 4 rewardsGiven / 4 questState1 / 4 questState2 arrays and
+        // showDeathGreeting), carried as plain data because Shop.java itself
+        // is still unported -- see save/game_save.h's own OtherStateInfo
+        // comment. Starts at Shop.reset()'s own post-condition, is reset to it
+        // again whenever a new character is created (Player.resetState()'s own
+        // `Shop.reset()` call, ../../../src/Player.java line 2576), and is
+        // replaced wholesale by a real load.
+        dawnstar::OtherStateInfo otherState = dawnstar::OtherStateInfo::Reset();
+        // The port's own RecordStore substitute: a directory of
+        // "es_gamestate<N>" files, of which exactly one (the newest) is ever
+        // kept -- see save/game_save.h's own class comment. Relative to the
+        // working directory (build/), same convention as `root` above.
+        const std::string saveDir = "saves";
+
         // M38: the real main menu is now shown first (see `inMenu`
         // above) -- the character itself is only constructed once "New
         // Game" is actually selected, not unconditionally at startup
@@ -409,6 +433,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             playerSlot.emplace(dawnstar::PlayerCreation::CreateCharacter(
                                 characterCreationFlow.SelectedClassIndex(), characterCreationFlow.EnteredName(),
                                 charData, items, globalRng));
+                            // M42: CreateCharacter's own tail is
+                            // Player.resetState(), whose own last act is
+                            // `Shop.reset()` (../../../src/Player.java line
+                            // 2576) -- so a brand-new character starts with
+                            // every shop's own firstVisit flag set again.
+                            otherState = dawnstar::OtherStateInfo::Reset();
                             inCharacterCreation = false;
                             break;
                         case dawnstar::CharacterCreationAction::CancelToMainMenu:
@@ -508,6 +538,78 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             if (optionsMenu.FinishUseItem(optionsPlayer, items) ==
                                 dawnstar::OptionsMenuAction::ReturnToGame) {
                                 inOptionsMenu = false;
+                            }
+                            break;
+                        }
+                        case dawnstar::OptionsMenuAction::SaveGame: {
+                            // M42: ESGame.commandAction's own case 5 plus
+                            // run()'s helperThreadState==5 branch. The
+                            // original shows a fresh `new LoadingScreen(this,
+                            // 10, 303)` and then runs saveGameState() on a
+                            // background thread; this port runs it inline and
+                            // presents the same bar at every reported percent
+                            // (see GameSave::ProgressCallback's own doc
+                            // comment on why that's the same observable frame
+                            // sequence). The 0-percent frame is presented here,
+                            // before the work starts, exactly as
+                            // setCurrentDisplay(saveGameUI) does -- and
+                            // saveGameState()'s own `percent = 0` is the one
+                            // assignment the original never repaints for.
+                            dawnstar::LoadingScreen saveGameUI(dawnstar::LoadingScreenMode::SavingGame);
+                            saveGameUI.Render(backbuffer);
+                            window.Present(backbuffer);
+                            bool saved = dawnstar::GameSave::SaveGameState(
+                                saveDir, optionsPlayer, world, otherState, globalRng, [&](int percent) {
+                                    saveGameUI.SetPercent(percent);
+                                    saveGameUI.Render(backbuffer);
+                                    window.Present(backbuffer);  // repaint() + serviceRepaints()
+                                });
+                            if (saved) {
+                                // `this.setCurrentDisplay(this.gameCanvas)`
+                                inOptionsMenu = false;
+                            } else {
+                                // run()'s own else-branch: GenericInfoUI
+                                // secondaryParam 499, whose Ok exits.
+                                optionsMenu.ShowSaveError();
+                            }
+                            break;
+                        }
+                        case dawnstar::OptionsMenuAction::LoadGame: {
+                            // M42: case 6 (`System.gc()` +
+                            // `gameCanvas.stopGameThread()` first -- this
+                            // port's inOptionsMenu early-return already stops
+                            // the whole tick) plus run()'s
+                            // helperThreadState==6 branch.
+                            dawnstar::LoadingScreen loadGameUI(dawnstar::LoadingScreenMode::LoadingGame);
+                            loadGameUI.Render(backbuffer);
+                            window.Present(backbuffer);
+                            bool loaded = dawnstar::GameSave::LoadGameState(saveDir, optionsPlayer, world, otherState,
+                                                                            [&](int percent) {
+                                                                                loadGameUI.SetPercent(percent);
+                                                                                loadGameUI.Render(backbuffer);
+                                                                                window.Present(backbuffer);
+                                                                            });
+                            if (loaded) {
+                                // run()'s own tail: resumeGame(), then
+                                // `loadGameUI.percent = 100` + one final
+                                // repaint, then setCurrentDisplay(gameCanvas)
+                                // + startGameThread(). The loadingDungeonID/
+                                // imgloadRunning/reloadGame dance in between
+                                // has no counterpart here -- see
+                                // save/game_save.h's own class comment.
+                                dawnstar::GameSave::ResumeGame(optionsPlayer, levels, world, [&](int percent) {
+                                    loadGameUI.SetPercent(percent);
+                                    loadGameUI.Render(backbuffer);
+                                    window.Present(backbuffer);
+                                });
+                                loadGameUI.SetPercent(100);
+                                loadGameUI.Render(backbuffer);
+                                window.Present(backbuffer);
+                                inOptionsMenu = false;
+                            } else {
+                                // run()'s own else-branch: noSavedGameUI,
+                                // whose backTarget case 6 set to OptionsUI.
+                                optionsMenu.ShowNoSavedGame();
                             }
                             break;
                         }
