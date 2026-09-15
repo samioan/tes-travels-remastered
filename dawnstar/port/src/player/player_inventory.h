@@ -27,13 +27,18 @@ namespace dawnstar {
 // DungeonRuntime/WorldRegistry) -- ported now, M41, alongside
 // ItemTooltip(), for the real Inventory-item screen (ui/options_menu.h).
 //
-// Deliberately NOT ported: addGold() (a one-line field increment nothing
-// here needs yet).
 class PlayerInventory {
 public:
     // Appends an item to the first free slot; false if inventoryCount
     // is already 24.
     static bool AddItem(PlayerState& p, int itemId, int spawnIdOrPacked, int charge);
+
+    // Player.java's addGold(): a bare `this.gold += amount;`, no clamp
+    // either direction. Ported M45, once npc/shop_interaction.h's buy
+    // (negative amount) and sell (positive amount) actions needed it --
+    // deferred through M18-M44 as "a one-line field increment nothing
+    // here needs yet".
+    static void AddGold(PlayerState& p, int amount) { p.gold += amount; }
 
     // True if inventoryItemIds[slot]'s sign marks it equipped (negative)
     // AND the item is actually equippable -- Player.java's isEquipped().

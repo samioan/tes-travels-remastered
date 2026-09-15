@@ -54,6 +54,7 @@
 #include "graphics/backbuffer.h"
 #include "graphics/bitmap_font.h"
 #include "interact/interact_tick.h"
+#include "npc/shop_interaction.h"
 #include "passive/passive_tick.h"
 #include "platform/win32/window.h"
 #include "player/player_creation.h"
@@ -78,18 +79,6 @@
 #include "world/dungeon_view.h"
 
 namespace {
-
-// Shop.NAMES -- needed here (not just the SHOP_X/Y position tables
-// player/visible_objects.cpp/world/dungeon_generator.cpp already
-// inline) for M30's NPC-shop-greeting popup text. Still no real Shop
-// class in this port (see player/player_state.h's own npcShopIndex doc
-// comment) -- just the one array's worth of display strings this one
-// new call site needs.
-const char* kShopNames[9] = {
-    "Weapon Peddler", "Heavy Armor Peddler", "Light Armor Peddler", "Jakar's",
-    "Eustacia",       "Alhavara",            "Beatrice",            "Chung",
-    "Delacroix",
-};
 
 // Mirrors every M13 test's own world-building loop: one GeneratedLevel
 // per real geomin.dat row, hub town (level 1) hand-carved, every other
@@ -222,6 +211,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool gameOverCancelKeyWasDown = false;
     dawnstar::Screen gameOverScreen(dawnstar::ScreenMode::PlainList);
     dawnstar::Screen gameOverExitingScreen(dawnstar::ScreenMode::PlainList);
+    // M45: GameCanvas.openNpcDialogue()'s own greeting popup
+    // (`GenericInfoUI.setupMessage(Shop.NAMES[shopId], line)` +
+    // `setCurrentDisplay`) -- shown whenever InteractTick::
+    // ProcessInteract's npcInSight branch returns a real line. Same
+    // early-return-pauses-the-tick-loop shape as inGameOver/
+    // inOptionsMenu above (`activeScreen != null`). Dismissing it (Ok
+    // only -- SetupMessage's own PlainList mode attaches no Cancel
+    // command, matching the original's real GenericInfoUI) just returns
+    // to the game rather than opening the real NPCChoicesUI menu --
+    // see interact_tick.h's own doc comment on why that's deferred.
+    bool inNpcDialogue = false;
+    bool npcDialogueSelectKeyWasDown = false;
+    dawnstar::Screen npcDialogueScreen(dawnstar::ScreenMode::PlainList);
     // GameCanvas.campStartTime -- a GameCanvas field, not one of
     // Player's own, same reasoning as lastAttackTimeMs below.
     int64_t campStartTimeMs = 0;
@@ -363,6 +365,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // `Shop.reset()` call, ../../../src/Player.java line 2576), and is
         // replaced wholesale by a real load.
         dawnstar::OtherStateInfo otherState = dawnstar::OtherStateInfo::Reset();
+        // M45: the real, live counterpart of the same Shop.* fields
+        // `otherState` above carries as an inert flat container (see
+        // npc/shop_interaction.h's own ShopState doc comment for why
+        // they're not synced yet -- that's the future "shops" milestone).
+        // Reset alongside `otherState`, same two call sites (startup and
+        // a fresh character's own Shop.reset() tail below).
+        dawnstar::ShopState shopState = dawnstar::ShopState::Reset();
         // The port's own RecordStore substitute: a directory of
         // "es_gamestate<N>" files, of which exactly one (the newest) is ever
         // kept -- see save/game_save.h's own class comment. Relative to the
@@ -472,6 +481,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             // 2576) -- so a brand-new character starts with
                             // every shop's own firstVisit flag set again.
                             otherState = dawnstar::OtherStateInfo::Reset();
+                            shopState = dawnstar::ShopState::Reset();
                             inCharacterCreation = false;
                             break;
                         case dawnstar::CharacterCreationAction::CancelToMainMenu:
@@ -552,6 +562,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 } else {
                     gameOverScreen.Paint(backbuffer);
                 }
+                window.Present(backbuffer);
+                return;
+            }
+
+            // M45: only reachable once `playerSlot` holds a character
+            // (inNpcDialogue is only ever set true from inside the
+            // tick-gated interact dispatch further below) -- see its own
+            // declaration comment above for the full writeup.
+            if (inNpcDialogue) {
+                bool selectDown = KeyPressed(VK_RETURN);
+                if (selectDown && !npcDialogueSelectKeyWasDown) inNpcDialogue = false;
+                npcDialogueSelectKeyWasDown = selectDown;
+
+                npcDialogueScreen.Paint(backbuffer);
                 window.Present(backbuffer);
                 return;
             }
@@ -853,7 +877,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                           monsterAttacking);
                         campPending = false;
                     } else if (interactPending) {
-                        dawnstar::InteractTick::ProcessInteract(player, levels, world, items, messagePopup, nowMs);
+                        std::optional<std::string> npcLine = dawnstar::InteractTick::ProcessInteract(
+                            player, levels, world, items, charData, shopDialogue, shopState, messagePopup, globalRng,
+                            nextDropSpawnId, nowMs);
+                        if (npcLine.has_value()) {
+                            npcDialogueScreen.SetupMessage(
+                                dawnstar::ShopInteraction::kNames[static_cast<size_t>(player.npcInSight)], *npcLine);
+                            inNpcDialogue = true;
+                        }
                         interactPending = false;
                     } else if (castActive) {
                         dawnstar::CombatTick::ProcessSpellCast(player, levels, world, monsters, items, charData,
@@ -952,7 +983,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             if (player.npcInSight >= 0) {
                                 dawnstar::MessagePopup::Show(
                                     messagePopup,
-                                    dawnstar::MessagePopup::WrapToTwoLines(kShopNames[player.npcInSight]), 1, nowMs);
+                                    dawnstar::MessagePopup::WrapToTwoLines(
+                                        dawnstar::ShopInteraction::kNames[static_cast<size_t>(player.npcInSight)]),
+                                    1, nowMs);
                             }
 
                             // commitMove()'s own unconditional
@@ -1021,8 +1054,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         // quiz's real traitor, same as the Clue Log's own
                         // suspect names.
                         gameOverScreen.SetupMessage(
-                            "Game Over", dawnstar::ReplaceFirstTag(shopDialogue.groups[9][73], "<TAG>",
-                                                                    kShopNames[5 + player.traitorIndex]));
+                            "Game Over",
+                            dawnstar::ReplaceFirstTag(
+                                shopDialogue.groups[9][73], "<TAG>",
+                                dawnstar::ShopInteraction::kNames[static_cast<size_t>(5 + player.traitorIndex)]));
                         inGameOver = true;
                         gameOverExiting = false;
                     }

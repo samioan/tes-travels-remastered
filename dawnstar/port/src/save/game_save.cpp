@@ -12,6 +12,7 @@
 #include "assets/binary_writer.h"
 #include "monster/monster_runtime.h"
 #include "player/player_save.h"
+#include "util/game_advancement.h"
 
 namespace dawnstar {
 
@@ -274,11 +275,11 @@ GameSave::RecordStore GameSave::DeserializeRecordStore(const std::vector<uint8_t
 }
 
 int GameSave::GetGameAdvancementLevel(int giftPointsFound) {
-    if (giftPointsFound < 17) return 0;
-    if (giftPointsFound < 29) return 1;
-    if (giftPointsFound < 38) return 2;
-    if (giftPointsFound < 49) return 3;
-    return giftPointsFound < 62 ? 4 : 5;
+    // M45: the real formula now lives in util/game_advancement.h (a second
+    // consumer, npc/shop_interaction.h, needed it too) -- this stays as a
+    // thin forwarding wrapper so existing callers (main.cpp's ResumeGame
+    // path, m42_game_save_smoke.cpp) don't need to change.
+    return ::dawnstar::GetGameAdvancementLevel(giftPointsFound);
 }
 
 void GameSave::OpenAndRepopulateDungeons(int advancementLevel, std::vector<GeneratedLevel>& levels,

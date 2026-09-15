@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 namespace dawnstar {
 
@@ -15,6 +16,19 @@ inline std::string ReplaceFirstTag(const std::string& source, const std::string&
     size_t at = source.find(tag);
     if (at == std::string::npos) return source;
     return source.substr(0, at) + value + source.substr(at + tag.size());
+}
+
+// Util.java's own replace(source, tag, String[] values) overload: calls
+// the single-value version once per entry, in order -- so a template with
+// several `tag` occurrences gets each replaced with a different value in
+// left-to-right sequence. M45's Shop.rumorFor (the "asked again" phrasing,
+// which substitutes a skill name plus two rank numbers into one template)
+// is its first real caller.
+inline std::string ReplaceFirstTag(const std::string& source, const std::string& tag,
+                                    const std::vector<std::string>& values) {
+    std::string result = source;
+    for (const std::string& value : values) result = ReplaceFirstTag(result, tag, value);
+    return result;
 }
 
 // ESGame.java's own copyString (lines ~58-65): the copyright/legal

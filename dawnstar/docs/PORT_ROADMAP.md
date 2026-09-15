@@ -2905,16 +2905,140 @@ milestone rather than just read-through.
       technique). Full clean rebuild zero warnings; all 42 smoke tests
       pass; `dawnstar_port.exe` launches and stays up.
 
+- [x] **M45 -- NPC dialogue: `Shop.java`'s own static state + the real
+      `dialogue()` line-selection logic** (this session). A new
+      `dawnstar_npc` module (`port/src/npc/shop_interaction.h`/`.cpp`)
+      ports `Shop.java` in full: `ShopState` (firstVisit[9]/
+      questState1[4]/questState2[4]/interactionCount[4]/rewardsGiven[4]/
+      showDeathGreeting -- the live counterpart of the exact same 26
+      values M42's `OtherStateInfo` has carried as an inert flat
+      container since before this class existed) and `ShopInteraction`
+      (NAMES/SHOP_CATEGORY/SHOP_X/SHOP_Y/SHOP_STOCK/
+      RUMOR_STRING_OFFSET, isNamedShop/isGenericPeddler/hubShopAt/
+      questFlagsFor/clearQuestTurnInState/rumorFor, the single
+      `dialogue()` dispatcher covering every action -- greet, buy, sell,
+      the named shopkeepers' 2-stage quest-turn-in/reward/rumor chain,
+      and Jakar's rumor-reveal/cure/camp-warp/heal branches -- plus the
+      declared-but-no-confirmed-caller `isValidShopAction`/
+      `shopActionCode` pair, ported anyway for a complete class, same
+      precedent as M15/M16's own unused-field/quirk ports). This is the
+      gap M8's `ShopDialogue` (raw npcstrings.dat text only) and M34's
+      `InteractTick` (whose npcInSight branch was a documented no-op
+      stand-in) were both left with.
+
+      Wired for real: `InteractTick::ProcessInteract`'s npcInSight
+      branch now calls `ShopInteraction::Dialogue(..., action=1, extra=0)`
+      -- `GameCanvas.openNpcDialogue()`'s own call -- and returns the
+      result for main.cpp to show as a blocking message screen (a new
+      `inNpcDialogue`/`npcDialogueScreen`, the same
+      early-return-pauses-the-tick-loop shape `inOptionsMenu`/
+      `inGameOver` already established). NOT reproduced: the real game's
+      own Ok dispatch on that popup always proceeds into
+      `NPCChoicesUI[shopId]`, a full buy/sell/quest-turn-in/rumor-question
+      list-menu this port has no counterpart for yet -- dismissing this
+      port's popup just returns to the game instead, the same
+      "the branch exists, but does less than the original until its own
+      UI milestone lands" precedent M32's monsterType-42 end-of-game-UI
+      skip already set. That whole interactive menu -- and wiring
+      `ShopState` into `OtherStateInfo` so a save/load round-trip
+      actually carries it -- is the still-open "shops" milestone
+      `ShopInteraction`'s own actions 2-5/8/10-15 are now ready for.
+
+      Small shared pieces promoted along the way, same
+      reuse-over-duplication precedent M16/M17/M43 already set:
+      `PlayerInventory::AddGold` (a one-line `gold += amount`, deferred
+      since M18 as "nothing needs it yet" -- buy/sell both do now);
+      `util/game_advancement.h`'s `GetGameAdvancementLevel` (Jakar's own
+      greeting needs the same 0-5 advancement bucket `save/game_save.h`'s
+      `GameSave::GetGameAdvancementLevel` already computed -- that method
+      is now a one-line forwarder to the shared free function rather than
+      a second copy of the formula); `util/text.h`'s `ReplaceFirstTag`
+      grew the `values[]` overload (`Util.replace(source, tag, String[])`
+      -- calls the single-value version once per entry in order,
+      `rumorFor`'s "asked again" phrasing needs it for 3 substitutions in
+      one template). `main.cpp`'s own pre-existing `kShopNames` array (a
+      duplicate of `Shop.NAMES` that predates this milestone, M30's own
+      shop-greeting popup) was deleted in favor of the new canonical
+      `ShopInteraction::kNames`.
+
+      **Three real findings, all preserved/ported exactly:**
+      1. `Shop.java`'s own switch has NO `break` between the shopId
+         5-8 case group and the shopId 4 case that follows it: with
+         shopId 5-8 and action==8 specifically, the if/else-if chain's
+         final `else if (action != 8) return "quack";` is false, so
+         nothing returns and control falls straight into shop 4's own
+         if/else chain, evaluated with the ORIGINAL shopId (5-8) still in
+         scope. Traced by hand: every branch of shop 4's chain for
+         action==8 (not 1/10/11/12/13) bottoms out at its own
+         `return null` with no side effects, so this port returns
+         `std::nullopt` directly for that case rather than literally
+         reproducing the fallthrough -- provably equivalent, documented
+         inline at both the header and the fallthrough site.
+      2. `rumorFor(player, step)` indexes `player.skills[step][0]` --
+         the SAME storage cell `PlayerCombatStats::GainSkillExp`/
+         `SkillValue` use for skill `step`'s real combat rank -- to track
+         how many times that rumor topic has been asked about. The
+         first 6 named skills' rank and their associated rumor-ask-count
+         are, in the original, literally one field. Ported exactly
+         rather than given separate storage; checked directly in the new
+         smoke test's own section F.
+      3. The generic-peddler buy path (`action==14`) draws its spawn id
+         (`Item.nextSpawnId()`, i.e. `++nextItemSpawnId` here) and the
+         counter is already advanced BEFORE the code checks whether
+         `addInventoryItem` actually succeeds -- so a failed purchase
+         (a full pack) still burns a real spawn id, exactly like M43's
+         already-documented `GrantStarFrostItem` precedent for the same
+         counter.
+
+      Verified via the new `shop_interaction_smoke.exe` (7 sections, A-G)
+      against the real 37-level generated world, real `itemsin.dat`/
+      `npcstrings.dat`/`charin.dat` data, and a real created character
+      (M11): `ShopState::Reset()`'s post-condition; every static table
+      and small helper (`IsNamedShop`/`IsGenericPeddler`/`HubShopAt`/
+      `IsValidShopAction`/`ShopActionCode`, plus `QuestFlagsFor` against a
+      synthetic 0xE4 byte exercising all 4 shops' own 2-bit windows);
+      shops 0-3's buy (afford/unaffordable/pack-full, including the
+      spawn-id-burn quirk) and sell (ordinary + the gift-item-blocked
+      case, both found by scanning real `itemsin.dat` rather than
+      hardcoded ids); shops 5-8's first-visit/subsequent-random-line
+      greet (a twin `JavaRandom` predicting `ESGame.nextInt(3)`),
+      action 2's quest-ask (a twin RNG independently re-deriving
+      `Player.rollShopOutcome`'s own chance formula via the
+      already-trusted `PlayerCombatStats::SkillValue`/`RollOutcome`, then
+      checking the resulting `questState1`/`rewardsGiven` transition
+      matches whichever of the 4 outcome branches that roll actually
+      landed on) and its already-turned-in short-circuit, action 4's
+      quest-item turn-in (found by scanning real items for a category-11
+      item with a real nonzero `QuestFlagsFor` result for the shop under
+      test), action 5's reward-gated rumor ask, and action 8's
+      fallthrough-to-null; Jakar's first-visit intro (plain and
+      death-greeting-prefixed), subsequent-visit advancement bump,
+      cure/warp/heal (including the no-camp-mark vs. real-warp branches,
+      the latter checked against real world levels), and the rumor-reveal
+      chain (`eventFlags` progression, the traitorIndex-selected fragment
+      substitution, and a twin-predicted pick roll) plus its
+      everything-already-revealed "no new rumors" branch; and
+      `InteractTick::ProcessInteract`'s own new wiring, checked to return
+      exactly what a direct `Dialogue()` call would. All checks passed.
+      Full clean rebuild zero warnings; all 43 smoke tests pass;
+      `dawnstar_port.exe` launches and stays up (not visually re-verified
+      talking to a real in-game NPC this session -- the ProcessInteract-
+      vs-Dialogue equivalence check in section G is this milestone's
+      wiring evidence instead).
+
 ## Milestones next
 
-- [ ] **M45 and beyond (not yet planned in detail):** NPC dialogue
-      (needs `Shop.dialogue()`'s real line-selection logic -- M39
-      only reused the raw npcstrings.dat text `ShopDialogue` already loads,
-      for Clue Log, not that selection logic itself); shops (which would
-      also let `OtherStateInfo`'s own 26 saved `Shop.*` values, and the two
-      global spawn-id counters M42 saves but nothing yet advances, become
-      live rather than format-only); `LoadingScreen.java`'s own modes 1/2
-      splash sequence, if the boot flow is ever reproduced. Gets its own
-      milestone(s) once the shape of "how much fits in one slice" is
-      clearer -- following `shadowkey-decomp`'s pattern of not over-planning
-      milestones far in advance of actually reaching them.
+- [ ] **M46 and beyond (not yet planned in detail):** the "shops"
+      milestone M45 left open -- the real `NPCChoicesUI[shopId]`
+      buy/sell/quest-turn-in/rumor-question list-menu screens
+      `ESGame.handleNPCAction()`/`handleNPCChoices()` drive
+      `ShopInteraction::Dialogue`'s actions 2-5/8/10-15 through (M45
+      only wired action 1, the greet), which would also let
+      `OtherStateInfo`'s own 26 saved `Shop.*` values sync with the new
+      live `ShopState` instead of sitting parallel to it, and the two
+      global spawn-id counters M42 saves but nothing yet advances become
+      live; `LoadingScreen.java`'s own modes 1/2 splash sequence, if the
+      boot flow is ever reproduced. Gets its own milestone(s) once the
+      shape of "how much fits in one slice" is clearer -- following
+      `shadowkey-decomp`'s pattern of not over-planning milestones far in
+      advance of actually reaching them.

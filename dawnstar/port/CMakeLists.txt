@@ -136,16 +136,32 @@ add_library(dawnstar_combat STATIC
 target_include_directories(dawnstar_combat PUBLIC src)
 target_link_libraries(dawnstar_combat PUBLIC dawnstar_player dawnstar_monster dawnstar_dungeon dawnstar_render)
 
-# M34: the interact action (chest looting), needing dawnstar_player
-# (PlayerInventory::AddItem) + dawnstar_dungeon (chest/dropped-item
-# registry) + dawnstar_render (the found-item/inventory-full popups) at
-# once -- same "own small module, no cycle" shape as dawnstar_combat
-# above. See docs/PORT_ROADMAP.md and src/interact/.
+# M45: Shop.java's own static state + the real dialogue()
+# line-selection logic (buy/sell/quest-turn-in/rumor dispatch) -- the gap
+# M34's own InteractTick doc comment (and M8's ShopDialogue, raw
+# npcstrings.dat text only) flagged as still open. Needs dawnstar_player
+# (PlayerCombatStats::SkillValue/RollOutcome/GainSkillExp,
+# PlayerInventory::AddItem/RemoveSlot/AddGold, PlayerMovement::
+# HasCampMark/WarpToCampMark) and dawnstar_assets (ItemDatabase/
+# CharacterData/ShopDialogue) -- see docs/PORT_ROADMAP.md's M45 entry and
+# src/npc/.
+add_library(dawnstar_npc STATIC
+  src/npc/shop_interaction.cpp
+)
+target_include_directories(dawnstar_npc PUBLIC src)
+target_link_libraries(dawnstar_npc PUBLIC dawnstar_player dawnstar_assets)
+
+# M34/M45: the interact action (chest looting, now also the real NPC
+# "talk" greeting), needing dawnstar_player (PlayerInventory::AddItem) +
+# dawnstar_dungeon (chest/dropped-item registry) + dawnstar_render (the
+# found-item/inventory-full popups) + dawnstar_npc (ShopInteraction::
+# Dialogue) at once -- same "own small module, no cycle" shape as
+# dawnstar_combat above. See docs/PORT_ROADMAP.md and src/interact/.
 add_library(dawnstar_interact STATIC
   src/interact/interact_tick.cpp
 )
 target_include_directories(dawnstar_interact PUBLIC src)
-target_link_libraries(dawnstar_interact PUBLIC dawnstar_player dawnstar_dungeon dawnstar_render)
+target_link_libraries(dawnstar_interact PUBLIC dawnstar_player dawnstar_dungeon dawnstar_render dawnstar_npc)
 
 # M35: the camp action (enterCampState + the campState 1/2/3 tick state
 # machine), needing dawnstar_player (PlayerCamp::Rest) + dawnstar_dungeon
@@ -212,13 +228,17 @@ target_link_libraries(dawnstar_save PUBLIC dawnstar_player)
 # run GameSave::SaveGameState/LoadGameState/ResumeGame from main.cpp's own
 # display orchestration (see ui/options_menu.h's own
 # OptionsMenuAction::SaveGame/LoadGame doc comment on why that's ESGame's
-# job, not the Screen's).
+# job, not the Screen's). M45 adds dawnstar_npc: InteractTick's own
+# npcInSight branch now calls the real ShopInteraction::Dialogue, and
+# main.cpp constructs the ShopState it's threaded through directly (the
+# same "constructed and reset alongside OtherStateInfo" pattern its own
+# doc comment describes).
 add_executable(dawnstar_port WIN32
   src/main.cpp
   src/platform/win32/window.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
-target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_passive dawnstar_save)
+target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_passive dawnstar_save dawnstar_npc)
 if(WIN32)
   target_compile_definitions(dawnstar_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_link_libraries(dawnstar_port PRIVATE user32 gdi32)
@@ -414,3 +434,10 @@ target_link_libraries(reveal_traitor_smoke PRIVATE dawnstar_render dawnstar_play
 # dawnstar_monster come transitively.
 add_executable(passive_tick_smoke src/tests/m44_passive_tick_smoke.cpp)
 target_link_libraries(passive_tick_smoke PRIVATE dawnstar_passive dawnstar_dungeon dawnstar_render)
+
+# M45 milestone smoke test -- see src/tests/m45_shop_interaction_smoke.cpp.
+# Links dawnstar_interact too (InteractTick::ProcessInteract's own new
+# npcInSight wiring) on top of dawnstar_npc (ShopInteraction itself) --
+# dawnstar_player/dawnstar_assets come transitively.
+add_executable(shop_interaction_smoke src/tests/m45_shop_interaction_smoke.cpp)
+target_link_libraries(shop_interaction_smoke PRIVATE dawnstar_npc dawnstar_interact)

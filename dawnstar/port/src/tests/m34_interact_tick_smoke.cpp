@@ -1,7 +1,10 @@
 // M34 smoke test: InteractTick::ProcessInteract (interact/
-// interact_tick.h) -- GameCanvas.processInteract()'s chest-looting half
-// (the npcInSight half is a deliberate no-op stand-in -- see
-// interact_tick.h's own doc comment). No JVM ground truth is available
+// interact_tick.h) -- GameCanvas.processInteract()'s chest-looting half.
+// (The npcInSight half is now real too, M45 -- see
+// m45_shop_interaction_smoke.cpp for its own deep coverage; every
+// scenario here keeps npcInSight at -1, so this file's own additions are
+// just the extra parameters ProcessInteract's signature grew, unused in
+// every one of its own checks.) No JVM ground truth is available
 // (same reason as every prior milestone) -- verified against the real
 // 37-level generated world (M6/M24) and a real created character (M11),
 // including a real chest the world generator itself registered with the
@@ -19,8 +22,10 @@
 #include "assets/dungeon_geometry.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "assets/shop_dialogue.h"
 #include "dungeon/dungeon_runtime.h"
 #include "interact/interact_tick.h"
+#include "npc/shop_interaction.h"
 #include "player/player_creation.h"
 #include "player/player_movement.h"
 #include "player/player_state.h"
@@ -36,6 +41,7 @@ using dawnstar::MessagePopupState;
 using dawnstar::PlayerCreation;
 using dawnstar::PlayerMovement;
 using dawnstar::PlayerState;
+using dawnstar::ShopState;
 using dawnstar::WorldRegistry;
 
 bool g_ok = true;
@@ -89,6 +95,12 @@ int main(int argc, char** argv) {
         dawnstar::MonsterDatabase monsterDb = dawnstar::MonsterDatabase::Load(archive);
         dawnstar::CharacterData charData = dawnstar::CharacterData::Load(archive);
         dawnstar::DungeonGeometry geometry = dawnstar::DungeonGeometry::Load(archive);
+        // M45: ProcessInteract's grown signature -- unused by every
+        // scenario in this file (npcInSight stays -1 throughout), see
+        // this file's own top doc comment.
+        dawnstar::ShopDialogue shopDialogue = dawnstar::ShopDialogue::Load(root + "/npcstrings.dat");
+        ShopState shop = ShopState::Reset();
+        int16_t nextItemSpawnId = 1;
 
         std::vector<GeneratedLevel> levels;
         WorldRegistry world(geometry.rows.size());
@@ -132,7 +144,8 @@ int main(int argc, char** argv) {
             player.npcInSight = -1;
             MessagePopupState popup;
             int inventoryBefore = player.inventoryCount;
-            InteractTick::ProcessInteract(player, levels, world, items, popup, 1000);
+            InteractTick::ProcessInteract(player, levels, world, items, charData, shopDialogue, shop, popup,
+                                          globalRng, nextItemSpawnId, 1000);
             Check(!popup.visible, "no chest in sight should show no message");
             Check(player.inventoryCount == inventoryBefore, "no chest in sight should not change the inventory");
             Check(PlayerMovement::ChestInFront(player, levels, world) != nullptr,
@@ -147,7 +160,8 @@ int main(int argc, char** argv) {
             player.npcInSight = 3;
             MessagePopupState popup;
             int inventoryBefore = player.inventoryCount;
-            InteractTick::ProcessInteract(player, levels, world, items, popup, 2000);
+            InteractTick::ProcessInteract(player, levels, world, items, charData, shopDialogue, shop, popup,
+                                          globalRng, nextItemSpawnId, 2000);
             Check(!popup.visible, "npcInSight >= 0 should show no message (openNpcDialogue is unported)");
             Check(player.inventoryCount == inventoryBefore, "npcInSight >= 0 should not touch the inventory");
             Check(PlayerMovement::ChestInFront(player, levels, world) != nullptr,
@@ -167,7 +181,8 @@ int main(int argc, char** argv) {
 
             int inventoryBefore = player.inventoryCount;
             MessagePopupState popup;
-            InteractTick::ProcessInteract(player, levels, world, items, popup, 3000);
+            InteractTick::ProcessInteract(player, levels, world, items, charData, shopDialogue, shop, popup,
+                                          globalRng, nextItemSpawnId, 3000);
 
             Check(player.inventoryCount == inventoryBefore + 1, "a successful loot should add exactly one inventory item");
             Check(static_cast<uint8_t>(std::abs(static_cast<int>(player.inventoryItemIds[inventoryBefore]))) ==
@@ -213,7 +228,8 @@ int main(int argc, char** argv) {
             player.chestInSight = true;
             size_t dropsBefore = world.droppedItems[static_cast<size_t>(levelIdx)].size();
             MessagePopupState popup;
-            InteractTick::ProcessInteract(player, levels, world, items, popup, 4000);
+            InteractTick::ProcessInteract(player, levels, world, items, charData, shopDialogue, shop, popup,
+                                          globalRng, nextItemSpawnId, 4000);
 
             Check(player.inventoryCount == 24, "a full-inventory loot should not add an inventory slot");
             Check(popup.visible && popup.lines[0] == "Inventory" && popup.lines[1] == "full!" && popup.priority == 10,
@@ -268,7 +284,8 @@ int main(int argc, char** argv) {
 
                 int inventoryBefore = p2.inventoryCount;
                 MessagePopupState popup;
-                InteractTick::ProcessInteract(p2, levels, world, items, popup, 5000);
+                InteractTick::ProcessInteract(p2, levels, world, items, charData, shopDialogue, shop, popup,
+                                              globalRng, nextItemSpawnId, 5000);
 
                 Check(p2.inventoryCount == inventoryBefore + 1 &&
                           std::abs(static_cast<int>(p2.inventoryItemIds[inventoryBefore])) == 86,

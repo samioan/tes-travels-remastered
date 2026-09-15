@@ -8,18 +8,21 @@
 
 namespace dawnstar {
 
-void InteractTick::ProcessInteract(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
-                                    const ItemDatabase& items, MessagePopupState& messagePopup, int64_t nowMs) {
+std::optional<std::string> InteractTick::ProcessInteract(PlayerState& player, std::vector<GeneratedLevel>& levels,
+                                                          WorldRegistry& world, const ItemDatabase& items,
+                                                          const CharacterData& charData, const ShopDialogue& dialogue,
+                                                          ShopState& shop, MessagePopupState& messagePopup,
+                                                          JavaRandom& globalRng, int16_t& nextItemSpawnId,
+                                                          int64_t nowMs) {
     if (player.npcInSight >= 0) {
-        // openNpcDialogue(): not ported yet -- see this method's own doc
-        // comment in interact_tick.h.
-        return;
+        return ShopInteraction::Dialogue(player, shop, charData, items, dialogue, levels, player.npcInSight, 1, 0,
+                                          globalRng, nextItemSpawnId);
     }
 
-    if (!player.chestInSight) return;
+    if (!player.chestInSight) return std::nullopt;
 
     const std::array<uint8_t, 8>* chestPtr = PlayerMovement::ChestInFront(player, levels, world);
-    if (chestPtr == nullptr) return;  // chestInSight should already guarantee this; defensive only.
+    if (chestPtr == nullptr) return std::nullopt;  // chestInSight should already guarantee this; defensive only.
     const std::array<uint8_t, 8>& chest = *chestPtr;
 
     GeneratedLevel& level = levels[static_cast<size_t>(player.currentLevel - 1)];
@@ -52,6 +55,8 @@ void InteractTick::ProcessInteract(PlayerState& player, std::vector<GeneratedLev
         DungeonRuntime::RemoveChest(level, world, chest);
         MessagePopup::Show(messagePopup, {"Inventory", "full!"}, -1, nowMs);
     }
+
+    return std::nullopt;
 }
 
 }  // namespace dawnstar
