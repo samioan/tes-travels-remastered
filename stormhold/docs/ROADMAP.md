@@ -40,18 +40,27 @@ methods, `ESGame.loadHelpTopicBodies()`'s remaining help topics, and a set
 of individually-flagged lower-confidence names throughout (see each file's
 header comment and CLASS_MAP.md).
 
-**Phase 2 (not started): asset formats.** See
-[`ASSET_FORMATS.md`](ASSET_FORMATS.md). Two families:
-- Flat game-data tables (`itemsin.dat`, `monstersin.dat`, `spellsin.dat`,
-  `dungnamesin.dat`, `geomin.dat`, `droppeditemsin.dat`, `charin.dat`,
-  `monsterfilenamesin.dat`, `npcstrings.dat`) -- `itemsin.dat`'s framing is
-  already worked out (see the doc); the others are presumably the same
-  `<u16 length><UTF-8/bytes>`-record style and should fall quickly once one
-  is confirmed against its loader.
-- `.cus` files (`baglarge.cus`, `chestfarclosed.cus`, `trainer_male_*.cus`,
-  `overseer*.cus`, `undead*.cus`, `warden*.cus`, ...) -- per-bodypart/prop
-  3D mesh data (the naming reads as equipment/character pieces: heads,
-  torsos, weapons, chests). Binary, structure not yet worked out.
+**Phase 2 (done): asset formats.** See [`ASSET_FORMATS.md`](ASSET_FORMATS.md)
+for the full writeup. Turned out to already be substantially resolved as a
+byproduct of phase 1's class-by-class read-through (every loader lives in
+one of the 13 renamed classes) -- this phase was mostly writing that up
+plus a couple of remaining gaps:
+- All 9 flat game-data tables (`itemsin.dat`, `monstersin.dat`,
+  `spellsin.dat`, `dungnamesin.dat`, `geomin.dat`, `droppeditemsin.dat`,
+  `charin.dat`, `monsterfilenamesin.dat`, `npcstrings.dat`) have confirmed
+  record layouts, each column-oriented (`<u16/u32 count>` then one
+  contiguous array per field), not the flat `itemsin.dat`-per-record style
+  originally guessed.
+- **Correction to this doc's own earlier guess:** the `.cus` files are
+  *not* 3D mesh data despite the naming pattern reading that way -- they're
+  a from-scratch 2D indexed-color raw sprite format (`RawImage.java`),
+  fully decoded (width/height/transparency flag/palette/1-byte-per-pixel
+  indices). `far`/`mid`/`near` in filenames is 2D sprite LOD, not mesh LOD.
+- Every non-`.class` resource in `extracted/` (75 files) has a confirmed
+  loader call site; nothing orphaned. Left open: a handful of individual
+  table columns/groups whose exact meaning isn't pinned down yet (doesn't
+  block phase 3) -- see `ASSET_FORMATS.md`'s own "what's actually left"
+  section.
 
 **Phase 3 (not started): PC port.** Scaffold is in `port/` (CMake + Ninja
 + MSVC, matching the shadowkey-decomp port's toolchain). Given the shared
