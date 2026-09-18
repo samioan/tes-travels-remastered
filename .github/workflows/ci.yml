@@ -39,8 +39,13 @@ jobs:
       - name: Build Dawnstar (Debug, all targets)
         run: .\dawnstar\port\build.bat
 
+      # cd into build/ first: the test's own asset paths assume it (the
+      # same convention every other dawnstar smoke test uses for
+      # ../../extracted), and it's the one thing a plain `.\...\launcher_smoke.exe`
+      # invocation from the repo root got wrong the first time this ran in CI.
       - name: Dawnstar launcher smoke test
-        run: .\dawnstar\port\build\launcher_smoke.exe
+        working-directory: dawnstar/port/build
+        run: .\launcher_smoke.exe
 
       - name: Build Dawnstar (shipping configuration)
         run: .\dawnstar\port\build_dist.bat ci-${{ github.run_number }}

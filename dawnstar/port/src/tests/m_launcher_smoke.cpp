@@ -170,6 +170,27 @@ bool WriteTestZip(const std::string& path, const std::vector<ZipMember>& members
     return static_cast<bool>(file);
 }
 
+// Finds a path this repo's own smoke tests conventionally assume relative
+// to build/ (two levels above dawnstar/), by trying every plausible
+// working directory rather than assuming one. Developer builds run this
+// from build/ by hand; CI (both ci.yml and release.yml) invokes the exe by
+// a path from the repo root instead, without cd'ing into build/ first --
+// a real CWD mismatch this test hit in its first CI run, not a
+// hypothetical one. `relativeToRepoRoot` is the same path spelled from the
+// repo root, for when that's where we actually are.
+std::string FindAsset(const std::string& relativeToBuildDir,
+                      const std::string& relativeToRepoRoot) {
+    const char* candidates[] = {
+        relativeToBuildDir.c_str(),   // CWD == dawnstar/port/build(-dist)/
+        relativeToRepoRoot.c_str(),   // CWD == repo root (CI's own convention)
+    };
+    std::error_code error;
+    for (const char* candidate : candidates) {
+        if (fs::is_regular_file(candidate, error) && !error) return candidate;
+    }
+    return relativeToBuildDir;  // let the caller's own Check() report the miss
+}
+
 // A scratch directory of our own under TEMP -- never the repo, never a
 // real install.
 fs::path ScratchDirectory() {
@@ -195,9 +216,12 @@ int main(int, char**) {
     // shadowkey-decomp's WIC-based decoder, DecodeBanner here goes through
     // stb_image and needs no COM.
     std::printf("\n-- 1. the banner artwork (stb_image -> DecodeBanner) --\n");
-    const std::vector<unsigned char> blob =
-        ReadFile("../src/launcher/assets/banner.png");
-    Check(!blob.empty(), "launcher/assets/banner.png is present");
+    const std::string bannerPath =
+        FindAsset("../src/launcher/assets/banner.png",
+                  "dawnstar/port/src/launcher/assets/banner.png");
+    const std::vector<unsigned char> blob = ReadFile(bannerPath);
+    Check(!blob.empty(), "launcher/assets/banner.png is present (looked for it at " +
+                             bannerPath + ")");
     if (!blob.empty()) {
         Check(blob.size() > 8 && blob[0] == 0x89 && blob[1] == 'P' && blob[2] == 'N' &&
                   blob[3] == 'G',
