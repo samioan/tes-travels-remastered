@@ -24,6 +24,7 @@ target_include_directories(stormhold_assets PUBLIC src)
 # src/world/.
 add_library(stormhold_world STATIC
   src/world/dungeon_generator.cpp
+  src/world/warden.cpp
 )
 target_include_directories(stormhold_world PUBLIC src)
 target_link_libraries(stormhold_world PUBLIC stormhold_assets)
@@ -65,3 +66,7 @@ target_link_libraries(dungeon_generator_smoke PRIVATE stormhold_world)
 # M7 milestone smoke test -- see src/tests/m7_raw_image_smoke.cpp.
 add_executable(raw_image_smoke src/tests/m7_raw_image_smoke.cpp)
 target_link_libraries(raw_image_smoke PRIVATE stormhold_assets)
+
+# M8 milestone smoke test -- see src/tests/m8_warden_smoke.cpp.
+add_executable(warden_smoke src/tests/m8_warden_smoke.cpp)
+target_link_libraries(warden_smoke PRIVATE stormhold_world)

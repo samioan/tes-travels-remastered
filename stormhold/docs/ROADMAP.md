@@ -71,9 +71,10 @@ foundations -- `BinaryReader`/`AssetRoot` plus the `ItemDatabase`/
 `monstersin.dat`/`geomin.dat`), M4 (`CharacterData`, `charin.dat`), M5
 (bit-exact `java.util.Random`, JVM-verified), M6 (procedural dungeon
 generation, self-consistency-verified across the hub town plus 6 standard
-levels), and M7 (`RawImage`'s indexed-color `.cus` sprite decoder,
-verified against all 37 real sprite files) are done, all verified against
-real extracted data/ground truth. Given the shared Vir2L "ngame" engine with dawnstar, small
+levels), M7 (`RawImage`'s indexed-color `.cus` sprite decoder, verified
+against all 37 real sprite files), and M8 (the Warden visits/leaves world
+event, including a confirmed tile-write index bug preserved rather than
+fixed) are done, all verified against real extracted data/ground truth. Given the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are
 copied rather than shared for now -- factoring out a real cross-project
 engine library is deferred until Stormhold's own port has enough

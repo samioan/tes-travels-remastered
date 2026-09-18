@@ -333,10 +333,51 @@ read-through.
       above never fired once across all 37 files, confirming real assets
       never actually depend on the Java static-scratch staleness quirk.
 
+- [x] **M8 -- Warden visits/leaves world event** (this session).
+      `WardenState` (`port/src/world/warden.h`/`.cpp`): `Shop.java`'s
+      Warden world-event state machine -- `shouldWardenVisit()`'s
+      escalating 13/26/39 elapsed-counter thresholds gating
+      `wardenArrives()`/`wardenLeaves()`'s tile-bit-32 flip at Varus's
+      fixed hub position (`Shop.SHOP_X[6]`/`SHOP_Y[6]` = (9,9)). Deliberately
+      scoped to just this mechanic, not the rest of `Shop.java`'s
+      `dialogue()` dispatcher (the full 7-NPC roster, quest-turn-in
+      economy, Beneca/Helga's bespoke branches) -- that needs a live
+      Player/inventory/dungeon-mutation model this port doesn't have yet,
+      a later milestone's job (see "What's next" below).
+
+      **A real, confirmed bug, preserved rather than fixed, same
+      discipline as M6's dead chest-record byte:** `wardenLeaves()` reads
+      the tile byte to clear bit 32 from `ESGame.dungeons[1]` (level
+      INDEX 1 = level NUMBER 2, an actual procedurally-generated dungeon)
+      at Varus's position, then writes the result into `ESGame.dungeons[0]`
+      (the HUB)'s tile at that same position -- instead of
+      reading/clearing/writing the hub's own tile the way `wardenArrives()`
+      correctly does. Near-certainly a copy-paste index bug
+      (`dungeons[1]` should read `dungeons[0]`): "the Warden leaving"
+      doesn't restore the hub tile's real prior value at all, it
+      overwrites it with whatever level 2 generated at the same (x, y)
+      that tick, with bit 32 cleared. `WardenState::Leave()` takes both
+      `GeneratedLevel&` arguments explicitly (hub and level 2) and
+      reproduces this exactly, with the header comment flagging it plainly
+      so a future reader doesn't assume it's a typo in the port itself.
+
+      Verified by `warden_smoke.exe` against real `extracted/` data (hub +
+      level 2, both from M6's `DungeonGenerator`): Varus's hub tile starts
+      with bit 32 clear (consistent with M6's own finding that
+      `BuildHubLevel` only marks the other 6 shops), the 13/26/39
+      threshold escalation is exact (checked one elapsedCounter below and
+      at each threshold), `Arrive()` sets bit 32 and blocks re-triggering
+      while already present, `Leave()` reproduces the dungeons[1]/
+      dungeons[0] bug exactly (asserted against level 2's real tile value,
+      not just "bit 32 is now clear"), and the visit cap after
+      `visitCount==3` matches the original's missing 4th branch (checked
+      with an elapsedCounter of 100000).
+
 ## What's next
 
-M8 onward: the Warden visits/leaves NPC mechanic (`Shop.wardenPresent`/
-`SHOP_X[6]`, the other Stormhold-specific system dawnstar has no
-equivalent of), then player state/character-creation/movement, following
-dawnstar's own M7+/M8+ roughly but expecting further Stormhold-specific
-divergences the way M3/M6/M7 already found.
+M9 onward: player state/character-creation/movement, following dawnstar's
+own M8+ roughly but expecting further Stormhold-specific divergences the
+way M3/M6/M7/M8 already found -- this is also where the rest of
+`Shop.java`'s dialogue() dispatcher (quest-turn-in shops 0-3, Beneca,
+Helga) becomes portable, once there's a real Player/inventory model to
+hang it off of.
