@@ -1,37 +1,26 @@
-// Placeholder entry point -- opens a blank window to prove the build
-// toolchain works. Replace with the real port once stormhold/decompiled/
-// has been read through and renamed (see ../../docs/ROADMAP.md).
+// M1: real tick loop + backbuffer + present. GameClock runs the actual
+// 250ms/4Hz cadence (GameCanvas.run(), see ../docs/PORT_ROADMAP.md), a
+// 176x208 Backbuffer is presented via GDI each frame. No game logic yet --
+// this proves the loop/presentation architecture only, same scope as
+// dawnstar's own M1.
 #include <windows.h>
 
-static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-  if (msg == WM_DESTROY) {
-    PostQuitMessage(0);
+#include "engine/game_clock.h"
+#include "graphics/backbuffer.h"
+#include "platform/win32/window.h"
+
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    stormhold::Window window(stormhold::Backbuffer::kWidth * 2, stormhold::Backbuffer::kHeight * 2,
+                              L"Stormhold Port");
+    stormhold::GameClock clock;
+    stormhold::Backbuffer backbuffer;
+
+    window.RunMessageLoop([&]() {
+        if (clock.ConsumeTick()) {
+            backbuffer.Fill(stormhold::PackRGB565(20, 20, 40));
+        }
+        window.Present(backbuffer);
+    });
+
     return 0;
-  }
-  return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
-  const wchar_t* kClassName = L"StormholdPortWindow";
-
-  WNDCLASSW wc = {};
-  wc.lpfnWndProc = WindowProc;
-  wc.hInstance = hInstance;
-  wc.lpszClassName = kClassName;
-  RegisterClassW(&wc);
-
-  HWND hwnd = CreateWindowExW(
-      0, kClassName, L"Stormhold Port", WS_OVERLAPPEDWINDOW,
-      CW_USEDEFAULT, CW_USEDEFAULT, 320, 240,
-      nullptr, nullptr, hInstance, nullptr);
-  if (!hwnd) return 0;
-
-  ShowWindow(hwnd, nCmdShow);
-
-  MSG msg = {};
-  while (GetMessageW(&msg, nullptr, 0, 0)) {
-    TranslateMessage(&msg);
-    DispatchMessageW(&msg);
-  }
-  return 0;
 }

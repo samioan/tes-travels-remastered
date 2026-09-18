@@ -62,8 +62,15 @@ plus a couple of remaining gaps:
   block phase 3) -- see `ASSET_FORMATS.md`'s own "what's actually left"
   section.
 
-**Phase 3 (not started): PC port.** Scaffold is in `port/` (CMake + Ninja
-+ MSVC, matching the shadowkey-decomp port's toolchain). Given the shared
-Vir2L "ngame" engine with dawnstar, factor out common engine code into a
-shared location once both are understood, rather than duplicating a
-reimplementation twice.
+**Phase 3 (in progress): PC port.** See
+[`PORT_ROADMAP.md`](PORT_ROADMAP.md) for the full milestone-by-milestone
+writeup, following dawnstar's own port precedent. M0 (scaffold), M1 (real
+tick loop/backbuffer/window, the confirmed 250ms cadence), and M2 (asset
+foundations -- `BinaryReader`/`AssetRoot` plus the `ItemDatabase`/
+`SpellDatabase` loaders, verified against real `itemsin.dat`/
+`droppeditemsin.dat`/`spellsin.dat`) are done. Given the shared Vir2L
+"ngame" engine with dawnstar, small identical pieces (tick cadence,
+backbuffer, window, binary reader) are copied rather than shared for now --
+factoring out a real cross-project engine library is deferred until
+Stormhold's own port has enough milestones to show what's actually worth
+sharing (see `PORT_ROADMAP.md`'s own note on this).
