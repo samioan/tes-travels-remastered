@@ -16,6 +16,7 @@ add_library(stormhold_assets STATIC
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
   src/assets/raw_image.cpp
+  src/assets/shop_dialogue.cpp
   src/assets/spell_database.cpp
 )
 target_include_directories(stormhold_assets PUBLIC src)
@@ -87,3 +88,7 @@ target_link_libraries(player_creation_smoke PRIVATE stormhold_player)
 # M10 milestone smoke test -- see src/tests/m10_player_movement_smoke.cpp.
 add_executable(player_movement_smoke src/tests/m10_player_movement_smoke.cpp)
 target_link_libraries(player_movement_smoke PRIVATE stormhold_player)
+
+# M11 milestone smoke test -- see src/tests/m11_shop_dialogue_smoke.cpp.
+add_executable(shop_dialogue_smoke src/tests/m11_shop_dialogue_smoke.cpp)
+target_link_libraries(shop_dialogue_smoke PRIVATE stormhold_assets)

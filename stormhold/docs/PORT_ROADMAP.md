@@ -539,11 +539,50 @@ read-through.
       walk from the actual hub spawn position across real generated
       neighbor levels with zero exceptions.
 
+- [x] **M11 -- NPC dialogue text (`npcstrings.dat`)** (this session).
+      `ShopDialogue` (`port/src/assets/shop_dialogue.h`/`.cpp`, `../src/
+      Shop.java`'s `loadDialogue()`/`load()`/`loadGroup()`): 8 fixed-size
+      groups (`GROUP_SIZES = {20, 20, 20, 20, 5, 22, 5, 41}`, checked
+      against the file's own per-group count, mismatch throws), groups
+      0-6 mapping 1:1 onto the 7-NPC roster (0-3 the quest-turn-in
+      shopkeepers, 4 Beneca, 5 Helga, 6 Varus -- see M8's `WardenState`),
+      group 7 a separate 41-entry generic/rumor string pool. **Data only,
+      same scoping dawnstar's own M8 used** -- the actual `dialogue()`
+      dispatcher logic (quest-turn-in state machine, Beneca/Helga's
+      charge/rest/heal economies) is deferred to a later milestone, since
+      it needs several `Player` inventory methods
+      (`removeInventorySlot`/`initializeItemCharge`/`isItemCharged`/
+      `hasCampMark`/`warpToCampMark`/`rollShopOutcome`) this port hasn't
+      ported yet -- `player_creation.cpp`'s own small inventory helpers
+      (`AddInventoryItemRaw`/`EquipItem`/`UnequipSlot`) only cover what
+      character creation itself needed, not general-purpose inventory
+      management.
+
+      Unlike dawnstar's own `ShopDialogue`, there's no "is it bundled
+      inside an archive or not" special case to handle here at all --
+      Stormhold has no archive indirection for ANY resource (established
+      since M2), so `npcstrings.dat` loads through the exact same
+      `AssetRoot::OpenFile()` every other table does.
+
+      Verified by `shop_dialogue_smoke.exe` against the real
+      `npcstrings.dat`: all 8 groups at their exact expected sizes, every
+      line non-empty, and every line reads as in-character, prison-camp-
+      themed NPC dialogue fitting Stormhold's own premise (Arantamo:
+      "I see they have captured another pearl to cast before the
+      swine...", Varus: "You are blessed to be part of my plans to rid
+      the Empire of evil..."). A nice independent confirmation the group-
+      to-shop mapping is right: group 7's very first line, "You can't
+      take that. Your inventory is full.", is exactly the message
+      `Shop.dialogue()`'s own Beneca branch (action 7, training-failed
+      path) returns as `dialogue[7][0]` -- a generic system message, not
+      a rumor, landing at exactly the index the code reads for that
+      purpose.
+
 ## What's next
 
-M11 onward: the rest of `Shop.java`'s dialogue() dispatcher (quest-turn-in
-shops 0-3, Beneca, Helga -- now that there's a real `PlayerState`/
-inventory/movement model to hang it off of), combat, and the player save
-format, following dawnstar's own later milestones roughly but expecting
-further Stormhold-specific divergences the way M3/M6/M7/M8/M9/M10 already
-found.
+M12 onward: general-purpose player inventory management (`removeInventorySlot`,
+`initializeItemCharge`/`isItemCharged`, `hasCampMark`/`warpToCampMark`,
+`rollShopOutcome`), which unlocks the actual `Shop.dialogue()` dispatcher
+logic M11 deferred, then combat and the player save format, following
+dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way M3/M6/M7/M8/M9/M10 already found.
