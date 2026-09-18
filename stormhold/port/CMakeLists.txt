@@ -19,6 +19,14 @@ add_library(stormhold_assets STATIC
 )
 target_include_directories(stormhold_assets PUBLIC src)
 
+# M6: procedural dungeon generation -- see docs/PORT_ROADMAP.md and
+# src/world/.
+add_library(stormhold_world STATIC
+  src/world/dungeon_generator.cpp
+)
+target_include_directories(stormhold_world PUBLIC src)
+target_link_libraries(stormhold_world PUBLIC stormhold_assets)
+
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
 # dawnstar ports' platform layer.
@@ -48,3 +56,7 @@ target_link_libraries(character_data_smoke PRIVATE stormhold_assets)
 # util/java_random.h is header-only, so no library to link against.
 add_executable(java_random_smoke src/tests/m5_java_random_smoke.cpp)
 target_include_directories(java_random_smoke PRIVATE src)
+
+# M6 milestone smoke test -- see src/tests/m6_dungeon_generator_smoke.cpp.
+add_executable(dungeon_generator_smoke src/tests/m6_dungeon_generator_smoke.cpp)
+target_link_libraries(dungeon_generator_smoke PRIVATE stormhold_world)

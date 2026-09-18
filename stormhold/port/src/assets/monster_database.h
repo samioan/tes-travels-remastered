@@ -35,6 +35,15 @@ struct MonsterDatabase {
     uint8_t Stat(int typeId, int column) const { return typeStats[typeId - 1][column]; }
     const std::string& TypeName(int typeId) const { return typeName[typeId - 1]; }
 
+    // Monster.java's constructor reads `typeStats[typeIndex-1][14]`
+    // (starting/max HP) directly as a private field of its own class,
+    // bypassing the masked `stat()` accessor entirely -- the RAW signed
+    // byte, not `Stat()`'s `& 0xFF`. Needed by dungeon generation (M6),
+    // which replicates that same construction-time HP read.
+    int8_t RawStat(int typeId, int column) const {
+        return static_cast<int8_t>(typeStats[typeId - 1][column]);
+    }
+
     static MonsterDatabase Load(const AssetRoot& assets);
 };
 

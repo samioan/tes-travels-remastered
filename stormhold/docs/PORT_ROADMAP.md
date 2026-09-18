@@ -209,13 +209,94 @@ read-through.
       `Math.abs(int)`'s `Integer.MIN_VALUE` quirk explicitly (`JavaAbs`)
       rather than calling `std::abs`, same rationale as dawnstar's own M5.
 
+- [x] **M6 -- procedural dungeon generation** (this session).
+      `DungeonGenerator` (`port/src/world/dungeon_generator.h`/`.cpp`):
+      the full room-carving/corridor-connection/monster-placement/
+      chest-placement pipeline transcribed from `../src/Dungeon.java`
+      (named `DungeonGenerator` here purely for cross-reference symmetry
+      with dawnstar's port -- the real source has no separate class at
+      all, per M3's finding), plus `Item.java`'s two loot-roll methods
+      added onto `ItemDatabase` (`RollLoot`/`RandomGiftItemOfSubtype`,
+      M2's data-only struct's first added logic methods) and
+      `MonsterDatabase::RawStat()` (the unmasked signed-byte read
+      `Monster`'s real constructor uses for starting HP, distinct from
+      `Stat()`'s `& 0xFF`).
+
+      **Correction to M3's own note, caught while transcribing this
+      milestone:** M3 said Stormhold's stairways are placed
+      "procedurally" as opposed to dawnstar's "fixed per-direction tile
+      coordinate" -- reading `carveStairwell(dir)` end to end shows that's
+      not quite right. It's still a fixed coordinate per compass
+      direction (N->(17,4), S->(17,30), W->(4,17), E->(30,17), same
+      values dawnstar's own `CarveStairwayCorridor` implementation
+      actually carves at, despite that game's `DungeonGeomRow.h` doc
+      comment describing slightly different numbers) -- the real
+      difference between the two games here is just *how* that mapping
+      is expressed (a small dispatch function vs. a data-shaped doc
+      comment), not the underlying behavior. Noted here rather than
+      silently reworded, same policy as the phase-2 `.cus` correction.
+
+      **A second, more consequential architecture difference confirmed
+      by finishing this transcription:** Stormhold has no "special
+      shopkeeper room" mechanic inside procedurally-generated levels at
+      all, unlike dawnstar (which places 4 NPCs at generation-chosen
+      positions on levels 3/12/21/30 and writes them back into `Shop.
+      SHOP_X[5..8]`/`SHOP_Y[5..8]`). `Shop.SHOP_X`/`SHOP_Y` here are
+      fixed 7-entry arrays (6 hub-town shops + 1 conditional Warden), and
+      `Dungeon.generate()`'s "mark one room's center" step has no
+      level-number-gated branch -- it always marks bit 8 (the same
+      "purpose not confirmed" no-spawn marker from M3/phase 1), never bit
+      32. `GeneratedLevel` accordingly has no `specialShopX`/`specialShopY`
+      fields at all here.
+
+      **A real, easy-to-miss RNG-order subtlety, caught by reading
+      `rollRoomRect()` character-by-character rather than assuming
+      uniformity with every other random draw in the file:**
+      `rollRoomRect()`'s 6 draws all use `Math.abs(rng.nextInt()) %
+      bound` (**abs, then mod**), while every other random draw in
+      `Dungeon.java` uses `Math.abs(rng.nextInt() % bound)` (**mod, then
+      abs**) -- two different formulas that usually agree but aren't
+      identical (e.g. around `Integer.MIN_VALUE`). Kept as a local
+      `AbsThenMod()` helper in `dungeon_generator.cpp` rather than folded
+      into `java_random.h`'s shared `RandomInt0Based`/`RandomInt1Based`,
+      since nothing else in this codebase uses that order. Confirmed
+      dawnstar's own port independently caught the identical pattern in
+      its own `DungeonGenerator.java` (its `AbsThenMod` helper is used in
+      exactly the same one place, its own `RandomRoomRect`).
+
+      **A confirmed-dead field, found and documented rather than
+      "fixed":** `Dungeon.placeChests()` writes a per-chest byte meant to
+      flag the guaranteed-gift chest (`record[2] = first ? 1 : 0`), but
+      `first` is already flipped to `false` earlier in the *same*
+      iteration, before that write executes -- so the byte is always `0`
+      for every chest, including the real gift one. Confirmed dead: the
+      only consumer (`Player.collectChestItem()`) never reads byte 2 at
+      all. `GeneratedChestSpawn::guaranteedGift` models the real game
+      logic (chest 0 really does get the gift-subtype roll) rather than
+      this always-zero on-disk byte, documented in the struct's own
+      comment.
+
+      Verified via `dungeon_generator_smoke.exe` against the real
+      37-level geometry/item/monster data (no JVM ground truth possible,
+      same reason as dawnstar's own M6 -- `ESGame`'s `RegisteredMIDlet`
+      base class's static initializer throws on real MIDP stub jars the
+      instant anything touching `ESGame` actually *runs*): the hub level
+      plus 2/3/12/15/21/30/37 -- all checks passed on the first attempt:
+      exactly 15 rooms/monster spawns and 5 chests (exactly 1
+      guaranteed-gift) per level, every monster/chest position
+      walkable/in-bounds with the right tile bit set, every chest's
+      rolled item id valid, exactly one bit-8 marker tile per level and
+      zero bit-32 tiles from generation (confirming the no-special-room
+      architecture finding above), the hub town's 6 shop tiles correctly
+      marked, level 37's last room forced to monster type 41, and no
+      undocumented tile bits anywhere.
+
 ## What's next
 
-M6 onward: procedural dungeon generation itself (fused onto `Dungeon`, not
-a separate `DungeonGenerator` class -- M3's finding, and Stormhold's
-generation uses `Item.java`'s two RNG-driven loot-roll methods this port's
-`ItemDatabase` deferred since M2), following dawnstar's own M6 as a
-template but adapted to the fused-class architecture, then
-Stormhold-specific systems dawnstar has no equivalent of yet: the Warden
-visits/leaves NPC mechanic and `RawImage`'s indexed-color sprite decoder
-(`.cus` files).
+M7 onward: Stormhold-specific systems dawnstar has no equivalent of yet --
+the Warden visits/leaves NPC mechanic (`Shop.wardenPresent`/`SHOP_X[6]`)
+and `RawImage`'s indexed-color sprite decoder (`.cus` files, phase 2's own
+correction of the original "3D mesh" guess) -- then player
+state/character-creation/movement, following dawnstar's own M7+ roughly
+but expecting further Stormhold-specific divergences the way M3/M6 already
+found two apiece.
