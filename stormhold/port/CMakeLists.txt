@@ -15,6 +15,7 @@ add_library(stormhold_assets STATIC
   src/assets/dungeon_geometry.cpp
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
+  src/assets/raw_image.cpp
   src/assets/spell_database.cpp
 )
 target_include_directories(stormhold_assets PUBLIC src)
@@ -60,3 +61,7 @@ target_include_directories(java_random_smoke PRIVATE src)
 # M6 milestone smoke test -- see src/tests/m6_dungeon_generator_smoke.cpp.
 add_executable(dungeon_generator_smoke src/tests/m6_dungeon_generator_smoke.cpp)
 target_link_libraries(dungeon_generator_smoke PRIVATE stormhold_world)
+
+# M7 milestone smoke test -- see src/tests/m7_raw_image_smoke.cpp.
+add_executable(raw_image_smoke src/tests/m7_raw_image_smoke.cpp)
+target_link_libraries(raw_image_smoke PRIVATE stormhold_assets)

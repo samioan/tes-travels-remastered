@@ -291,12 +291,52 @@ read-through.
       marked, level 37's last room forced to monster type 41, and no
       undocumented tile bits anywhere.
 
+- [x] **M7 -- `RawImage` indexed-color sprite decoder** (this session).
+      `RawImage::Load` (`port/src/assets/raw_image.h`/`.cpp`): the
+      from-scratch `.cus` sprite format transcribed from `../src/RawImage.
+      java`'s `load()` (no dawnstar analog, see `../docs/ASSET_FORMATS.md`'s
+      ".cus files" section -- itself phase 2's own correction of the
+      original "per-bodypart 3D mesh" naming-pattern guess). Decodes
+      straight to the same ARGB4444-ish `uint16_t` pixel format the Java
+      keeps (alpha nibble `0xF000` set/cleared per pixel at load time, no
+      separate alpha mask) rather than converting to `Backbuffer`'s RGB565
+      -- compositing (alpha test + format conversion, i.e. a real `Blit()`)
+      is deliberately deferred to whichever later milestone actually draws
+      a frame with sprites in it, same scoping note `Backbuffer`'s own
+      header comment already flagged back at M1.
+
+      **A real dead-field/dead-code pair, found and documented rather than
+      silently reproduced or "fixed":** `RawImage.load()` stores a
+      `widthAgain` field (a second copy of `width`) that's never read
+      anywhere else in `../src/` -- not ported. Separately, its palette
+      buffer (`paletteScratch`) is a **static** 256-entry array reused
+      across every image load, so any pixel index `>= colorCount` for a
+      given image would silently resolve to a *stale entry left over from
+      whichever `.cus` file loaded before it* -- load-order-dependent
+      behavior no well-formed asset should ever trigger. The port doesn't
+      reproduce that static-reuse nondeterminism; an out-of-range index is
+      a hard `std::runtime_error` instead, verified never to fire against
+      any real file (see below). Also: `RawImage.load()`'s own "colorCount
+      > 255" check is dead code -- `colorCount` is read as `in.read() &
+      0xFF`, which can never exceed 255 in the first place -- noted, not
+      reimplemented as unreachable logic.
+
+      Verified by `raw_image_smoke.exe` against **all 37 real `.cus`
+      files** in `extracted/` (the complete roster `../docs/
+      ASSET_FORMATS.md` lists): every one decodes cleanly, width*height
+      always matches the decoded pixel count, every one of them actually
+      sets `hasTransparency=true` and has a plausible count of transparent
+      pixels (ranging from 15 on the smallest sprite, `bagsmall.cus`
+      12x10, up to 4297 on the largest, `overseerbodyf3lc.cus` 105x158),
+      the alpha-nibble invariant holds pixel-for-pixel on every image, and
+      -- the strongest check here -- the out-of-range-palette-index guard
+      above never fired once across all 37 files, confirming real assets
+      never actually depend on the Java static-scratch staleness quirk.
+
 ## What's next
 
-M7 onward: Stormhold-specific systems dawnstar has no equivalent of yet --
-the Warden visits/leaves NPC mechanic (`Shop.wardenPresent`/`SHOP_X[6]`)
-and `RawImage`'s indexed-color sprite decoder (`.cus` files, phase 2's own
-correction of the original "3D mesh" guess) -- then player
-state/character-creation/movement, following dawnstar's own M7+ roughly
-but expecting further Stormhold-specific divergences the way M3/M6 already
-found two apiece.
+M8 onward: the Warden visits/leaves NPC mechanic (`Shop.wardenPresent`/
+`SHOP_X[6]`, the other Stormhold-specific system dawnstar has no
+equivalent of), then player state/character-creation/movement, following
+dawnstar's own M7+/M8+ roughly but expecting further Stormhold-specific
+divergences the way M3/M6/M7 already found.
