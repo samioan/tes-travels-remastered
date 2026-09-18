@@ -165,13 +165,57 @@ read-through.
       with) resolves to the same archetypal pairing dawnstar found:
       Sorcerer -> High Elf (index 3), the classic pure-caster combo.
 
+- [x] **M5 -- bit-exact `java.util.Random`** (this session). `JavaRandom`
+      (`port/src/util/java_random.h`, header-only): the 48-bit LCG
+      (`NextInt`/`next(32)`) plus `RandomInt1Based`/`RandomInt0Based`,
+      matching every real caller in `../src/` (`Dungeon.java`,
+      `Item.java`, `Monster.java`, `ESGame.java`, `Shop.java` -- only ever
+      the no-arg `nextInt()` plus the codebase's own `Math.abs(x % bound)`
+      wrapping, never `Random`'s more involved `nextInt(bound)`).
+      Foundational rather than optional: `Dungeon.generate()` seeds one of
+      these **deterministically per level** (`new Random(seed)`, seed =
+      `levelNumber * 5000` -- confirmed in `../src/Dungeon.java`'s own
+      header comment, *not* dawnstar's `levelNumber * 8000`), so a level's
+      room layout/monster spawns/loot are a pure function of the level
+      number, same as dawnstar.
+
+      **A real naming-convention divergence from dawnstar, confirmed
+      directly against both games' sources rather than assumed
+      symmetric:** dawnstar's own `JavaRandom` calls the *1-based* formula
+      (`1 + abs(nextInt() % bound)`) `LingoRandomInt` and the *0-based*
+      one `RandomIntBelow`/`nextInt`. Stormhold's decompiled/renamed
+      source has the names **swapped**: `ESGame.nextInt(bound)` and
+      `ESGame.randomInt(Random, bound)`/`Util.randomInt(...)` are the
+      1-based formula, while `ESGame.lingoRandomInt(bound)` is the
+      0-based one (`../src/ESGame.java` lines 2241-2250) -- and
+      `Dungeon.java`/`Item.java` mostly skip named helpers entirely,
+      inlining `Math.abs(this.rng.nextInt() % bound)` directly at each
+      call site. `java_random.h`'s `RandomInt1Based`/`RandomInt0Based`
+      names sidestep both games' inconsistent naming rather than
+      reusing either one, with each function's doc comment mapping to
+      its real Java call sites and flagging the swap explicitly so a
+      future reader doesn't assume dawnstar's naming carries over.
+
+      Verified the strongest way available, same standard as dawnstar's
+      own M5: captured real `java.util.Random(seed).nextInt()` sequences
+      from an actual JVM (java 1.8.0_503, `javac --release 8`) for 5
+      seeds, including `10000` = level 2's real generator seed
+      (`2 * 5000`), and checked `JavaRandom` reproduces them **bit-for-
+      bit** -- `java_random_smoke.exe` matched on the first try. The
+      other 4 seeds (0/42/-1/4294967295) produced the exact same output
+      dawnstar's own M5 capture did, confirming `java.util.Random`'s
+      algorithm is identical between the two games as expected -- only
+      the seed formula and call-site naming actually differ. Also ported
+      `Math.abs(int)`'s `Integer.MIN_VALUE` quirk explicitly (`JavaAbs`)
+      rather than calling `std::abs`, same rationale as dawnstar's own M5.
+
 ## What's next
 
-M5 onward: `java.util.Random`'s bit-exact LCG (needed the moment dungeon
-generation is ported, since `Dungeon.generate()` seeds one per level --
-confirmed `levelNumber * 5000` here, not dawnstar's `levelNumber * 8000`,
-see `../src/Dungeon.java`'s header comment), following dawnstar's own M5 as
-a template, then procedural dungeon generation itself (fused onto
-`Dungeon`, not a separate class -- M3's finding), and Stormhold-specific
-systems dawnstar has no equivalent of yet: the Warden visits/leaves NPC
-mechanic and `RawImage`'s indexed-color sprite decoder (`.cus` files).
+M6 onward: procedural dungeon generation itself (fused onto `Dungeon`, not
+a separate `DungeonGenerator` class -- M3's finding, and Stormhold's
+generation uses `Item.java`'s two RNG-driven loot-roll methods this port's
+`ItemDatabase` deferred since M2), following dawnstar's own M6 as a
+template but adapted to the fused-class architecture, then
+Stormhold-specific systems dawnstar has no equivalent of yet: the Warden
+visits/leaves NPC mechanic and `RawImage`'s indexed-color sprite decoder
+(`.cus` files).

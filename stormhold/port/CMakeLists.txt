@@ -43,3 +43,8 @@ target_link_libraries(monster_dungeon_smoke PRIVATE stormhold_assets)
 # M4 milestone smoke test -- see src/tests/m4_character_data_smoke.cpp.
 add_executable(character_data_smoke src/tests/m4_character_data_smoke.cpp)
 target_link_libraries(character_data_smoke PRIVATE stormhold_assets)
+
+# M5 milestone smoke test -- see src/tests/m5_java_random_smoke.cpp.
+# util/java_random.h is header-only, so no library to link against.
+add_executable(java_random_smoke src/tests/m5_java_random_smoke.cpp)
+target_include_directories(java_random_smoke PRIVATE src)
