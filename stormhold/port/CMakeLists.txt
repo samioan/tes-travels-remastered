@@ -34,6 +34,7 @@ target_link_libraries(stormhold_world PUBLIC stormhold_assets)
 # docs/PORT_ROADMAP.md and src/player/.
 add_library(stormhold_player STATIC
   src/player/player_creation.cpp
+  src/player/player_inventory.cpp
   src/player/player_movement.cpp
 )
 target_include_directories(stormhold_player PUBLIC src)
@@ -92,3 +93,7 @@ target_link_libraries(player_movement_smoke PRIVATE stormhold_player)
 # M11 milestone smoke test -- see src/tests/m11_shop_dialogue_smoke.cpp.
 add_executable(shop_dialogue_smoke src/tests/m11_shop_dialogue_smoke.cpp)
 target_link_libraries(shop_dialogue_smoke PRIVATE stormhold_assets)
+
+# M12 milestone smoke test -- see src/tests/m12_player_inventory_smoke.cpp.
+add_executable(player_inventory_smoke src/tests/m12_player_inventory_smoke.cpp)
+target_link_libraries(player_inventory_smoke PRIVATE stormhold_player)

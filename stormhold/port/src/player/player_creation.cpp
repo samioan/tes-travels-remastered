@@ -1,6 +1,6 @@
 #include "player/player_creation.h"
 
-#include <cmath>
+#include "player/player_inventory.h"
 
 namespace stormhold {
 
@@ -139,72 +139,15 @@ void ResetForNewCharacter(PlayerState& p) {
     p.safeCampingBuff = false;
 }
 
-// Player.addInventoryItemRaw(itemId, packedValue, charge).
-bool AddInventoryItemRaw(PlayerState& p, int itemId, int packedValue, int charge) {
-    if (p.inventoryCount >= 24) return false;
-    int slot = p.inventoryCount;
-    p.inventoryItemIds[static_cast<size_t>(slot)] = static_cast<int8_t>(itemId);
-    int32_t packed = (static_cast<int32_t>(packedValue) << 16) + static_cast<int8_t>(charge);
-    p.inventoryItemData[static_cast<size_t>(slot)] = packed;
-    p.inventoryCount++;
-    return true;
-}
-
-// Player.unequipSlot(slot) -- only the subset needed to support
-// unequipMatchingCategory's swap path below (full drop/unequip handling is
-// a later inventory-management milestone's job).
-void UnequipSlot(PlayerState& p, int slot, const ItemDatabase& items) {
-    int8_t id = p.inventoryItemIds[static_cast<size_t>(slot)];
-    bool isEquipped = items.IsEquipmentCategory(static_cast<int>(std::abs(id))) && id < 0;
-    if (!isEquipped) return;
-
-    id = static_cast<int8_t>(std::abs(id));
-    p.inventoryItemIds[static_cast<size_t>(slot)] = id;
-    for (int i = 0; i < 7; i++) {
-        if (p.equippedItems[static_cast<size_t>(i)] == id) {
-            p.equippedItems[static_cast<size_t>(i)] = 0;
-            break;
-        }
-    }
-}
-
-// Player.unequipMatchingCategory(equipSlot) -- **using the corrected
-// equipSlot-based indexing**, see player_creation.h's header comment and
-// ../../../src/Player.java's own equipItem() header comment for the real
-// phase-1 renaming bug this replaces (it used to read the wrong Item
-// column here, category instead of equipSlot).
-void UnequipMatchingEquipSlot(PlayerState& p, int equipSlotWanted, const ItemDatabase& items) {
-    for (int i = 0; i < p.inventoryCount; i++) {
-        int id = std::abs(p.inventoryItemIds[static_cast<size_t>(i)]);
-        if (items.EquipSlotOf(id) == equipSlotWanted) {
-            UnequipSlot(p, i, items);
-        }
-    }
-}
-
-// Player.equipItem(slot, allowSwap).
-bool EquipItem(PlayerState& p, int slot, bool allowSwap, const ItemDatabase& items) {
-    int8_t id = p.inventoryItemIds[static_cast<size_t>(slot)];
-    if (id < 0) return false;
-    if (!items.IsEquipmentCategory(id)) return false;
-
-    int equipSlot = items.EquipSlotOf(id);
-    if (p.equippedItems[static_cast<size_t>(equipSlot)] != 0) {
-        if (!allowSwap) return false;
-        UnequipMatchingEquipSlot(p, equipSlot, items);
-    }
-
-    p.equippedItems[static_cast<size_t>(equipSlot)] = id;
-    p.inventoryItemIds[static_cast<size_t>(slot)] = static_cast<int8_t>(-std::abs(id));
-    return true;
-}
-
-// Player.grantStartingItems().
+// Player.grantStartingItems(). Inventory add/equip logic now lives in
+// PlayerInventory (M12) -- player_creation.cpp used to keep private
+// duplicates of these, moved out so character creation and general
+// inventory management share one real implementation.
 void GrantStartingItems(PlayerState& p, int classIndex, int16_t spawnId, const ItemDatabase& items) {
     for (int itemId : kClassStartingItems[classIndex]) {
-        AddInventoryItemRaw(p, itemId, spawnId, 0);
+        PlayerInventory::AddInventoryItemRaw(p, itemId, spawnId, 0);
         int slot = p.inventoryCount - 1;
-        EquipItem(p, slot, true, items);
+        PlayerInventory::EquipItem(p, slot, true, items);
     }
 }
 

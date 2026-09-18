@@ -578,11 +578,59 @@ read-through.
       a rumor, landing at exactly the index the code reads for that
       purpose.
 
+- [x] **M12 -- general-purpose player inventory management** (this
+      session). `PlayerInventory` (`port/src/player/player_inventory.h`/
+      `.cpp`): `addInventoryItemRaw`/`removeInventorySlot`/`unequipSlot`/
+      `equipItem`/`equipLastPickedUpItem`/`initializeItemCharge`/
+      `isItemCharged`/`tryPickUpItem`/`dropInventoryItem`/`hasCampMark`/
+      `markCampAndReturnToTown`/`warpToCampMark`. M9's `player_creation.cpp`
+      used to keep small private duplicates of the add/equip pieces it
+      needed (`AddInventoryItemRaw`/`EquipItem`/`UnequipSlot`) -- moved
+      here and made public, with `player_creation.cpp` now calling into
+      this one shared implementation instead. **Still deliberately NOT
+      included:** `rollShopOutcome()` (needs `skillValue()`/
+      `rollOutcome()`, combat-adjacent stat/RNG machinery -- a later
+      combat milestone's job) and any actual world-registry wiring for
+      `tryPickUpItem`/`dropInventoryItem` (no persistent per-level
+      dropped-item registry exists yet, same "caller supplies/owns world
+      state" gap M10 already flagged for the analogous case) -- this
+      still doesn't unlock the FULL `Shop.dialogue()` dispatcher (that
+      needs `rollShopOutcome` too), but does unlock its item-turn-in/
+      charge-consuming branches.
+
+      **A real, confirmed original-game quirk, found while porting
+      `tryPickUpItem`/`dropInventoryItem` and preserved rather than
+      fixed:** both methods pack/unpack a 16-bit "packed value" (most
+      often `Item.nextSpawnId()`'s result) across 2 SIGNED Java bytes.
+      Reconstructing via `(record[hi] << 8) + record[lo]` sign-extends
+      whenever that value's high byte is >= 0x80 (i.e. the value is >=
+      32768), producing a NEGATIVE reconstructed value instead of the
+      original positive one -- confirmed real Java `byte` arithmetic, the
+      exact same shape as `Player.collectChestItem()`'s own analogous
+      chest-value unpacking. Reproduced exactly (`std::array<int8_t, 7>`
+      records, not `uint8_t`) rather than "corrected" to always
+      round-trip cleanly; `player_inventory_smoke.cpp` demonstrates the
+      precise reconstructed value for a synthetic out-of-range input
+      (40000 comes back as -25536, hand-verified).
+
+      Verified by `player_inventory_smoke.exe` against real
+      `CharacterData`/`ItemDatabase`: removing an equipped item clears
+      its equip slot and compacts the array correctly, re-adding and
+      re-equipping round-trips the sign flip, item-charge init correctly
+      gates on equipment category (confirmed refused for a real
+      category-11 item), pick-up/drop round-trips a normal item and
+      confirms item id 109 never produces a record while still removing
+      its slot, the sign-extension quirk reproduces exactly as
+      hand-derived, and the camp bookmark correctly distinguishes
+      `markCampAndReturnToTown`'s (12, 14) death/respawn point from
+      character creation's (9, 10) -- and confirms `warpToCampMark`
+      genuinely never touches `facing` at all, matching a direct reading
+      of that method.
+
 ## What's next
 
-M12 onward: general-purpose player inventory management (`removeInventorySlot`,
-`initializeItemCharge`/`isItemCharged`, `hasCampMark`/`warpToCampMark`,
-`rollShopOutcome`), which unlocks the actual `Shop.dialogue()` dispatcher
-logic M11 deferred, then combat and the player save format, following
-dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way M3/M6/M7/M8/M9/M10 already found.
+M13 onward: combat (`skillValue`/`rollOutcome`/`rollShopOutcome`, which
+also finally unlocks the full `Shop.dialogue()` dispatcher M11/M12
+deferred pieces of), then the player save format, following dawnstar's
+own later milestones roughly but expecting further Stormhold-specific
+divergences the way M3/M6/M7/M8/M9/M10/M12 already found.

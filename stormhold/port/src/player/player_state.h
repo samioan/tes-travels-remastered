@@ -101,11 +101,17 @@ struct PlayerState {
     bool enteredNewLevelZone = false;
     bool leftLevelZone = false;
 
+    // --- M12: touched by player/player_inventory.h. Set true by both
+    // MarkCampAndReturnToTown and WarpToCampMark; campLevel/campX/campY/
+    // campFacing above (already added at M9) are the actual camp
+    // bookmark itself.
+    bool justMarkedCamp = false;
+
     // --- Deferred to a later milestone, none touched by character
-    // creation or core movement: the corridor-occlusion view grid
-    // (corridorView, PlayerMovement doesn't call refreshCorridorView()
-    // yet -- see its own header comment), UI/rendering-only scratch state
-    // (endOfGameTriggered, justMarkedCamp, stateByteAb), and
+    // creation, core movement, or inventory: the corridor-occlusion view
+    // grid (corridorView, PlayerMovement doesn't call
+    // refreshCorridorView() yet -- see its own header comment), UI/
+    // rendering-only scratch state (endOfGameTriggered, stateByteAb), and
     // visibleObjects (the 13-slot "what's renderable this frame" cache).
 };
 
