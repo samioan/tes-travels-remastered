@@ -755,15 +755,86 @@ read-through.
       entry points build on that same already-checked function rather
       than reimplementing the tier formula a second time.
 
+- [x] **M15 -- leveling** (this session). `PlayerLeveling`
+      (`port/src/player/player_leveling.h`/`.cpp`): `gainSkillExp`/
+      `tryRankUpSkills`/`consumeLevelExp`/`pendingLevelUpAttributeNames`,
+      plus `ApplyLevelUpAttributeChoices` -- a new name for logic that
+      isn't a single named Java method at all, but `ESGame.java`'s own
+      inline level-up-confirm UI handler (its 3-step "choose an
+      attribute" flow, screenGroup 39, lines ~1046-1069): +3/+2/+1 to 3
+      caller-chosen attribute indices (weighted by pick ORDER, matching
+      the UI's 3 steps exactly), then `computeDerivedStats()` +
+      `consumeLevelExp()`. The 3 attribute choices are a real player
+      DECISION with no UI to source them from in this port (same "caller
+      supplies the missing decision" pattern as M9's traitor-index roll/
+      M13's `interactionCount`). This unblocks the one gap M13/M14 both
+      had to flag and defer: `combat/combat_resolution.h`'s
+      `PlayerAttack`/`MonsterTick` now both actually call
+      `PlayerLeveling::GainSkillExp` on a strong hit/successful block,
+      instead of a comment noting the skip.
+
+      `PlayerCreation::ComputeDerivedStats` is a new public method,
+      split out of `ApplyClassTemplate`'s previously-inlined copy of the
+      same formula (confirmed the exact same real call --
+      `Player.java`'s own `resetState()` and `ESGame.java`'s level-up
+      handler both call the identical `computeDerivedStats()` method) --
+      needed here since leveling has to re-run it after an attribute
+      boost, not just once at character creation.
+
+      NOT ported: `Shop.clearQuestTurnInState()`, a confirmed real
+      cross-system coupling `consumeLevelExp()` triggers on every
+      rank-up (clearing all 4 quest-shops' turn-in progress) -- no live
+      `Shop` state exists yet (M11 only ported its dialogue TEXT), so
+      `ConsumeLevelExp` skips it, flagged at the skip site. Also NOT
+      ported: neither `Player.attack(Monster)` nor `Monster.tick()`
+      calls `tryRankUpSkills()` itself in the real source (confirmed by
+      reading both methods in full during M13/M14) -- rank-up checking
+      is some OTHER caller's separate per-tick concern in the original
+      (not yet recovered -- same class of still-stubbed-caller gap M14
+      already flagged for `Monster.tick()` itself), so a caller driving
+      a real combat loop needs to call `TryRankUpSkills`/eventually
+      `ApplyLevelUpAttributeChoices` on its own, `CombatResolution`
+      doesn't do it for them.
+
+      One real, confirmed finding: `levelUpAttributeFlags` is only ever
+      RESET at character creation and only ever OR'd into by
+      `tryRankUpSkills()` -- there is no confirmed call site anywhere in
+      `Player.java` (or `ESGame.java`'s level-up-confirm handler) that
+      ever clears an individual bit after its attribute point has
+      actually been spent. Confirmed by grepping every reference to the
+      field, not assumed: bits accumulate across the character's whole
+      life and `pendingLevelUpAttributeNames()` can keep returning a
+      long-since-spent attribute's name indefinitely. Ported exactly --
+      `ApplyLevelUpAttributeChoices` does not clear any flags either,
+      matching this real behavior rather than "fixing" it.
+
+      Verified by `player_leveling_smoke.exe` against a real created
+      character: `GainSkillExp`'s negative-index guard; `TryRankUpSkills`
+      ranking up multiple skills in one call (one exactly-at-threshold,
+      one over-threshold with its excess exp correctly preserved rather
+      than discarded, one under-threshold correctly untouched), the
+      correct governing-attribute bits set, level-exp granted once per
+      rank-up, and the character-level-up threshold/return value at
+      exactly 10 level-exp; `ConsumeLevelExp`'s exact -10;
+      `PendingLevelUpAttributeNames` against real `CharacterData::
+      attributeNames`; `ApplyLevelUpAttributeChoices`'s +3/+2/+1
+      weighting (with two overlapping attribute picks, to check each
+      weight independently) and its `ComputeDerivedStats` recompute
+      actually reflecting the new attribute values, not stale ones; and
+      an integration check running `PlayerAttack`/`MonsterTick` across
+      200 seeds each against a real created character + real monster
+      type, confirming skill exp genuinely increases on at least one
+      seed's strong-hit/successful-block outcome -- `RollOutcome` itself
+      isn't re-verified here (already done in M13).
+
 ## What's next
 
-M15 onward: leveling (`gainSkillExp`/`consumeLevelExp`, including its
-confirmed real cross-system coupling with `Shop.
-clearQuestTurnInState()`), which unblocks the skill-exp awards
-`PlayerAttack`/`MonsterTick` both had to skip this milestone, then a live
-per-level Monster/dropped-item registry (unblocking `target.store()`/
-`Dungeon.spawnAmbushMonsters()`/auto-loot, all deferred so far), and
-eventually the player save format (Monster's own `readFrom`/`writeTo`
-included) -- following dawnstar's own later milestones roughly but
-expecting further Stormhold-specific divergences the way
+M16 onward: a live per-level Monster/dropped-item registry (unblocking
+`target.store()`/`Dungeon.spawnAmbushMonsters()`/auto-loot, all deferred
+so far across M10/M12/M14), and eventually the player save format
+(Monster's own `readFrom`/`writeTo` included, plus whatever caller
+actually drives `tryRankUpSkills()`/`Monster.tick()` in the original --
+still not recovered, see `GameCanvas.java`'s remaining stubbed methods)
+-- following dawnstar's own later milestones roughly but expecting
+further Stormhold-specific divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14 already found.

@@ -36,6 +36,7 @@ add_library(stormhold_player STATIC
   src/player/player_combat_stats.cpp
   src/player/player_creation.cpp
   src/player/player_inventory.cpp
+  src/player/player_leveling.cpp
   src/player/player_movement.cpp
 )
 target_include_directories(stormhold_player PUBLIC src)
@@ -124,3 +125,7 @@ target_link_libraries(player_combat_stats_smoke PRIVATE stormhold_player)
 # M14 milestone smoke test -- see src/tests/m14_monster_combat_smoke.cpp.
 add_executable(monster_combat_smoke src/tests/m14_monster_combat_smoke.cpp)
 target_link_libraries(monster_combat_smoke PRIVATE stormhold_combat)
+
+# M15 milestone smoke test -- see src/tests/m15_player_leveling_smoke.cpp.
+add_executable(player_leveling_smoke src/tests/m15_player_leveling_smoke.cpp)
+target_link_libraries(player_leveling_smoke PRIVATE stormhold_combat)

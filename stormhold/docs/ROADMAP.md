@@ -84,13 +84,18 @@ inventory management, including a confirmed original-game sign-extension
 quirk in the dropped-item/chest packed-value round trip), M13
 (combat resolution primitives -- skill/attack/armor stat math and the
 rollOutcome hit-tier roll, independently cross-checked against a fresh
-java.util.Random reimplementation), and M14 (a live Monster runtime --
+java.util.Random reimplementation), M14 (a live Monster runtime --
 spawn/stat/move/chase/onDeath -- plus the two combat entry points that
 need both Player and Monster, `PlayerAttack`/`MonsterTick`, including a
 confirmed real Stormhold-specific divergence in `Monster.chase()`'s
 void return type and internal range gate, absent from dawnstar's own
-equivalent) are done, all verified against real extracted data/ground
-truth. Given the shared Vir2L "ngame" engine with dawnstar, small
+equivalent), and M15 (leveling -- gainSkillExp/tryRankUpSkills/
+consumeLevelExp/the level-up attribute-point allocation ESGame.java
+performs inline rather than as a named Player method -- which finally
+unblocks the skill-exp awards M13/M14 had to defer, plus a confirmed
+finding that levelUpAttributeFlags bits are never cleared once spent)
+are done, all verified against real extracted data/ground truth. Given
+the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are
 copied rather than shared for now -- factoring out a real cross-project
 engine library is deferred until Stormhold's own port has enough

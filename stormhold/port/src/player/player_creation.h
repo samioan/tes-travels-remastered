@@ -46,6 +46,16 @@ public:
     // the whole method, reproduced here exactly.
     static PlayerState CreateCharacter(int classIndex, const std::string& name, int16_t spawnId,
                                         const CharacterData& charData, const ItemDatabase& items);
+
+    // Player.computeDerivedStats(): maxHP/maxMagicka/maxFatigue from
+    // attributes[]/classMagickaFactor. Exposed standalone (not just
+    // inlined into ApplyClassTemplate/CreateCharacter above) because
+    // player/player_leveling.h's own ApplyLevelUpAttributeChoices needs
+    // to re-run this exact formula after a level-up attribute boost --
+    // confirmed as the SAME real call in the original (Player.java's own
+    // resetState() and ESGame.java's level-up-confirm handler both call
+    // this one method).
+    static void ComputeDerivedStats(PlayerState& p);
 };
 
 }  // namespace stormhold

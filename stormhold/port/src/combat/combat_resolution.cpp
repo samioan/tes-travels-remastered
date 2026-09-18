@@ -4,6 +4,7 @@
 
 #include "monster/monster_runtime.h"
 #include "player/player_combat_stats.h"
+#include "player/player_leveling.h"
 
 namespace stormhold {
 
@@ -68,8 +69,10 @@ void CombatResolution::PlayerAttack(PlayerState& player, MonsterState& target, c
         }
     }
 
-    // if (tier >= 2) this.gainSkillExp(this.activeWeaponSkillIndex(), 1):
-    // SIMPLIFIED, skipped -- see this file's own class header comment.
+    if (tier >= 2) {
+        int skillIdx = PlayerCombatStats::ActiveWeaponSkillIndex(player, charData, items);
+        PlayerLeveling::GainSkillExp(player, skillIdx, 1);
+    }
 
     if (!PlayerCombatStats::IsEffectActive(player, 7)) {
         int fatigueCostMultiplier = (player.ailmentMask & 1) ? 3 : 1;
@@ -131,8 +134,10 @@ void CombatResolution::MonsterTick(MonsterState& m, PlayerState& player, const C
     int16_t newHp = static_cast<int16_t>(player.coreStats[2] - scaled);
     player.coreStats[2] = std::max(newHp, int16_t{0});
 
-    // if (hitB) player.gainSkillExp(player.defenseSkillIndex(), 1):
-    // SIMPLIFIED, skipped -- see this file's own class header comment.
+    if (hitB) {
+        int skillIdx = PlayerCombatStats::DefenseSkillIndex(player, items);
+        PlayerLeveling::GainSkillExp(player, skillIdx, 1);
+    }
 
     if (tier < 3) {
         m.aiPhase = 1;

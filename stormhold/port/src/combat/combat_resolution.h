@@ -18,15 +18,16 @@ namespace stormhold {
 // dependency on each other -- only this module depends on both. Same
 // split dawnstar's own port uses (its M15's combat/combat_resolution.h).
 //
-// Neither entry point here awards skill exp on a strong hit
-// (Player.gainSkillExp()/Player.attack()'s activeWeaponSkillIndex() call,
-// tick()'s player.defenseSkillIndex() call): no leveling system is ported
-// yet (gainSkillExp/consumeLevelExp, confirmed to have a real cross-
-// system coupling with Shop.clearQuestTurnInState() -- see player/
-// player_combat_stats.h's own class header comment and
-// ../../docs/PORT_ROADMAP.md's M13 "what's next" note). Flagged again at
-// each specific omission point below rather than silently dropped, same
-// discipline player/player_movement.h uses for ITS deferred side effects.
+// Both entry points now award skill exp on a strong hit via
+// player/player_leveling.h's PlayerLeveling::GainSkillExp (M15) --
+// resolving the one gap M13/M14 both had to flag and defer. Note that
+// awarding the exp is as far as either entry point goes: NEITHER calls
+// PlayerLeveling::TryRankUpSkills itself (the real Player.attack()/
+// Monster.tick() don't either -- rank-up checking is the caller's own
+// separate per-tick concern in the original, not part of either combat
+// method), so a caller driving a real combat loop needs to call
+// TryRankUpSkills (and eventually ApplyLevelUpAttributeChoices) itself
+// on its own cadence.
 class CombatResolution {
 public:
     // Player.attack(Monster target): rolls hit tier via
@@ -35,10 +36,11 @@ public:
     // armor stat, min 4, scaled by the target's type multiplier column)
     // via MonsterRuntime::TakeDamage, with an extra "effect 7" second
     // damage tick and an "effect 13" armor-reduction/"effect 10"
-    // diff-bonus read of `target.scratch[]`. Sets player.lastCombatTargetId.
-    // SIMPLIFIED: skips target.store() (no live per-level registry yet --
-    // see monster/monster_runtime.h's class comment) and the skill-exp
-    // award (see class comment above).
+    // diff-bonus read of `target.scratch[]`. Sets player.lastCombatTargetId,
+    // and on a tier>=2 hit awards ActiveWeaponSkillIndex() exp via
+    // PlayerLeveling::GainSkillExp. SIMPLIFIED: skips target.store() (no
+    // live per-level registry yet -- see monster/monster_runtime.h's
+    // class comment).
     static void PlayerAttack(PlayerState& player, MonsterState& target, const CharacterData& charData,
                               const ItemDatabase& items, const MonsterDatabase& monsterDb, JavaRandom& globalRng);
 
@@ -53,12 +55,12 @@ public:
     // ("clean hit") result rolls a further 30% chance to inflict an
     // ailment matching the monster type's RAW column-11 id (setting
     // player.ailmentMask and, for ids 4/5, vampirismTimer/manaBurnTimer).
+    // On a successful player block (the defender's own roll also hit),
+    // awards DefenseSkillIndex() exp via PlayerLeveling::GainSkillExp.
     // SIMPLIFIED: the ailment-2 ("swarm curse") side effect -- spawning 3
     // more monsters via Dungeon.spawnAmbushMonsters(3) -- is a no-op, no
     // live per-level monster registry exists to spawn into yet (same
-    // class of gap as player/player_movement.h's deferred auto-loot); and
-    // the skill-exp award on a successful player block (see class comment
-    // above).
+    // class of gap as player/player_movement.h's deferred auto-loot).
     static void MonsterTick(MonsterState& m, PlayerState& player, const CharacterData& charData,
                              const ItemDatabase& items, const MonsterDatabase& monsterDb, int64_t now,
                              JavaRandom& globalRng);

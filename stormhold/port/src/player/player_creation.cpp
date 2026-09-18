@@ -30,11 +30,7 @@ void ApplyClassTemplate(PlayerState& p, int classIndex, const CharacterData& cha
     p.coreStats[0] = 1;
     p.coreStats[1] = 0;
 
-    // computeDerivedStats().
-    p.coreStats[3] = static_cast<int16_t>((p.attributes[0] + p.attributes[10]) / 2);
-    p.coreStats[5] = static_cast<int16_t>(p.classMagickaFactor * p.attributes[2] / 4);
-    p.coreStats[7] =
-        static_cast<int16_t>(p.attributes[0] + p.attributes[4] + p.attributes[6] + p.attributes[10]);
+    PlayerCreation::ComputeDerivedStats(p);
 
     p.coreStats[2] = p.coreStats[3];
     p.coreStats[4] = p.coreStats[5];
@@ -161,6 +157,12 @@ PlayerState PlayerCreation::CreateCharacter(int classIndex, const std::string& n
     ResetForNewCharacter(p);
     GrantStartingItems(p, classIndex, spawnId, items);
     return p;
+}
+
+void PlayerCreation::ComputeDerivedStats(PlayerState& p) {
+    p.coreStats[3] = static_cast<int16_t>((p.attributes[0] + p.attributes[10]) / 2);
+    p.coreStats[5] = static_cast<int16_t>(p.classMagickaFactor * p.attributes[2] / 4);
+    p.coreStats[7] = static_cast<int16_t>(p.attributes[0] + p.attributes[4] + p.attributes[6] + p.attributes[10]);
 }
 
 }  // namespace stormhold
