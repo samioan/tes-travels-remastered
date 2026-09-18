@@ -41,6 +41,24 @@ add_library(stormhold_player STATIC
 target_include_directories(stormhold_player PUBLIC src)
 target_link_libraries(stormhold_player PUBLIC stormhold_assets stormhold_world)
 
+# M14: monster runtime state/AI-support (everything except tick()/
+# attack()'s Monster-side reads, which need Player too -- see
+# src/combat/) -- see docs/PORT_ROADMAP.md and src/monster/.
+add_library(stormhold_monster STATIC
+  src/monster/monster_runtime.cpp
+)
+target_include_directories(stormhold_monster PUBLIC src)
+target_link_libraries(stormhold_monster PUBLIC stormhold_assets stormhold_world)
+
+# M14: the two combat entry points needing both Player and Monster
+# (Player.attack(Monster)/Monster.tick(Player,now)) -- see
+# docs/PORT_ROADMAP.md and src/combat/.
+add_library(stormhold_combat STATIC
+  src/combat/combat_resolution.cpp
+)
+target_include_directories(stormhold_combat PUBLIC src)
+target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster)
+
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
 # dawnstar ports' platform layer.
@@ -102,3 +120,7 @@ target_link_libraries(player_inventory_smoke PRIVATE stormhold_player)
 # M13 milestone smoke test -- see src/tests/m13_player_combat_stats_smoke.cpp.
 add_executable(player_combat_stats_smoke src/tests/m13_player_combat_stats_smoke.cpp)
 target_link_libraries(player_combat_stats_smoke PRIVATE stormhold_player)
+
+# M14 milestone smoke test -- see src/tests/m14_monster_combat_smoke.cpp.
+add_executable(monster_combat_smoke src/tests/m14_monster_combat_smoke.cpp)
+target_link_libraries(monster_combat_smoke PRIVATE stormhold_combat)

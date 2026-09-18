@@ -81,11 +81,16 @@ including a confirmed dead-code finding in `leftLevelZone` and two
 corrected M6-era modeling gaps around `Dungeon.populated`/`visited`), M11 (NPC dialogue text from `npcstrings.dat`, data only -- the dispatcher
 logic is deferred to a later milestone), M12 (general-purpose player
 inventory management, including a confirmed original-game sign-extension
-quirk in the dropped-item/chest packed-value round trip), and M13
+quirk in the dropped-item/chest packed-value round trip), M13
 (combat resolution primitives -- skill/attack/armor stat math and the
 rollOutcome hit-tier roll, independently cross-checked against a fresh
-java.util.Random reimplementation) are done, all verified against real
-extracted data/ground truth. Given the shared Vir2L "ngame" engine with dawnstar, small
+java.util.Random reimplementation), and M14 (a live Monster runtime --
+spawn/stat/move/chase/onDeath -- plus the two combat entry points that
+need both Player and Monster, `PlayerAttack`/`MonsterTick`, including a
+confirmed real Stormhold-specific divergence in `Monster.chase()`'s
+void return type and internal range gate, absent from dawnstar's own
+equivalent) are done, all verified against real extracted data/ground
+truth. Given the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are
 copied rather than shared for now -- factoring out a real cross-project
 engine library is deferred until Stormhold's own port has enough

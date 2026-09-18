@@ -683,13 +683,87 @@ read-through.
       character fallback defaults, `IsEffectActive`'s three duration
       codes, and `EffectiveStat`'s Regeneration-bonus clamp.
 
+- [x] **M14 -- monster runtime + combat resolution** (this session).
+      `MonsterRuntime` (`port/src/monster/monster_runtime.h`/`.cpp`, plus
+      the plain-data `MonsterState` in `monster/monster_state.h`):
+      `pickMonsterType`/`spawn`/`stat`/`rawStat`/`typeName`/`isUndead`/
+      `takeDamage`/`toBytes`/`fromBytes`/`move`/`isStairwayTile`/
+      `distanceTo`/`isWithinRange`/`isAdjacent`/`chase`/`onDeath` --
+      everything in `../src/Monster.java` except `tick()` (needs a live
+      Player) and `attack(Monster)`'s Monster-side reads, both of which
+      live in a new sibling module instead: `CombatResolution`
+      (`port/src/combat/combat_resolution.h`/`.cpp`)'s `PlayerAttack`/
+      `MonsterTick`. Same three-module split (monster/player never depend
+      on each other, only combat depends on both) dawnstar's own M15
+      uses.
+
+      `readFrom`/`writeTo` (Monster's SECOND, unpacked stream
+      serialization -- presumably the save-game format) is deliberately
+      NOT ported yet: this port has no `BinaryWriter` at all (only
+      `assets/binary_reader.h`, read-only, for loading the shipped
+      `.dat` tables) and no save-format milestone exists yet either --
+      left for that future milestone rather than invented early.
+      `PickMonsterType`/`Spawn` reuse M6's existing
+      `DungeonGenerator::MonsterTypeForTierBucket` rather than
+      duplicating the tier/rarity-bucket table a second time.
+      `PlayerAttack`/`MonsterTick` both skip their `gainSkillExp()`/
+      `defenseSkillIndex()`-exp-award call (no leveling system ported
+      yet -- same M13-flagged cross-system-coupling deferral) and skip
+      `target.store()`/`Dungeon.spawnAmbushMonsters(3)` (no live
+      per-level Monster/registry exists yet) -- every omission flagged
+      at its exact call site, same discipline as `player_movement.h`'s
+      own deferred side effects.
+
+      Two real, confirmed Stormhold-specific divergences from dawnstar's
+      own Monster, found while transcribing `Monster.java` directly
+      rather than assumed to carry over: **(1)** `Monster.move()` does
+      NOT call `store()` itself in the real Stormhold source (unlike
+      dawnstar's own `Monster.move`) -- a genuine engine difference, not
+      a simplification this port chose. **(2)** `Monster.chase(Player)`
+      gates itself on `isWithinRange` (manhattan distance <= 3)
+      internally before touching `chaseCadence` at all; dawnstar's own
+      `Monster.chase(x,y)` has no such gate and isn't even boolean-
+      returning the way a first draft here assumed by analogy --
+      Stormhold's real `chase()` is `void`, corrected once actually
+      checked against dawnstar's own `chase(x,y)` return type by reading
+      both source files side by side rather than assuming parity.
+      **(3)** `Dungeon.isWalkable()` (what `Monster.move()` actually
+      calls) tests a DIFFERENT bit set (1/2/8/32) than
+      `PlayerMovement::IsWalkableTileBits` (1/2/32, no bit 8) --
+      confirmed by reading `Dungeon.java` directly rather than assumed
+      to match the player's own walkability rule.
+
+      Verified by `monster_combat_smoke.exe` against real
+      `MonsterDatabase`/`ItemDatabase`/`CharacterData`/
+      `DungeonGeometry`-derived data (not just internal self-
+      consistency): `Spawn`'s starting HP against the type's real RAW
+      column-14 read, `Stat`/`RawStat` agreement across all 17 columns
+      for a real monster type, `TakeDamage`'s clamp-at-0,
+      `ToBytes`/`FromBytes`'s full round trip (including a negative HP
+      and a negative spawnId), `Move`/`IsStairwayTile` against a REAL
+      generated level 2 (a real monster spawn's tile, a real adjacent
+      wall tile, and the real per-level stairway direction fields),
+      `IsAdjacent`'s aiPhase-reset side effect, `Chase`'s range gate and
+      its exact 1-in-5 step cadence traced call-by-call over a real open
+      corridor, `OnDeath`'s guaranteed-vs-rolled drop and record layout,
+      and `PlayerAttack`/`MonsterTick` run across 20 seeds each against a
+      real created character + real monster type, checking the
+      invariants that must hold regardless of roll outcome (HP only ever
+      goes down, never below 0, `lastCombatTargetId` always set,
+      `aiPhase` always ends at 1). `RollOutcome` itself was already
+      independently verified in M13 -- not re-proven here, since both new
+      entry points build on that same already-checked function rather
+      than reimplementing the tier formula a second time.
+
 ## What's next
 
-M14 onward: a live Monster runtime (spawnId/typeIndex/currentHp/scratch,
-`stat()`/`takeDamage()`/`store()`), which finally unlocks `attack
-(Monster)` itself, then leveling (`gainSkillExp`/`consumeLevelExp`,
-including its confirmed real cross-system coupling with `Shop.
-clearQuestTurnInState()`) and the player save format, following
-dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way M3/M6/M7/M8/M9/M10/M12/M13
-already found.
+M15 onward: leveling (`gainSkillExp`/`consumeLevelExp`, including its
+confirmed real cross-system coupling with `Shop.
+clearQuestTurnInState()`), which unblocks the skill-exp awards
+`PlayerAttack`/`MonsterTick` both had to skip this milestone, then a live
+per-level Monster/dropped-item registry (unblocking `target.store()`/
+`Dungeon.spawnAmbushMonsters()`/auto-loot, all deferred so far), and
+eventually the player save format (Monster's own `readFrom`/`writeTo`
+included) -- following dawnstar's own later milestones roughly but
+expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14 already found.
