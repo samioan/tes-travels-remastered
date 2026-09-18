@@ -29,6 +29,14 @@ add_library(stormhold_world STATIC
 target_include_directories(stormhold_world PUBLIC src)
 target_link_libraries(stormhold_world PUBLIC stormhold_assets)
 
+# M9: player character creation -- see docs/PORT_ROADMAP.md and
+# src/player/.
+add_library(stormhold_player STATIC
+  src/player/player_creation.cpp
+)
+target_include_directories(stormhold_player PUBLIC src)
+target_link_libraries(stormhold_player PUBLIC stormhold_assets)
+
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
 # dawnstar ports' platform layer.
@@ -70,3 +78,7 @@ target_link_libraries(raw_image_smoke PRIVATE stormhold_assets)
 # M8 milestone smoke test -- see src/tests/m8_warden_smoke.cpp.
 add_executable(warden_smoke src/tests/m8_warden_smoke.cpp)
 target_link_libraries(warden_smoke PRIVATE stormhold_world)
+
+# M9 milestone smoke test -- see src/tests/m9_player_creation_smoke.cpp.
+add_executable(player_creation_smoke src/tests/m9_player_creation_smoke.cpp)
+target_link_libraries(player_creation_smoke PRIVATE stormhold_player)

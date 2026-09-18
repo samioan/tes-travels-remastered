@@ -36,6 +36,16 @@ struct ItemDatabase {
     bool IsEquippable(int itemId) const { return equipSlot[itemId - 1] != -1; }
     int EquipSlotOf(int itemId) const { return equipSlot[itemId - 1]; }
 
+    // Item.java's isEquipmentCategory() -- a DISTINCT gate from
+    // IsEquippable() above (that one checks the equipSlot column; this one
+    // checks category is 1-10). See ../../../src/Player.java's
+    // equipItem()'s own header comment for the real bug found (and fixed
+    // there, not here) from once conflating the two.
+    bool IsEquipmentCategory(int itemId) const {
+        int8_t cat = category[itemId - 1];
+        return cat >= 1 && cat <= 10;
+    }
+
     // Item.java's randomGiftItemOfSubtype()/rollLoot() -- the two
     // RNG-driven loot-roll methods Dungeon.placeChests() calls. M2
     // deferred these (data-only struct); M6 (dungeon generation) is the

@@ -2189,9 +2189,33 @@ public class Player {
       return !Item.isEquipmentCategory(Math.abs(id)) ? false : id < 0;
    }
 
-   // Equips/unequips slot `slot`. If the item's equip category is already
+   // Equips/unequips slot `slot`. If the item's equip slot is already
    // occupied by a different item and `allowSwap` is true, the old one is
    // unequipped first; if allowSwap is false and a conflict exists, fails.
+   //
+   // **Phase-1 renaming correction (found during phase-3 M9, NOT a bug in
+   // the original game):** this method and unequipMatchingCategory() below
+   // both used to read `Item.column(1, id)` here -- itemsin.dat's
+   // *category* column (1-10, e.g. Boots=7/Gloves=8/Helmet=9/Shield=10),
+   // used directly as an index into `equippedItems` (byte[7], valid
+   // indices 0-6). Real itemsin.dat data has items in every category 1-10
+   // (confirmed against extracted/itemsin.dat directly), so that would
+   // throw ArrayIndexOutOfBoundsException the moment a real player
+   // equipped any Boots/Gloves/Helmet/Shield item -- clearly wrong for a
+   // shipped game. Re-checked against decompiled/j.java (the raw,
+   // unrenamed decompiler output) directly: the real call at this site is
+   // the SINGLE-argument `a.a(var3)` (decompiled/j.java line 1865, and
+   // `f(int)`'s line 1883) -- i.e. `Item.equipSlotOf(id)`, itemsin.dat's
+   // dedicated `equipSlot` column, whose real values are confirmed 0-6
+   // (fits `equippedItems[7]` exactly, and matches every OTHER read of
+   // `equippedItems[0]`/`[1]`/etc. throughout this file). The two-argument
+   // `Item.column(1, ...)` calls at other call sites in this file (e.g.
+   // deriveWeaponSkillIndex-style methods around line 1430-1630) ARE
+   // correct as originally transcribed -- those read the *category* of an
+   // item ALREADY STORED in an equippedItems slot for an unrelated lookup,
+   // matching decompiled/j.java's own two-argument `a.a(1, this.T[n])`
+   // calls at those sites exactly. Only the two call sites below, where
+   // the result is used to INDEX `equippedItems` itself, were wrong.
    boolean equipItem(int slot, boolean allowSwap) {
       byte id = this.inventoryItemIds[slot];
       if (id < 0) {
@@ -2202,26 +2226,26 @@ public class Player {
          return false;
       }
 
-      int cat = Item.column(1, id);
-      if (this.equippedItems[cat] != 0) {
+      int equipSlot = Item.equipSlotOf(id);
+      if (this.equippedItems[equipSlot] != 0) {
          if (!allowSwap) {
             return false;
          }
 
-         this.unequipMatchingCategory(cat);
+         this.unequipMatchingCategory(equipSlot);
       }
 
-      this.equippedItems[cat] = id;
+      this.equippedItems[equipSlot] = id;
       this.inventoryItemIds[slot] = (byte)(-Math.abs(this.inventoryItemIds[slot]));
       return true;
    }
 
-   private void unequipMatchingCategory(int equipCategory) {
+   private void unequipMatchingCategory(int equipSlotWanted) {
       for (int i = 0; i < this.inventoryCount; i++) {
          byte id = this.inventoryItemIds[i];
          id = (byte)Math.abs(id);
-         int cat = Item.column(1, id);
-         if (cat == equipCategory) {
+         int equipSlot = Item.equipSlotOf(id);
+         if (equipSlot == equipSlotWanted) {
             this.unequipSlot(i);
          }
       }

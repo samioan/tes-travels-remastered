@@ -373,11 +373,88 @@ read-through.
       `visitCount==3` matches the original's missing 4th branch (checked
       with an elapsedCounter of 100000).
 
+- [x] **M9 -- player character creation** (this session). `PlayerState`
+      (`port/src/player/player_state.h`) and `PlayerCreation`
+      (`port/src/player/player_creation.h`/`.cpp`) port the real
+      character-creation pipeline out of `../src/Player.java`:
+      `applyClassTemplate()` (attributes/skills/derived stats/starting
+      known-spell mask) fused with `resetState(classIndex, false)`'s "new
+      character" branch (hub-town spawn position, ailment/timer reset,
+      then `grantStartingItems()` -> `addInventoryItem()`/`equipItem()`)
+      -- the real game calls these from two separate UI steps
+      (class-select, then confirm), fused here since this port doesn't
+      model the UI screens between them, only the resulting character
+      data. Same fusion dawnstar's own M11 `PlayerCreation` uses for its
+      equivalent two-step call. Also added `ItemDatabase::
+      IsEquipmentCategory()` (M2's data-only struct's third round of
+      added logic methods, same pattern as M6's `RollLoot`/
+      `RandomGiftItemOfSubtype` and M7's decode-time alpha logic).
+
+      **A real, notable divergence from dawnstar, confirmed by reading the
+      whole creation pipeline end to end:** Stormhold's character creation
+      involves NO randomness at all -- no `Util.randomInt`/`ESGame.
+      *Random*` call appears anywhere in `applyClassTemplate()`,
+      `resetState(classIndex, false)`, `setHubSpawnPosition()`, or
+      `grantStartingItems()`. Two starting items and a fixed class-driven
+      stat/skill/spell template, deterministically, every time -- unlike
+      dawnstar's own character creation, which rolls a hidden "traitor
+      index" via `Util.randomInt(4)` at this exact step. Consistent with
+      `Shop.java`'s own header note that Stormhold may have no
+      hidden-traitor subplot at all (see M8's entry): this milestone
+      confirms the creation path at least has no such roll. Also unlike
+      dawnstar: Stormhold has no `gold`/currency concept anywhere in
+      `Player.java` at all (`Shop.java`'s own header note: no buy/sell
+      action branch exists anywhere in that class either) -- the one
+      place `Player.java`'s debug-summary method prints something
+      labeled "gold" turns out, on reading the whole method, to just be
+      printing `inventoryCount` under a stale/copy-pasted label, not a
+      real currency value. And, checked directly against real
+      `charin.dat` (not assumed from dawnstar's own data): **every one of
+      the 7 classes** has a nonzero starting rank in all 5 spell-tier
+      skills (Alteration/Conjuration/Destruction/Illusion/Restoration),
+      so every class -- not just caster archetypes -- ends up with the
+      exact same `knownSpellsMask` (`0x108421`) and `selectedSpellId`
+      (`1`) straight out of character creation, a real content
+      difference from dawnstar's own class-differentiated spell access.
+
+      **A real phase-1 renaming bug, found and FIXED in `../src/
+      Player.java` directly (not preserved -- see that file's own
+      updated header comment on `equipItem()`), unlike this project's
+      usual "document, don't fix" policy for bugs confirmed to be in the
+      original game itself:** `equipItem()`/`unequipMatchingCategory()`
+      used to read `Item.column(1, id)` (itemsin.dat's *category*
+      column, values 1-10) and use the result directly as an index into
+      `equippedItems` (`byte[7]`, valid indices 0-6) -- real
+      `itemsin.dat` data has items in every category 1-10 (checked
+      directly), so equipping any Boots/Gloves/Helmet/Shield item
+      (categories 7-10) would throw `ArrayIndexOutOfBoundsException` in
+      a real JVM, clearly not how a shipped game behaves. Re-checked
+      against `decompiled/j.java` (the raw, unrenamed decompiler output)
+      directly: the real bytecode call at both sites is the
+      SINGLE-argument `a.a(var3)` -- `Item.equipSlotOf(id)`, the
+      *dedicated* `equipSlot` column, confirmed 0-6 (fits `equippedItems`
+      exactly, and matches every other `equippedItems[n]` read throughout
+      the file). A genuine phase-1 transcription slip in THIS project's
+      own renaming pass, not a bug in the original game -- corrected at
+      the source, then the full renamed tree re-compiled clean against
+      the MIDP stub jars (`javac`, zero errors) to confirm the fix
+      didn't break anything else.
+
+      Verified against real `CharacterData`/`ItemDatabase` for all 7
+      classes via `player_creation_smoke.exe`: every attribute/skill/
+      derived-stat field cross-checked directly against the loaded
+      `classTemplates` row (not just internal self-consistency), hub-town
+      spawn position, the all-classes-identical spell mask/selectedSpellId
+      confirmed against an independent `charin.dat` parse, and starting
+      items granted + auto-equipped into two always-distinct equip slots
+      (weapon vs. armor) for every class -- confirmed directly against
+      real `itemsin.dat` category/equipSlot data, not assumed.
+
 ## What's next
 
-M9 onward: player state/character-creation/movement, following dawnstar's
-own M8+ roughly but expecting further Stormhold-specific divergences the
-way M3/M6/M7/M8 already found -- this is also where the rest of
+M10 onward: player movement, following dawnstar's own M13-equivalent
+roughly but expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9 already found -- this is also where the rest of
 `Shop.java`'s dialogue() dispatcher (quest-turn-in shops 0-3, Beneca,
-Helga) becomes portable, once there's a real Player/inventory model to
-hang it off of.
+Helga) becomes portable, now that there's a real `PlayerState`/inventory
+model to hang it off of.
