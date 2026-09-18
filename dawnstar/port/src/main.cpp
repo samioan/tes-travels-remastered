@@ -31,10 +31,19 @@
 #include <windows.h>
 
 #include <array>
+#include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
+
+// Populated by the CRT for a wWinMain entry point the same way argc/argv
+// are for main() -- not declared in any header this file already includes.
+extern "C" {
+extern int __argc;
+extern wchar_t** __wargv;
+}
 
 #include "assets/character_data.h"
 #include "assets/dat_archive.h"
@@ -109,10 +118,73 @@ std::vector<dawnstar::GeneratedLevel> BuildWorld(const dawnstar::DungeonGeometry
 
 bool KeyPressed(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
+std::string NarrowArg(const wchar_t* text) {
+    if (!text) return std::string();
+    const int size = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+    if (size <= 0) return std::string();
+    std::string narrow(static_cast<size_t>(size - 1), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, narrow.data(), size, nullptr, nullptr);
+    return narrow;
+}
+
+// argv[1], if given (the launcher's dawnstar_port.exe <dataPath> call --
+// see port/src/launcher/launcher_main.cpp's Play()), overrides the asset
+// root; falls back to the repo-relative default every smoke test and a
+// plain dev build from build/ already uses. __argc/__wargv are populated
+// by the CRT for a wWinMain entry point same as argc/argv would be for
+// main().
+std::string ResolveAssetRoot() {
+    if (__argc > 1 && __wargv && __wargv[1] && __wargv[1][0] != L'\0') {
+        return NarrowArg(__wargv[1]);
+    }
+    return "../../extracted";
+}
+
+// DAWNSTAR_USER_DIR (set by the launcher to <install>/user, mirroring
+// shadowkey-decomp's SK_USER_DIR) is where saves and the log file live.
+// Unset -- a plain dev build -- both stay exactly where they've always
+// been: "saves" relative to the working directory, no log file at all.
+std::string ResolveUserDir() {
+    const char* value = std::getenv("DAWNSTAR_USER_DIR");
+    return value ? std::string(value) : std::string();
+}
+
+// DAWNSTAR_SCALE (set by the launcher from its own window-size picker,
+// mirroring SK_SCALE) overrides the window's integer scale over the
+// native 176x208 backbuffer. Unset, or garbage, keeps the *2 this file
+// hardcoded before the launcher existed.
+int ResolveScale() {
+    const char* value = std::getenv("DAWNSTAR_SCALE");
+    if (!value) return 2;
+    int scale = std::atoi(value);
+    if (scale < 1) scale = 1;
+    if (scale > 8) scale = 8;
+    return scale;
+}
+
+// Redirects stdout/stderr into <userDir>/dawnstar_port.log so a bug report
+// has something to attach -- this is a WINAPI-subsystem app with no
+// console to print to otherwise. A no-op (same as running with no launcher
+// at all) when userDir is empty.
+void OpenLogFile(const std::string& userDir) {
+    if (userDir.empty()) return;
+    std::error_code error;
+    std::filesystem::create_directories(userDir, error);
+    const std::string path = (std::filesystem::path(userDir) / "dawnstar_port.log").string();
+    FILE* unused = nullptr;
+    freopen_s(&unused, path.c_str(), "a", stdout);
+    freopen_s(&unused, path.c_str(), "a", stderr);
+    std::printf("--- dawnstar_port starting ---\n");
+    std::fflush(stdout);
+}
+
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    dawnstar::Window window(dawnstar::Backbuffer::kWidth * 2, dawnstar::Backbuffer::kHeight * 2,
+    const std::string userDir = ResolveUserDir();
+    OpenLogFile(userDir);
+    const int scale = ResolveScale();
+    dawnstar::Window window(dawnstar::Backbuffer::kWidth * scale, dawnstar::Backbuffer::kHeight * scale,
                              L"Dawnstar Port");
     dawnstar::Backbuffer backbuffer;
     dawnstar::MinimapSurface minimap;
@@ -317,10 +389,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool ccHyphenKeyWasDown = false;
     bool ccBackspaceKeyWasDown = false;
 
-    // Same default-relative-path convention every console smoke test
+    // argv[1], when the launcher (or anyone else) passes one; otherwise
+    // the same default-relative-path convention every console smoke test
     // uses (see e.g. tests/m10_frame_render_smoke.cpp) -- this exe also
     // lands in build/, two levels above dawnstar/extracted/.
-    const std::string root = "../../extracted";
+    const std::string root = ResolveAssetRoot();
 
     try {
         dawnstar::DatArchive archive(root + "/datfiles.lmp");
@@ -374,9 +447,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::ShopState shopState = dawnstar::ShopState::Reset();
         // The port's own RecordStore substitute: a directory of
         // "es_gamestate<N>" files, of which exactly one (the newest) is ever
-        // kept -- see save/game_save.h's own class comment. Relative to the
-        // working directory (build/), same convention as `root` above.
-        const std::string saveDir = "saves";
+        // kept -- see save/game_save.h's own class comment. Under
+        // DAWNSTAR_USER_DIR when the launcher set one (see ResolveUserDir),
+        // otherwise "saves" relative to the working directory (build/),
+        // same convention as `root` above.
+        const std::string saveDir =
+            userDir.empty() ? "saves" : (std::filesystem::path(userDir) / "saves").string();
 
         // M38: the real main menu is now shown first (see `inMenu`
         // above) -- the character itself is only constructed once "New
@@ -1140,11 +1216,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             dawnstar::MinimapRenderer::Composite(backbuffer, minimap, player);
             window.Present(backbuffer);
         });
-    } catch (const std::exception&) {
+    } catch (const std::exception& e) {
         // No fallback rendering is possible without the extracted
         // assets -- surface a visibly distinct color (rather than the
         // placeholder's own dark blue) so a missing-assets failure
-        // isn't mistaken for "the game is just idle".
+        // isn't mistaken for "the game is just idle". Logged too, when
+        // there's a log file to put it in -- this is the one failure
+        // shape a player pointing the launcher at the wrong .jar/folder
+        // actually hits.
+        std::printf("fatal: %s\n", e.what());
+        std::fflush(stdout);
         backbuffer.Fill(dawnstar::PackRGB565(80, 0, 0));
         window.RunMessageLoop([&] { window.Present(backbuffer); });
     }

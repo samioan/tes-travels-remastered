@@ -63,16 +63,27 @@ readable Java, engines and asset-format families identified (see each
 game's `docs/`), PC port toolchain proven working (all three `port/`
 scaffolds configure, build, and link cleanly with `port/build.bat`).
 
-**Dawnstar's phase 1+ is underway**: 9 of its 13 decompiled classes are
-read through, understood, and mechanically renamed into a compile-checked
-`dawnstar/src/` reference tree (see `dawnstar/docs/CLASS_MAP.md` and
-`dawnstar/src/README.md`); its asset formats (`datfiles.lmp`,
-`imgfiles.lmp`, and every `*.dat` data table) are fully confirmed. Given
-Dawnstar and Stormhold share Vir2L's "ngame" engine, Stormhold should
-reuse most of this work rather than starting from scratch.
+**Dawnstar's phase 1 is done**: all 13 decompiled classes read through,
+understood, and renamed into a compile-checked `dawnstar/src/` reference
+tree (see `dawnstar/docs/CLASS_MAP.md` and `dawnstar/src/README.md`).
+**Phase 3 (the PC port) is well underway** -- a real, playable build with
+its own launcher; see "Playing it" below.
 
-**Oblivion and Stormhold's phase 1+ has not started.** Stormhold's
-data-table formats are partially crackable from a hexdump alone the same
-way Dawnstar's were; Oblivion's `.scr`/`.cml`/`.jtm` formats are fully
-opaque and will need the Superscape engine's own parsing code read
-through first.
+**Stormhold's phase 1 is done** the same way (see
+`stormhold/docs/CLASS_MAP.md`), reusing most of Dawnstar's own findings
+where the two games' shared Vir2L "ngame" engine matches, documenting the
+real differences where it doesn't. Its own PC port (phase 3) hasn't
+started.
+
+**Oblivion's phase 1 has not started.** Its `.scr`/`.cml`/`.jtm` formats
+are fully opaque and will need the Superscape engine's own parsing code
+read through first.
+
+## Playing it
+
+Dawnstar has a real, downloadable build: a small launcher
+(`Dawnstar.exe`) that asks for your own copy of `TEST-Dawnstar.jar`,
+unpacks it, and starts the game -- no other setup, and it updates itself
+from this repo's [Releases](https://github.com/samioan/tes-travels-remastered/releases)
+page (tagged `dawnstar-v*`). See `dawnstar/port/src/launcher/` for how it
+works and `dawnstar/docs/ITCH_PAGE.md` for the itch.io page copy.

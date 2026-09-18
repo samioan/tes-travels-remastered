@@ -1,0 +1,23 @@
+#pragma once
+
+// Generated into the build directory by port/CMakeLists.txt's
+// configure_file. The value comes from the `DAWNSTAR_VERSION` cache
+// variable, which a local build leaves at its "-dev" default and which the
+// release workflow sets from the git tag (with the "dawnstar-v" prefix
+// stripped) -- so what the launcher shows in its corner is always the
+// build it actually is, with no file to remember to bump by hand.
+//
+// The same value decides whether this build offers updates at all. A
+// "-dev" version does not (see updater.h): its install is a build tree,
+// and dropping a release on top of it would overwrite work in progress.
+
+#define DAWNSTAR_LAUNCHER_VERSION "@DAWNSTAR_VERSION@"
+#define DAWNSTAR_LAUNCHER_VERSION_W L"@DAWNSTAR_VERSION@"
+
+// Where the launcher looks for newer builds, and the tag prefix that
+// distinguishes Dawnstar's releases from Oblivion's/Stormhold's in the
+// same repo (see update_check.h). Cache variables so a fork updates from
+// its own repository without editing source.
+#define DAWNSTAR_UPDATE_OWNER "@DAWNSTAR_UPDATE_OWNER@"
+#define DAWNSTAR_UPDATE_REPO "@DAWNSTAR_UPDATE_REPO@"
+#define DAWNSTAR_UPDATE_TAG_PREFIX "@DAWNSTAR_UPDATE_TAG_PREFIX@"

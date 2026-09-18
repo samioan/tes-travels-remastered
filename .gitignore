@@ -17,6 +17,8 @@ __pycache__/
 
 # --- PC port build output (regenerable via port/build.bat / CMake) ---
 /dawnstar/port/build/
+/dawnstar/port/build-dist/
+/dawnstar/port/dist/
 /oblivion/port/build/
 /stormhold/port/build/
 *.log

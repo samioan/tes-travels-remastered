@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(dawnstar_port CXX)
+project(dawnstar_port CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,6 +7,36 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(MSVC)
   add_compile_options(/W4 /utf-8)
+endif()
+
+# --- building something other people can download ---------------------
+#
+# `DAWNSTAR_VERSION` is what the launcher prints in its corner. A local
+# build leaves it at the "-dev" default; the release workflow passes the
+# git tag with its "dawnstar-v" prefix stripped.
+set(DAWNSTAR_VERSION "0.1.0-dev" CACHE STRING "Version string shown by the launcher")
+
+# Where the launcher checks for newer builds, and the tag prefix that picks
+# Dawnstar's own releases out of a repo that also publishes Oblivion's and
+# Stormhold's (see src/launcher/update_check.h). Cache variables so a fork
+# updates from its own repository without editing source. A version
+# carrying "-dev" does not check at all -- see src/launcher/updater.h.
+set(DAWNSTAR_UPDATE_OWNER "samioan" CACHE STRING "GitHub owner to check for updates")
+set(DAWNSTAR_UPDATE_REPO "tes-travels-remastered" CACHE STRING "GitHub repo to check for updates")
+set(DAWNSTAR_UPDATE_TAG_PREFIX "dawnstar-v" CACHE STRING "Release tag prefix identifying a Dawnstar build")
+
+# The shipping build: no smoke tests, so a release compiles the two
+# executables that actually get zipped instead of every milestone's own
+# test binary too. Does not change any game behaviour.
+option(DAWNSTAR_DIST "Build only the shipped executables (launcher + game)" OFF)
+
+# Static CRT for release builds. This is the single thing that most decides
+# whether "unzip and play" works: with the dynamic runtime, every machine
+# without a matching Visual C++ redistributable gets a missing-DLL dialog
+# instead of a game. Debug builds stay dynamic so the usual debugging tools
+# behave normally.
+if(MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
 # M10: vendored stb_image (PNG decoding) -- see
@@ -244,6 +274,76 @@ if(WIN32)
   target_link_libraries(dawnstar_port PRIVATE user32 gdi32)
 endif()
 
+# --- the launcher -------------------------------------------------------
+#
+# The "unzip and play" front end for the game; see
+# src/launcher/launcher_main.cpp for why it draws its own panel rather than
+# using a dialog template, and src/launcher/banner.h for why its artwork
+# decodes through stb_image (already vendored for the game's own PNG
+# assets) rather than WIC. Ported from shadowkey-decomp's own launcher --
+# see each launcher/ file's own header comment for what's shared verbatim
+# and what's genuinely different (no font, a .jar instead of a folder to
+# search, a tag-prefix-filtered update check for a repo that publishes more
+# than one game).
+#
+# The artwork the .rc embeds (src/launcher/assets/banner.png and
+# dawnstar.ico) is generated from src/launcher/assets/banner_source.jpg by:
+#
+#   python tools/make_banner.py dawnstar/port/src/launcher/assets/banner_source.jpg
+#   python tools/make_icon.py   dawnstar/port/src/launcher/assets/banner_source.jpg
+configure_file(src/launcher/version.h.in
+               "${CMAKE_BINARY_DIR}/generated/launcher/version.h" @ONLY)
+
+# third_party/puff (zlib's reference inflate), vendored for the launcher's
+# zip reader -- see third_party/puff/PROVENANCE.md.
+add_library(puff STATIC third_party/puff/puff.c)
+target_include_directories(puff PUBLIC third_party/puff)
+if(MSVC)
+  target_compile_options(puff PRIVATE /W3)  # vendored third-party source
+endif()
+
+add_executable(dawnstar_launcher WIN32
+  src/launcher/launcher_main.cpp
+  src/launcher/banner.cpp
+  src/launcher/install.cpp
+  src/launcher/launcher_config.cpp
+  src/launcher/update_check.cpp
+  src/launcher/updater.cpp
+  src/launcher/zip_reader.cpp
+  src/launcher/launcher.rc
+  src/platform/win32/exe_dir.cpp
+)
+set_target_properties(dawnstar_launcher PROPERTIES OUTPUT_NAME "Dawnstar")
+target_include_directories(dawnstar_launcher PRIVATE src "${CMAKE_BINARY_DIR}/generated")
+# ole32 is COM (IFileOpenDialog, the file pickers); winhttp is the update
+# check/download. No windowscodecs -- the banner decodes through stb_image.
+target_link_libraries(dawnstar_launcher PRIVATE stb_image puff comctl32 ole32 winhttp)
+target_compile_definitions(dawnstar_launcher PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+# The manifest is a resource in launcher.rc (see the comment there for why);
+# CMake's own generated manifest has to be turned off so only one
+# RT_MANIFEST ends up in the image.
+target_link_options(dawnstar_launcher PRIVATE /MANIFEST:NO)
+
+# Launcher smoke test -- see src/tests/m_launcher_smoke.cpp. Headless: it
+# exercises the launcher's decode/config/discovery layer directly, so it
+# never opens a window and needs no game data or network. Compiles the
+# launcher's own sources rather than linking a library, same as
+# dawnstar_launcher itself.
+add_executable(launcher_smoke
+  src/tests/m_launcher_smoke.cpp
+  src/launcher/banner.cpp
+  src/launcher/install.cpp
+  src/launcher/launcher_config.cpp
+  src/launcher/update_check.cpp
+  src/launcher/updater.cpp
+  src/launcher/zip_reader.cpp
+)
+target_include_directories(launcher_smoke PRIVATE src "${CMAKE_BINARY_DIR}/generated")
+target_link_libraries(launcher_smoke PRIVATE stb_image puff ole32 winhttp)
+target_compile_definitions(launcher_smoke PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+
+if(NOT DAWNSTAR_DIST)
+
 # M2 milestone smoke test -- see src/tests/m2_asset_smoke.cpp. Separate
 # console executable so it doesn't disturb the M0/M1 windowed app.
 add_executable(asset_smoke src/tests/m2_asset_smoke.cpp)
@@ -441,3 +541,5 @@ target_link_libraries(passive_tick_smoke PRIVATE dawnstar_passive dawnstar_dunge
 # dawnstar_player/dawnstar_assets come transitively.
 add_executable(shop_interaction_smoke src/tests/m45_shop_interaction_smoke.cpp)
 target_link_libraries(shop_interaction_smoke PRIVATE dawnstar_npc dawnstar_interact)
+
+endif()  # NOT DAWNSTAR_DIST

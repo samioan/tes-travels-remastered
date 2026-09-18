@@ -1,0 +1,59 @@
+name: CI
+
+# Two things this can actually prove on a machine that has no game data:
+#
+#   * the Debug build compiles, every target -- both the game and the
+#     launcher, plus every milestone's own smoke test.
+#   * the shipping configuration (DAWNSTAR_DIST=ON, Release, static CRT)
+#     also compiles, and the resulting port/dist/ passes check_dist.ps1
+#     (no accidentally-shipped game data, no VC++ runtime dependency, the
+#     launcher's artwork actually embedded).
+#   * the launcher's own smoke test (config round-trip, jar install
+#     against a synthetic jar, the zip reader, version comparison, the
+#     tag-prefix-filtered release parser) passes -- the one dawnstar smoke
+#     test that needs neither the real game data nor a network call.
+#
+# Scoped to Dawnstar only: Oblivion and Stormhold have no buildable port
+# yet (see NOTICE.md). Add their own build steps here once they do.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # CMake is already on the runner image; Ninja is not guaranteed to be,
+      # and dawnstar/port/build.bat asks for it by name.
+      - name: Install Ninja
+        run: choco install ninja -y --no-progress
+
+      # dawnstar/port/vcvars.bat finds whatever Visual Studio this machine
+      # has through vswhere, which is why this workflow does not need to
+      # know where that is.
+      - name: Build Dawnstar (Debug, all targets)
+        run: .\dawnstar\port\build.bat
+
+      - name: Dawnstar launcher smoke test
+        run: .\dawnstar\port\build\launcher_smoke.exe
+
+      - name: Build Dawnstar (shipping configuration)
+        run: .\dawnstar\port\build_dist.bat ci-${{ github.run_number }}
+
+      - name: Check the Dawnstar package
+        run: .\dawnstar\port\check_dist.ps1
+
+      # Worth keeping around: this is a complete, runnable build, so a
+      # reviewer can download a pull request's launcher and try it without
+      # building anything. It still needs the user's own game files.
+      - name: Upload the Dawnstar build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dawnstar-remastered-ci-${{ github.run_number }}
+          path: dawnstar/port/dist/
+          retention-days: 14
