@@ -22,10 +22,23 @@ to readable-but-unrenamed Java (`decompiled/`, 13 files) via
 [`../../tools/decompile.py`](../../tools/decompile.py). Clean recovery,
 same as dawnstar -- plain JVM bytecode, no native/ARM step.
 
-**Phase 1 (not started): read through and rename.** `ESGame.java` is the
-biggest single class (28KB source) and the obvious starting point;
-`ngame/midlet/a.java` next, cross-referenced against dawnstar's
-`RegisteredMIDlet.java`.
+**Phase 1 (done): read through and rename.** See
+[`CLASS_MAP.md`](CLASS_MAP.md) for the full writeup. All 13 decompiled
+classes plus `ngame/midlet/a.java` are renamed, with hand-written source in
+`../src/`, and the whole tree **compiles cleanly** (`javac` against
+`tools/midp-stubs/*`, zero errors). Several classes turned out field-for-
+field identical to dawnstar's own equivalents (same shared "ngame" engine),
+though real Stormhold-specific content/mechanic differences were found and
+documented rather than assumed away -- a Stormhold-only "Warden visits/
+leaves" NPC mechanic, monsters keyed by spawn id rather than tile position
+in the live registry, a from-scratch indexed-color image format
+(`RawImage`), and a rendering/UI architecture (`ScreenCanvas`/`UIScreen`/
+`GameCanvas`) that does NOT map onto dawnstar's Screen/LoadingScreen/
+GameCanvas split by content, among others. Left for later phases (not
+blocking phase 2/3): `GameCanvas.java`'s ~15 still-stubbed pixel-rendering
+methods, `ESGame.loadHelpTopicBodies()`'s remaining help topics, and a set
+of individually-flagged lower-confidence names throughout (see each file's
+header comment and CLASS_MAP.md).
 
 **Phase 2 (not started): asset formats.** See
 [`ASSET_FORMATS.md`](ASSET_FORMATS.md). Two families:
