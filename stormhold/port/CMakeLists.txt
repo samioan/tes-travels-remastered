@@ -33,6 +33,7 @@ target_link_libraries(stormhold_world PUBLIC stormhold_assets)
 # M9: player character creation. M10: player movement -- see
 # docs/PORT_ROADMAP.md and src/player/.
 add_library(stormhold_player STATIC
+  src/player/player_combat_stats.cpp
   src/player/player_creation.cpp
   src/player/player_inventory.cpp
   src/player/player_movement.cpp
@@ -97,3 +98,7 @@ target_link_libraries(shop_dialogue_smoke PRIVATE stormhold_assets)
 # M12 milestone smoke test -- see src/tests/m12_player_inventory_smoke.cpp.
 add_executable(player_inventory_smoke src/tests/m12_player_inventory_smoke.cpp)
 target_link_libraries(player_inventory_smoke PRIVATE stormhold_player)
+
+# M13 milestone smoke test -- see src/tests/m13_player_combat_stats_smoke.cpp.
+add_executable(player_combat_stats_smoke src/tests/m13_player_combat_stats_smoke.cpp)
+target_link_libraries(player_combat_stats_smoke PRIVATE stormhold_player)

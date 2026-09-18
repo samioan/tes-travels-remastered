@@ -79,10 +79,13 @@ real phase-1 renaming bug found in `../src/Player.java`'s `equipItem()`
 and fixed at the source rather than preserved), M10 (player movement,
 including a confirmed dead-code finding in `leftLevelZone` and two
 corrected M6-era modeling gaps around `Dungeon.populated`/`visited`), M11 (NPC dialogue text from `npcstrings.dat`, data only -- the dispatcher
-logic is deferred to a later milestone), and M12 (general-purpose player
+logic is deferred to a later milestone), M12 (general-purpose player
 inventory management, including a confirmed original-game sign-extension
-quirk in the dropped-item/chest packed-value round trip) are done, all
-verified against real extracted data/ground truth. Given the shared Vir2L "ngame" engine with dawnstar, small
+quirk in the dropped-item/chest packed-value round trip), and M13
+(combat resolution primitives -- skill/attack/armor stat math and the
+rollOutcome hit-tier roll, independently cross-checked against a fresh
+java.util.Random reimplementation) are done, all verified against real
+extracted data/ground truth. Given the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are
 copied rather than shared for now -- factoring out a real cross-project
 engine library is deferred until Stormhold's own port has enough

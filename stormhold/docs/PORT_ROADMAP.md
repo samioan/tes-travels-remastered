@@ -627,10 +627,69 @@ read-through.
       genuinely never touches `facing` at all, matching a direct reading
       of that method.
 
+- [x] **M13 -- combat resolution primitives** (this session).
+      `PlayerCombatStats` (`port/src/player/player_combat_stats.h`/
+      `.cpp`): `skillValue`/`skillBonus`/`defenseSkillValue`/
+      `baseEvasion`/`bestArmorSkillIndex`/`activeWeaponSkillIndex`/
+      `defenseSkillIndex`/`attackPower`/`attackAccuracy`/`weaponDamage`/
+      `armorValue`/`isEffectActive`/`clearEffect`/`hasAilment`/
+      `effectiveStat`, plus the static `rollOutcome()` hit-tier roll and
+      `rollShopOutcome()`. Deliberately NOT `attack(Monster)` itself, or
+      `gainSkillExp`/the rank-up/level-up cascade `consumeLevelExp()`
+      triggers (leveling is a separate concern nothing here depends on)
+      -- `attack()` needs a live Monster target (`stat()`/`takeDamage()`/
+      `store()`), and there is no Monster runtime port yet, only M3/M6's
+      static `MonsterDatabase`/generation-time spawn list. Everything
+      ported here is entirely self-contained in `PlayerState` +
+      `CharacterData` + `ItemDatabase`, matching dawnstar's own equivalent
+      milestone's scoping exactly. `RollShopOutcome` takes `Shop`'s
+      `interactionCount[shopId]` as an explicit parameter rather than
+      reading a ported `Shop` static-state object -- no live `Shop` state
+      exists yet (M11 only ported its dialogue TEXT) -- same "caller
+      supplies/owns world state" pattern M8/M10/M12 already established.
+      This still doesn't unlock the FULL `Shop.dialogue()` dispatcher on
+      its own (that also needs a real `Shop` state object to hold
+      `interactionCount`/`questState1`/`questState2`/etc.), but the
+      combat-side blocker M11/M12 both deferred is gone.
+
+      Two real, confirmed findings carried through from the source
+      itself, not fresh discoveries: `isEffectActive`'s `-2` duration
+      code is conditional on `lastCombatTargetId != 0` ("has attacked
+      something at least once"), **not** `giftPointsFound` despite a
+      decompiled field reference that could plausibly have meant either
+      -- `../src/Player.java`'s own header comment already flags this as
+      resolved by reading the bytecode directly, not guessed; carried
+      through here rather than re-litigated. And `weaponDamage()`/
+      `armorValue()` both reuse `itemsin.dat`'s `questFlags` COLUMN as
+      the equipped item's raw damage/armor magnitude (not a mistake --
+      confirmed the same "column reuse" dawnstar's own `Item.java`
+      documents for its analogous methods).
+
+      Verified by `player_combat_stats_smoke.exe`: `RollOutcome` cross-
+      checked against an INDEPENDENT reimplementation of `java.util.
+      Random` (a fresh script, not reusing this port's own code) for 6
+      seed/chance combinations -- the first attempt at that
+      cross-check actually disagreed with this port's output, which
+      turned out to be a bug in the *verification script* (Python's `%`
+      floors toward negative infinity; Java's truncates toward zero --
+      the same category of pitfall `JavaAbs`/`RandomInt1Based`'s own doc
+      comments already warn about), not this port's `RollOutcome` --
+      fixed the script's modulo to truncate like Java's, then all 6
+      cases matched. Also verified: combat stats against a real created
+      Barbarian character (`AttackPower`/`AttackAccuracy`/`WeaponDamage`/
+      `ArmorValue`/`DefenseSkillIndex`/`BaseEvasion` all cross-checked
+      against the loaded `ItemDatabase`'s real magnitude/category
+      columns, not just internal self-consistency), the unequipped-
+      character fallback defaults, `IsEffectActive`'s three duration
+      codes, and `EffectiveStat`'s Regeneration-bonus clamp.
+
 ## What's next
 
-M13 onward: combat (`skillValue`/`rollOutcome`/`rollShopOutcome`, which
-also finally unlocks the full `Shop.dialogue()` dispatcher M11/M12
-deferred pieces of), then the player save format, following dawnstar's
-own later milestones roughly but expecting further Stormhold-specific
-divergences the way M3/M6/M7/M8/M9/M10/M12 already found.
+M14 onward: a live Monster runtime (spawnId/typeIndex/currentHp/scratch,
+`stat()`/`takeDamage()`/`store()`), which finally unlocks `attack
+(Monster)` itself, then leveling (`gainSkillExp`/`consumeLevelExp`,
+including its confirmed real cross-system coupling with `Shop.
+clearQuestTurnInState()`) and the player save format, following
+dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way M3/M6/M7/M8/M9/M10/M12/M13
+already found.
