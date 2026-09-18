@@ -74,10 +74,12 @@ generation, self-consistency-verified across the hub town plus 6 standard
 levels), M7 (`RawImage`'s indexed-color `.cus` sprite decoder, verified
 against all 37 real sprite files), M8 (the Warden visits/leaves world
 event, including a confirmed tile-write index bug preserved rather than
-fixed), and M9 (player character creation for all 7 classes, including a
+fixed), M9 (player character creation for all 7 classes, including a
 real phase-1 renaming bug found in `../src/Player.java`'s `equipItem()`
-and fixed at the source rather than preserved) are done, all verified
-against real extracted data/ground truth. Given the shared Vir2L "ngame" engine with dawnstar, small
+and fixed at the source rather than preserved), and M10 (player movement,
+including a confirmed dead-code finding in `leftLevelZone` and two
+corrected M6-era modeling gaps around `Dungeon.populated`/`visited`) are
+done, all verified against real extracted data/ground truth. Given the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are
 copied rather than shared for now -- factoring out a real cross-project
 engine library is deferred until Stormhold's own port has enough

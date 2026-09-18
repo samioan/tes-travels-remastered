@@ -88,12 +88,25 @@ struct PlayerState {
     bool increaseArmorBuff = false;
     bool safeCampingBuff = false;
 
+    // --- M10: touched by player/player_movement.h.
+    int8_t prevTileX = 0;
+    int8_t prevTileY = 0;
+    bool crossingLevelBoundary = false;
+    // Set by PlayerMovement::CommitMove -- see that method's own header
+    // comment on `enteredNewLevelZone` and a real finding about
+    // `leftLevelZone`: it can NEVER actually become true given
+    // commitMove()'s own control flow (confirmed by reading the whole
+    // method), even though the original faithfully computes it as if it
+    // could.
+    bool enteredNewLevelZone = false;
+    bool leftLevelZone = false;
+
     // --- Deferred to a later milestone, none touched by character
-    // creation: movement (corridorView, prevTileX/prevTileY), UI/
-    // rendering-only scratch state (endOfGameTriggered,
-    // crossingLevelBoundary, justMarkedCamp, enteredNewLevelZone,
-    // leftLevelZone, stateByteAb), and visibleObjects (the 13-slot
-    // "what's renderable this frame" cache).
+    // creation or core movement: the corridor-occlusion view grid
+    // (corridorView, PlayerMovement doesn't call refreshCorridorView()
+    // yet -- see its own header comment), UI/rendering-only scratch state
+    // (endOfGameTriggered, justMarkedCamp, stateByteAb), and
+    // visibleObjects (the 13-slot "what's renderable this frame" cache).
 };
 
 }  // namespace stormhold

@@ -347,7 +347,7 @@ GeneratedLevel DungeonGenerator::BuildHubLevel(const DungeonGeomRow& geomRow) {
     level.neighborWest = geomRow.west;
     level.stairsUpDir = geomRow.stairsUpDir;
     level.stairsDownDir = geomRow.stairsDownDir;
-    level.visited = false;
+    level.populated = true;
     return level;
 }
 
@@ -449,7 +449,7 @@ GeneratedLevel DungeonGenerator::PopulateLevel(int levelNumber, const DungeonGeo
     level.neighborWest = geomRow.west;
     level.stairsUpDir = geomRow.stairsUpDir;
     level.stairsDownDir = geomRow.stairsDownDir;
-    level.visited = false;
+    level.populated = true;
 
     return level;
 }

@@ -29,13 +29,14 @@ add_library(stormhold_world STATIC
 target_include_directories(stormhold_world PUBLIC src)
 target_link_libraries(stormhold_world PUBLIC stormhold_assets)
 
-# M9: player character creation -- see docs/PORT_ROADMAP.md and
-# src/player/.
+# M9: player character creation. M10: player movement -- see
+# docs/PORT_ROADMAP.md and src/player/.
 add_library(stormhold_player STATIC
   src/player/player_creation.cpp
+  src/player/player_movement.cpp
 )
 target_include_directories(stormhold_player PUBLIC src)
-target_link_libraries(stormhold_player PUBLIC stormhold_assets)
+target_link_libraries(stormhold_player PUBLIC stormhold_assets stormhold_world)
 
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
@@ -82,3 +83,7 @@ target_link_libraries(warden_smoke PRIVATE stormhold_world)
 # M9 milestone smoke test -- see src/tests/m9_player_creation_smoke.cpp.
 add_executable(player_creation_smoke src/tests/m9_player_creation_smoke.cpp)
 target_link_libraries(player_creation_smoke PRIVATE stormhold_player)
+
+# M10 milestone smoke test -- see src/tests/m10_player_movement_smoke.cpp.
+add_executable(player_movement_smoke src/tests/m10_player_movement_smoke.cpp)
+target_link_libraries(player_movement_smoke PRIVATE stormhold_player)
