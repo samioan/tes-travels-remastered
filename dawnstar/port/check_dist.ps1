@@ -21,7 +21,14 @@
 #>
 [CmdletBinding()]
 param(
-    [string] $DistDir = "port/dist"
+    # Relative to $PSScriptRoot (this script's own directory), not the
+    # caller's CWD -- shadowkey-decomp's own version of this script can
+    # default to "port/dist" because that repo's port/ sits at the repo
+    # root; this one is dawnstar/port/, and a CWD-relative default was
+    # wrong for every realistic caller (CI invokes this by a path from the
+    # repo root without cd'ing in first, exactly the CWD assumption that
+    # already broke launcher_smoke.exe once -- see that fix's commit).
+    [string] $DistDir = (Join-Path $PSScriptRoot "dist")
 )
 
 $ErrorActionPreference = 'Stop'
