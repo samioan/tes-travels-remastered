@@ -106,14 +106,54 @@ read-through.
       content between the two games, not a coincidence of this port's own
       code.
 
+- [x] **M3 -- monster type database + dungeon geometry** (this session).
+      `MonsterDatabase` (`monstersin.dat`, `../src/Monster.java`'s
+      `loadTypes()` -- u32 count/names/17-byte stat rows, identical layout
+      to dawnstar's own `monstersin.dat`) and `DungeonGeometry`
+      (`geomin.dat`'s 37 six-byte rows, `../src/ESGame.java`'s
+      `loadDungeonGeometryRows()`/`../src/Dungeon.java`'s `neighbors[]`/
+      `stairsUpDir`/`stairsDownDir`). Deliberately just the per-*type*
+      monster database and static level connectivity, not per-instance
+      Monster spawn/AI/combat or dungeon generation -- gameplay logic for
+      later milestones, same scoping dawnstar's own M3 used.
+
+      **`DungeonGeomRow`'s doc comment departs from dawnstar's own M3
+      finding, on purpose:** dawnstar's `geomin.dat` stairways sit at a
+      *fixed* per-direction tile coordinate; Stormhold's `Dungeon.
+      generate()` instead calls `carveStairwell(direction)` to place each
+      stairwell procedurally as part of level generation (confirmed in
+      phase 2, `../docs/ASSET_FORMATS.md`) -- so `stairsUpDir`/
+      `stairsDownDir` here are direction codes with no fixed coordinate to
+      hardcode alongside them. Also unlike dawnstar: Stormhold has no
+      separate `DungeonGenerator` class at all (`../src/Dungeon.java`'s own
+      header comment) -- the room-carving/generation algorithm is fused
+      directly onto `Dungeon`, confirmed by reading `decompiled/i.java`
+      directly. Neither difference blocked this milestone (data loading
+      only), but both matter for whichever later milestone ports
+      generation itself.
+
+      Verified by `monster_dungeon_smoke.exe` against the real
+      `extracted/`: 41 monster types with sane names/stats (`Weak
+      Prisoner`/`Prisoner`/`Ruffian`, increasing HP/attack/loot-row as
+      expected for early low-tier types), and 37 geometry rows whose
+      connectivity is topologically sane -- level 1 (the hub town)
+      connects N/E/S/W to levels 2/11/20/29 with no stairs (`stairsUp=-1`/
+      `stairsDown=-1`), the exact same hub connectivity dawnstar's own M3
+      smoke test found for its hub level, a strong independent
+      cross-check that both games share this world layout. Also: 41
+      monster types with type 41 being the last one lines up with `Dungeon.
+      java`'s own header comment that level 37's last room gets a "forced
+      monster type 41" scripted encounter.
+
 ## What's next
 
-M3 onward: monster type database + dungeon geometry (`monstersin.dat`,
-`geomin.dat` -- `../src/Monster.java`/`../src/Dungeon.java`), following
-dawnstar's own M3 as a template, then character data (`charin.dat`),
+M4 onward: character data (`charin.dat` -- `../src/Player.java`'s
+`loadCharacterData()`), following dawnstar's own M4 as a template, then
 `java.util.Random`'s bit-exact LCG (needed the moment dungeon generation is
-ported, since `Dungeon.java`'s level layouts are seeded per-level the same
-way dawnstar's are), and Stormhold-specific systems dawnstar has no
-equivalent of yet -- the Warden visits/leaves NPC mechanic and
-`RawImage`'s indexed-color sprite decoder (`.cus` files), both flagged in
-`ROADMAP.md`'s phase 1 writeup as real Stormhold-only content.
+ported, since `Dungeon.generate()` seeds one per level -- confirmed
+`levelNumber * 5000` here, not dawnstar's `levelNumber * 8000`, see
+`../src/Dungeon.java`'s header comment), and Stormhold-specific systems
+dawnstar has no equivalent of yet -- the Warden visits/leaves NPC mechanic,
+`RawImage`'s indexed-color sprite decoder (`.cus` files), and the fused
+`Dungeon`-does-its-own-generation architecture this milestone's doc comment
+flagged.
