@@ -28,6 +28,23 @@ namespace stormhold {
 // strong internal self-consistency checks -- see
 // src/tests/m6_dungeon_generator_smoke.cpp.
 //
+// Dungeon.java's own `short[6] room{x0,y0,x1,y1,doorX,doorY}` room-
+// rectangle representation, exposed publicly (added at M16) so a later
+// milestone's runtime room-position logic (e.g. Dungeon.
+// spawnAmbushMonsters -- see dungeon/dungeon_runtime.h) has real room
+// bounding boxes to sample from, not just the two spawn-list summaries
+// below. `PopulateLevel` fills this from the exact same room list its
+// own monster-placement/chest-placement loops already build internally;
+// `BuildHubLevel` leaves it empty (the hub is hand-carved, no rooms).
+struct GeneratedRoomRect {
+    int x0 = 0;
+    int y0 = 0;
+    int x1 = 0;
+    int y1 = 0;
+    int doorX = 0;
+    int doorY = 0;
+};
+
 // A monster spawned at a room's door position. Corresponds to a `Monster`
 // this code doesn't otherwise model yet (no runtime Monster/save-state
 // port exists) -- just enough to place it and know its type/starting HP.
@@ -87,6 +104,9 @@ struct GeneratedLevel {
     std::vector<std::vector<uint8_t>> tiles;
     std::vector<GeneratedMonsterSpawn> monsters;
     std::vector<GeneratedChestSpawn> chests;
+    // Every room placed during generation (see GeneratedRoomRect's own
+    // doc comment above) -- empty for the hand-carved hub level.
+    std::vector<GeneratedRoomRect> rooms;
 
     // Dungeon.java's neighbors[0..3] (north/east/south/west level ids,
     // <= 0 = no neighbor -- see assets/dungeon_geometry.h) plus

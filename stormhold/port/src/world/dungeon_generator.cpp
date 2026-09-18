@@ -66,18 +66,14 @@ void CarveRect(std::vector<std::vector<uint8_t>>& tiles, int x, int w, int y, in
     }
 }
 
-struct RoomRect {
-    int x0, y0, x1, y1, doorX, doorY;
-};
-
 // rollRoomRect(): 2-5 tiles wide/tall, positioned within [3,31]x[3,31],
 // plus a random interior "door" point. All 6 draws use AbsThenMod (see
 // its own comment above).
-RoomRect RollRoomRect(JavaRandom& rng) {
+GeneratedRoomRect RollRoomRect(JavaRandom& rng) {
     const int origin = 3;
     const int maxCoord = 31;
     const int sizeRange = 4;
-    RoomRect rect;
+    GeneratedRoomRect rect;
     int w = 2 + AbsThenMod(rng, sizeRange);
     int h = 2 + AbsThenMod(rng, sizeRange);
     int xRange = maxCoord - origin + 1 - (w - 1);
@@ -95,7 +91,8 @@ RoomRect RollRoomRect(JavaRandom& rng) {
 // (+1 tile margin, clamped to [0,34]) is still untouched wall (0 would
 // mean already-carved floor). On success, carves the room and -- since a
 // minimum 2x2 room is never a single point -- always registers it.
-bool TryPlaceRoom(const RoomRect& rect, std::vector<std::vector<uint8_t>>& tiles, std::vector<RoomRect>& roomList) {
+bool TryPlaceRoom(const GeneratedRoomRect& rect, std::vector<std::vector<uint8_t>>& tiles,
+                   std::vector<GeneratedRoomRect>& roomList) {
     int x0 = std::max(rect.x0 - 1, 0);
     int x1 = std::min(rect.x1 + 1, 34);
     int y0 = std::max(rect.y0 - 1, 0);
@@ -252,13 +249,13 @@ std::vector<int> RandomRoomIndices(JavaRandom& rng, int roomCount, int count) {
 // placeChests(): 5 chests in 5 random rooms. The first is a guaranteed
 // "gift"/special item; the other 4 roll normal loot (2 bonus rolls).
 // Avoids any tile already marked with bit 3 (mask 8).
-void PlaceChests(const std::vector<int>& roomIdx, const std::vector<RoomRect>& roomList, int tier, JavaRandom& rng,
-                  const ItemDatabase& items, GeneratedLevel& level) {
+void PlaceChests(const std::vector<int>& roomIdx, const std::vector<GeneratedRoomRect>& roomList, int tier,
+                  JavaRandom& rng, const ItemDatabase& items, GeneratedLevel& level) {
     int giftSubtype = kChestGiftSubtypeByTier[tier - 1];
     bool first = true;
 
     for (int i = 0; i < 5; i++) {
-        const RoomRect& room = roomList[roomIdx[i]];
+        const GeneratedRoomRect& room = roomList[roomIdx[i]];
         int itemId = first ? items.RandomGiftItemOfSubtype(rng, giftSubtype) : items.RollLoot(rng, tier, 2);
 
         int w = room.x1 - room.x0 + 1;
@@ -366,7 +363,7 @@ GeneratedLevel DungeonGenerator::PopulateLevel(int levelNumber, const DungeonGeo
 
     std::vector<int32_t> connectedSet;
     std::vector<int32_t> unconnectedSet;
-    std::vector<RoomRect> roomList;
+    std::vector<GeneratedRoomRect> roomList;
 
     if (IsCardinalDirection(geomRow.stairsUpDir)) {
         int stairwayRoom = CarveStairwayCorridor(level.tiles, geomRow.stairsUpDir);
@@ -381,7 +378,7 @@ GeneratedLevel DungeonGenerator::PopulateLevel(int levelNumber, const DungeonGeo
     int placed = 0;
 
     while (placed < 15) {
-        RoomRect rect = RollRoomRect(rng);
+        GeneratedRoomRect rect = RollRoomRect(rng);
         if (TryPlaceRoom(rect, level.tiles, roomList)) {
             placed++;
             int doorCoord = PackCoord(rect.doorX, rect.doorY);
@@ -419,7 +416,7 @@ GeneratedLevel DungeonGenerator::PopulateLevel(int levelNumber, const DungeonGeo
     // java's own class header comment -- NOT dawnstar's 42) -- every
     // other room/level rolls a type via the tier/bucket roll below.
     for (int i = 0; i < roomCount; i++) {
-        const RoomRect& room = roomList[i];
+        const GeneratedRoomRect& room = roomList[i];
         int monsterType;
         if (levelNumber == 37 && i == roomCount - 1) {
             monsterType = 41;
@@ -450,6 +447,7 @@ GeneratedLevel DungeonGenerator::PopulateLevel(int levelNumber, const DungeonGeo
     level.stairsUpDir = geomRow.stairsUpDir;
     level.stairsDownDir = geomRow.stairsDownDir;
     level.populated = true;
+    level.rooms = roomList;
 
     return level;
 }

@@ -60,6 +60,19 @@ add_library(stormhold_combat STATIC
 target_include_directories(stormhold_combat PUBLIC src)
 target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster)
 
+# M16: the live per-level Monster/chest/dropped-item registry
+# (WorldRegistry) plus Dungeon.java's own registry-management methods --
+# see docs/PORT_ROADMAP.md and src/dungeon/. Depends on stormhold_monster/
+# stormhold_world only; stormhold_player/stormhold_combat depend on
+# NEITHER of those going back to this (no cycle) -- wiring their own
+# deferred call sites to actually use a WorldRegistry is a later
+# milestone's job.
+add_library(stormhold_dungeon STATIC
+  src/dungeon/dungeon_runtime.cpp
+)
+target_include_directories(stormhold_dungeon PUBLIC src)
+target_link_libraries(stormhold_dungeon PUBLIC stormhold_monster stormhold_world)
+
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
 # dawnstar ports' platform layer.
@@ -129,3 +142,7 @@ target_link_libraries(monster_combat_smoke PRIVATE stormhold_combat)
 # M15 milestone smoke test -- see src/tests/m15_player_leveling_smoke.cpp.
 add_executable(player_leveling_smoke src/tests/m15_player_leveling_smoke.cpp)
 target_link_libraries(player_leveling_smoke PRIVATE stormhold_combat)
+
+# M16 milestone smoke test -- see src/tests/m16_dungeon_runtime_smoke.cpp.
+add_executable(dungeon_runtime_smoke src/tests/m16_dungeon_runtime_smoke.cpp)
+target_link_libraries(dungeon_runtime_smoke PRIVATE stormhold_dungeon)

@@ -827,14 +827,104 @@ read-through.
       seed's strong-hit/successful-block outcome -- `RollOutcome` itself
       isn't re-verified here (already done in M13).
 
+- [x] **M16 -- the live per-level registry** (this session).
+      `WorldRegistry` + `DungeonRuntime`
+      (`port/src/dungeon/dungeon_runtime.h`/`.cpp`, new `stormhold_dungeon`
+      library): `StoreMonster`/`RemoveMonster`/`MonsterAt`/`StoreChest`/
+      `RemoveChest`/`AddDroppedItem`/`RemoveDroppedItem`/
+      `CountDroppedItemsAt`/`FirstDroppedItemAt`/`DroppedItemsAt`/
+      `RefreshTileFlags`/`SpawnAmbushMonsters` -- `ESGame.monsters[]`/
+      `chests[]`/`droppedItems[]` and every `Dungeon.java` method that
+      manages them. Same 3-way milestone split as dawnstar's own
+      precedent (its M22/M23/M24): this one scopes to the registry +
+      management methods ONLY, matching dawnstar's M22 exactly --
+      wiring `player/player_movement.h`/`player/player_inventory.h`/
+      `combat/combat_resolution.h`'s own already-deferred call sites to
+      actually populate/consume a `WorldRegistry` (dawnstar's M23), and
+      registering M6's generation-time `GeneratedMonsterSpawn`/
+      `GeneratedChestSpawn` output into one (dawnstar's M24), are both
+      left for later milestones. `stormhold_dungeon` depends on
+      `stormhold_monster`/`stormhold_world` only -- `stormhold_player`/
+      `stormhold_combat` depend on neither of those back to this
+      module, so there's no cycle.
+
+      Confirmed Stormhold-specific divergence from dawnstar's own
+      `WorldRegistry` (M14's finding, reconfirmed here by reading
+      `Dungeon.java` directly): `WorldRegistry::monsters` is
+      **spawnId-keyed** (`unordered_map<int16_t, ...>`), not
+      position-keyed like dawnstar's -- matching Stormhold's real
+      `Monster.store()`. `chests` stays position-keyed (`PackTileKey`,
+      a plain-int stand-in for `Util.posKey`'s string), and
+      `droppedItems` stays an unordered per-level list, matching
+      dawnstar's shapes for those two. `MonsterAt` has to linear-scan
+      the whole spawnId-keyed registry by position -- confirmed the
+      real `Dungeon.monsterAt(x,y)` does exactly this too, it has no
+      position index for monsters either.
+
+      **A real, necessary data-model addition, not scope creep:**
+      `GeneratedLevel` gained a new `rooms` field
+      (`GeneratedRoomRect`, `world/dungeon_generator.h`) -- `Dungeon.
+      spawnAmbushMonsters(count)` needs real room bounding boxes to
+      pick a random position from (Dungeon.java's own do-while loop:
+      pick a random room, then a random point in ITS bounding box, not
+      any random walkable tile on the whole level), and M6 had never
+      exposed `PopulateLevel`'s own internal room list on
+      `GeneratedLevel` before now -- only its two spawn-list SUMMARIES
+      (`monsters`/`chests`). `BuildHubLevel` leaves `rooms` empty (no
+      RNG, no room list at all, hand-carved). `SpawnAmbushMonsters`
+      itself reproduces the original's RNG draw order per retry attempt
+      exactly (room index, then monster type, then x, then y --
+      re-rolled on EVERY rejected/non-walkable attempt, not just the
+      final one, since that's load-bearing for later RNG-stream
+      determinism); the one confirmed simplification is that
+      `spawnIdCounter` only advances once per ACTUALLY-placed monster,
+      not once per rejected attempt too (the real game's `nextSpawnId()`
+      burns a spawnId on every attempt) -- deliberate, since spawnId's
+      specific numeric value has no confirmed observable effect
+      anywhere in the source, only ever used as a registry key.
+
+      `RemoveMonster` throws `std::runtime_error` on an unregistered
+      spawnId rather than reproducing a crash: the real
+      `ESGame.killMonster()` reads `record[4]`/`record[5]` BEFORE its
+      own `if (record != null)` null-check (reconfirmed directly, a
+      real latent `NullPointerException` for exactly this case, first
+      flagged in M14) -- not reproducible as a genuine crash in C++
+      without deliberately dereferencing something invalid, so this
+      surfaces the same "should never happen, but the original doesn't
+      guard it either" condition loudly instead, same discipline
+      `player/player_movement.h`'s `ComputeMoveTarget` already
+      established for its own no-neighbor edge case. `RefreshTileFlags`
+      SIMPLIFIED: skips the hub-town `Shop.wardenPresent` bit-32 refresh
+      the original also performs there -- no live Shop/Warden state is
+      wired to a `WorldRegistry` yet (M8's `WardenState` stays its own
+      standalone, caller-supplied object).
+
+      Verified by `dungeon_runtime_smoke.exe`: monster store/remove/
+      lookup (including the wall-tile guard on `MonsterAt` and the
+      confirmed-throw on an unregistered spawnId), chest store/remove
+      (including its wall-tile guard blocking removal, and a safe no-op
+      on a second removal), dropped-item add/remove/count/first/all
+      with two distinct records sharing one tile (the presence bit stays
+      set until the LAST one is removed), `RefreshTileFlags` rebuilding
+      all 3 presence bits from registries alone on an otherwise-blank
+      level, and `SpawnAmbushMonsters` against a REAL generated level 2
+      (confirming its room list is non-empty, exactly 3 new registry
+      entries appear, every spawned monster's tile carries the
+      monster-presence bit and falls inside SOME real room's bounding
+      box, and `spawnIdCounter` advances by exactly 3).
+
 ## What's next
 
-M16 onward: a live per-level Monster/dropped-item registry (unblocking
-`target.store()`/`Dungeon.spawnAmbushMonsters()`/auto-loot, all deferred
-so far across M10/M12/M14), and eventually the player save format
-(Monster's own `readFrom`/`writeTo` included, plus whatever caller
-actually drives `tryRankUpSkills()`/`Monster.tick()` in the original --
-still not recovered, see `GameCanvas.java`'s remaining stubbed methods)
--- following dawnstar's own later milestones roughly but expecting
-further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14 already found.
+M17 onward: wiring `player/player_movement.h` (dropped-item auto-loot +
+`giftPointsFound` accumulation), `player/player_inventory.h`
+(`TryPickUpItem`/`DropInventoryItem`'s own registry side), and
+`combat/combat_resolution.h` (`target.store()`,
+`Dungeon.spawnAmbushMonsters()`'s now-real call site) to actually use
+this milestone's `WorldRegistry`; then registering M6's generation-time
+spawn lists into one (dawnstar's own M24 equivalent); and eventually the
+player save format (Monster's own `readFrom`/`writeTo` included, plus
+whatever caller actually drives `tryRankUpSkills()`/`Monster.tick()` in
+the original -- still not recovered, see `GameCanvas.java`'s remaining
+stubbed methods) -- following dawnstar's own later milestones roughly
+but expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16 already found.
