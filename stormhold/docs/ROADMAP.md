@@ -67,9 +67,9 @@ plus a couple of remaining gaps:
 writeup, following dawnstar's own port precedent. M0 (scaffold), M1 (real
 tick loop/backbuffer/window, the confirmed 250ms cadence), M2 (asset
 foundations -- `BinaryReader`/`AssetRoot` plus the `ItemDatabase`/
-`SpellDatabase` loaders), and M3 (`MonsterDatabase`/`DungeonGeometry`,
-`monstersin.dat`/`geomin.dat`) are done, all verified against real
-extracted data. Given the shared Vir2L "ngame" engine with dawnstar, small
+`SpellDatabase` loaders), M3 (`MonsterDatabase`/`DungeonGeometry`,
+`monstersin.dat`/`geomin.dat`), and M4 (`CharacterData`, `charin.dat`) are
+done, all verified against real extracted data. Given the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are
 copied rather than shared for now -- factoring out a real cross-project
 engine library is deferred until Stormhold's own port has enough

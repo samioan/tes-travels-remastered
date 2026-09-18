@@ -145,15 +145,33 @@ read-through.
       java`'s own header comment that level 37's last room gets a "forced
       monster type 41" scripted encounter.
 
+- [x] **M4 -- character data (class/race/skill templates)** (this
+      session). `CharacterData` (`charin.dat`, `../src/Player.java`'s
+      `loadCharacterData()` -- stat labels, attribute names, class names,
+      race names, skill names, per-skill governing attribute, and the big
+      per-class stat template table). Unlike dawnstar's own M4, no rename
+      fix was needed here -- phase 1's read-through already carried
+      dawnstar's class/race naming fix over correctly (`../docs/
+      ASSET_FORMATS.md`'s `charin.dat` section says so directly), so this
+      milestone is confirmation against real data rather than a fresh
+      find.
+
+      Verified by `character_data_smoke.exe` against the real
+      `extracted/`: the exact same 7 classes (Barbarian/Battlemage/
+      Knight/Nightblade/Rogue/Sorcerer/Spellsword) and 6 races (Redguard/
+      Nord/Breton/High Elf/Wood Elf/Dark Elf) as dawnstar, correctly in
+      the class/race slots (not swapped) -- and, as a nice independent
+      confirmation, `classTemplates[class][1]` (the race each class comes
+      with) resolves to the same archetypal pairing dawnstar found:
+      Sorcerer -> High Elf (index 3), the classic pure-caster combo.
+
 ## What's next
 
-M4 onward: character data (`charin.dat` -- `../src/Player.java`'s
-`loadCharacterData()`), following dawnstar's own M4 as a template, then
-`java.util.Random`'s bit-exact LCG (needed the moment dungeon generation is
-ported, since `Dungeon.generate()` seeds one per level -- confirmed
-`levelNumber * 5000` here, not dawnstar's `levelNumber * 8000`, see
-`../src/Dungeon.java`'s header comment), and Stormhold-specific systems
-dawnstar has no equivalent of yet -- the Warden visits/leaves NPC mechanic,
-`RawImage`'s indexed-color sprite decoder (`.cus` files), and the fused
-`Dungeon`-does-its-own-generation architecture this milestone's doc comment
-flagged.
+M5 onward: `java.util.Random`'s bit-exact LCG (needed the moment dungeon
+generation is ported, since `Dungeon.generate()` seeds one per level --
+confirmed `levelNumber * 5000` here, not dawnstar's `levelNumber * 8000`,
+see `../src/Dungeon.java`'s header comment), following dawnstar's own M5 as
+a template, then procedural dungeon generation itself (fused onto
+`Dungeon`, not a separate class -- M3's finding), and Stormhold-specific
+systems dawnstar has no equivalent of yet: the Warden visits/leaves NPC
+mechanic and `RawImage`'s indexed-color sprite decoder (`.cus` files).
