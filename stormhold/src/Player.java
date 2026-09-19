@@ -2564,6 +2564,25 @@ public class Player {
       this.currentDungeon().sampleCorridorView(this.tileX, this.tileY, this.facing, this.corridorView);
    }
 
+   // Confirmed (phase-3 port M38): byte-for-byte from decompiled/j.java's
+   // n(). The monster at the forward-facing look-ahead tile, via
+   // computeMoveTarget(1) -- but UNLIKE commitMove()'s own unguarded
+   // computeMoveTarget() call (a real latent crash risk if a step would
+   // cross to a nonexistent neighbor, see Dungeon.tileAt()'s own port-
+   // side guard discipline), this gracefully returns null instead when
+   // that happens (`pendingLevel <= 0`), matching the original's own
+   // explicit check here. The original also calls a confirmed real
+   // no-op method on the found monster (decompiled/d.java's own empty
+   // c()) -- not reproduced, it does literally nothing.
+   Monster monsterInFront() {
+      this.computeMoveTarget(1);
+      if (this.pendingLevel <= 0) {
+         return null;
+      }
+
+      return ESGame.dungeons[this.pendingLevel - 1].monsterAt(this.pendingTileX, this.pendingTileY);
+   }
+
    // The longer (~450 char) character-sheet dump: name/class/level/HP/
    // Magicka/Fatigue/active ailments (by name)/giftPointsFound/attributes.
    // NOT transcribed -- was `K()`, a ~84-line debug-only string builder

@@ -2376,19 +2376,80 @@ read-through.
       warnings only). Re-verified the real windowed exe still launches
       and runs.
 
+- [x] **M38 -- `PlayerMovement::MonsterInFront` + live targetMonster
+      refresh/death handling** (this session). `GameCanvas.
+      refreshTargetMonster()`/`resolveTargetMonsterDeath()` (were
+      decompiled/e.java's `a()`/`m()`) and `Player.monsterInFront()`
+      (was decompiled/j.java's `n()`) are all new, fully transcribed
+      this session -- none had a GameCanvas.java-side stub at all
+      before now (found purely by reading the decompiled source
+      directly while investigating `tickMovementAndAI`'s own real
+      identity, decompiled/e.java's `e(long)`, confirmed as the per-tick
+      ACTION dispatcher these 4 unconditional calls -- along with 2
+      more not transcribed this session -- live inside).
+
+      `Player.monsterInFront()`: the monster at the forward-facing
+      look-ahead tile, via `computeMoveTarget(1)` -- but UNLIKE
+      `commitMove()`'s own unguarded call to it (a real, if believed-
+      unreachable, crash risk on a no-neighbor edge, preserved exactly
+      there), gracefully returns null instead when that happens,
+      matching the original's own explicit `pendingLevel <= 0` check.
+      Ported as `PlayerMovement::MonsterInFront`, which reproduces that
+      same graceful path by catching the exception `ComputeMoveTarget`
+      already throws for exactly that case, rather than duplicating its
+      entire boundary-stitching body just to avoid throwing in the
+      first place.
+
+      `refreshTargetMonster()`: refreshes `targetMonster` from
+      `monsterInFront()` every call; when found, sets `unconfirmed_aa`
+      true (`resolveHudIconSet()`'s own icon-set-1 gate, M29) and shows
+      a 2-line "Found `<Name>`" popup, splitting the monster's own
+      `typeName()` at its first space. `resolveTargetMonsterDeath()`:
+      once `targetMonster`'s HP drops to 0 or below, rolls its death-
+      drop (guaranteed for the level-37 type-41 "roaming" monster, M19),
+      removes it from the registry (`ESGame.killMonster()`, already
+      `DungeonRuntime::RemoveMonster`), heals the player 30% of maxHP
+      under `hasAilment(4)` ("vampirism"), shows "Creature is dead!",
+      then clears `targetMonster`/`unconfirmed_aa`. **Finally closes the
+      other half of the M14/M15 gap** M37 didn't: `Monster.onDeath()`
+      now has a real, confirmed caller too.
+
+      Wired directly into `main.cpp`'s tick loop even though neither
+      Java method has a reachable caller in the real game yet either
+      (their own real caller, `tickMovementAndAI`/`e(long)`, remains a
+      stub) -- same "wire the confirmed mechanic ahead of its still-
+      stubbed original dispatcher" precedent M35-M37 already used. Also
+      the second real call site for `MessagePopup`, and gives `render/
+      hud_state.h`'s `HudState`/`TargetMonsterInfo` (M29) their own
+      first live values instead of a fixed all-false/`nullopt` stand-in.
+      `resolveTargetMonsterDeath`'s own trigger is currently
+      unreachable in practice -- nothing yet lets the player actually
+      damage `targetMonster` (no combat input exists) -- but wired
+      anyway, same precedent.
+
+      Verified with a new `target_monster_smoke.exe`: a real monster
+      directly ahead is found (with `ComputeMoveTarget`'s own pending-
+      field side effects confirmed too); nothing ahead resolves to
+      `nullopt`; and the no-neighbor edge case resolves to `nullopt`
+      gracefully rather than propagating the exception
+      `ComputeMoveTarget` itself still throws for it. All 35 smoke
+      tests pass; full clean rebuild stayed at zero `/W4` warnings.
+      `javac` recompiled clean (8 expected warnings only). Re-verified
+      the real windowed exe still launches and runs.
+
 ## What's next
 
 The remaining still-untranscribed tick-loop helper, `tickMovementAndAI`
 (the real per-tick action dispatcher, decompiled/e.java's `e(long)`) --
-gates a whole further web of interconnected methods (`a()`/`f()`/
-`g(long)`/`h(long)`/`n()`/`d(long)`/`m()`, all confirmed to exist and
-roughly what they each do this session, just not yet transcribed) --
-this is where real combat input, camp/rest, and `Monster.onDeath()`'s
-own still-unrecovered caller most likely live. `paintFlashOverlays()`/
-`paintUnknown_b()` (the two remaining unported-pixel paint methods,
-both gated on that same live state). Beyond that: a character-creation
-UI (`main.cpp` still hardcodes class 0). Following dawnstar's own later
-milestones roughly but expecting further Stormhold-specific
-divergences the way
+gates a whole further web of interconnected methods (`f()`/`g(long)`/
+`h(long)`/`n()`/`d(long)`, all confirmed to exist and roughly what they
+each do this session, just not yet transcribed -- `a()`/`m()` are now
+done, M38) -- this is where real combat input (`d(long)`, confirmed to
+call the already-ported `Player.attack()`/`PlayerAttack`) and camp/rest
+most likely live. `paintFlashOverlays()`/`paintUnknown_b()` (the two
+remaining unported-pixel paint methods, both gated on that same live
+state). Beyond that: a character-creation UI (`main.cpp` still
+hardcodes class 0). Following dawnstar's own later milestones roughly
+but expecting further Stormhold-specific divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

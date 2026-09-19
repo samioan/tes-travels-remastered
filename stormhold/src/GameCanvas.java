@@ -1811,8 +1811,93 @@ public class GameCanvas extends FullCanvas implements Runnable {
       }
    }
 
+   // RENAMED from this file's own earlier wrong "tickStatusCountdowns_e"
+   // guess -- confirmed (phase-3 port M38, reconnaissance only, body
+   // still not transcribed) to be the real per-tick ACTION dispatcher:
+   // decompiled/e.java's e(long) checks a chain of action-request flags
+   // (I/A/ay/ap/U/av/Z/this.p) and dispatches to whichever single
+   // handler applies (a(long)/f(long)/h(long)/g(long)/d(long)/f()/n()),
+   // then unconditionally calls 4 more methods every tick regardless:
+   // refreshTargetMonster()/tickStatusCountdowns_h (was h(), still
+   // unconfirmed)/refreshTargetMonster (was a(), CONFIRMED this session,
+   // see below)/resolveTargetMonsterDeath (was m(), CONFIRMED this
+   // session, see below). This method itself remains a stub -- the
+   // action-flag dispatch alone fans out into `d(long)` (attack input,
+   // confirmed to call the already-ported Player.attack() /
+   // PlayerAttack) and several UI-screen-dependent handlers
+   // (rest/camp/rumors/help) this port has no screens for at all yet --
+   // too large a web to responsibly finish alongside this session's
+   // actual deliverable.
    private void tickStatusCountdowns_e(long now) {
       throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's e(long))");
+   }
+
+   // Confirmed (phase-3 port M38): byte-for-byte from decompiled/e.java's
+   // a() (no-arg) -- one of e(long)'s own 4 unconditional per-tick
+   // calls (see that method's own header comment); NOT yet reachable
+   // from run() itself, since e(long)/tickStatusCountdowns_e remains a
+   // stub, but transcribed anyway, same "confirmed and transcribed, no
+   // reachable caller yet" treatment showMessage() had before M34's own
+   // live wiring. Refreshes targetMonster from Player.monsterInFront()
+   // every call; when found, sets unconfirmed_aa true
+   // (resolveHudIconSet()'s own icon-set-1 gate) and shows a 2-line
+   // "Found <Name>" popup, splitting the monster's own typeName() at
+   // its first space (e.g. "Giant Rat" -> "Giant"/"Rat"; a single-word
+   // name like "Skeleton" -> "Skeleton"/"").
+   private void refreshTargetMonster() {
+      targetMonster = this.player.monsterInFront();
+      unconfirmed_aa = targetMonster != null;
+
+      if (unconfirmed_aa) {
+         String name = targetMonster.typeName();
+         String[] lines = new String[2];
+         int spaceIdx = name.indexOf(' ');
+         if (spaceIdx < 0) {
+            lines[0] = name;
+            lines[1] = "";
+         } else {
+            lines[0] = name.substring(0, spaceIdx);
+            lines[1] = name.substring(spaceIdx + 1);
+         }
+
+         if (this.showMessage(lines, 1)) {
+            messageShownAt = System.currentTimeMillis();
+            unconfirmed_ad = true;
+         }
+      }
+   }
+
+   // Confirmed (phase-3 port M38): byte-for-byte from decompiled/e.java's
+   // m() -- same "not yet reachable from run()" status as
+   // refreshTargetMonster() above. Once targetMonster's own HP drops to
+   // 0 or below: rolls its death-drop (guaranteed for the level-37
+   // type-41 "roaming" monster, M19's own confirmed special case),
+   // removes it from the live registry (ESGame.killMonster()), heals
+   // the player 30% of maxHP when hasAilment(4) ("vampirism") is
+   // active, shows the "Creature is dead!" popup, then clears
+   // targetMonster/unconfirmed_aa.
+   private void resolveTargetMonsterDeath() {
+      if (targetMonster != null && targetMonster.currentHp <= 0) {
+         if (targetMonster.typeIndex == 41) {
+            targetMonster.onDeath(true);
+         } else {
+            targetMonster.onDeath(false);
+         }
+
+         ESGame.killMonster(this.player.currentLevel, targetMonster.spawnId);
+         if (this.player.hasAilment(4)) {
+            this.player.coreStats[2] = (short)(this.player.coreStats[2] + 3 * this.player.coreStats[3] / 10);
+            this.player.coreStats[2] = (short)Math.min(this.player.coreStats[2], this.player.coreStats[3]);
+         }
+
+         if (this.showMessage(MSG_CREATURE_DEAD, 1)) {
+            messageShownAt = System.currentTimeMillis();
+            unconfirmed_ad = true;
+         }
+
+         targetMonster = null;
+         unconfirmed_aa = false;
+      }
    }
 
    private void tickMovementAndAI(long now, long deltaMs) {

@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <optional>
 
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
@@ -90,6 +91,20 @@ public:
     // separate, smaller follow-up, not a blocker for this milestone's
     // actual goal (a live render pass off CommitMove's own corridorView).
     static void RefreshCorridorView(PlayerState& p, const GeneratedLevel& level, const LevelLookup& levels);
+
+    // Player.monsterInFront() (M38, phase-3 port; was decompiled/j.java's
+    // n()): the monster at the forward-facing look-ahead tile, via
+    // ComputeMoveTarget(1) -- but UNLIKE CommitMove's own unguarded
+    // ComputeMoveTarget call above (a real, if believed-unreachable,
+    // crash risk on a no-neighbor edge, preserved exactly there),
+    // returns std::nullopt instead when that happens (mutates `p`'s own
+    // pendingLevel/pendingTileX/pendingTileY as a side effect either
+    // way, matching the original's own computeMoveTarget(1) call
+    // exactly). The original also calls a confirmed real no-op method
+    // on the found monster here (decompiled/d.java's own empty c()) --
+    // not reproduced, it does literally nothing.
+    static std::optional<MonsterState> MonsterInFront(PlayerState& p, const LevelLookup& levels,
+                                                        const WorldRegistry& world);
 
     // Player.commitMove(dir) -- see class header comment for what's
     // deliberately not modeled. `world`/`items` are the M17 addition: once

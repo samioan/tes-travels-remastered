@@ -99,6 +99,29 @@ void PlayerMovement::RefreshCorridorView(PlayerState& p, const GeneratedLevel& l
     p.corridorView = DungeonRuntime::SampleCorridorView(level, p.tileX, p.tileY, p.facing, constLevels);
 }
 
+std::optional<MonsterState> PlayerMovement::MonsterInFront(PlayerState& p, const LevelLookup& levels,
+                                                             const WorldRegistry& world) {
+    try {
+        ComputeMoveTarget(p, 1, levels);
+    } catch (const std::runtime_error&) {
+        // The real computeMoveTarget(1) has no equivalent guard at all
+        // here -- this is exactly the "no neighbor to cross into" edge
+        // ComputeMoveTarget's own doc comment already flags as a real
+        // (if believed-unreachable) crash risk for CommitMove's own
+        // unguarded call. monsterInFront() explicitly checks
+        // `pendingLevel <= 0` and returns null instead -- this port
+        // models that same graceful path by catching the exception
+        // ComputeMoveTarget already throws for it, rather than
+        // duplicating its entire boundary-stitching body just to avoid
+        // throwing in the first place.
+        return std::nullopt;
+    }
+    if (p.pendingLevel <= 0) return std::nullopt;
+
+    const GeneratedLevel& pendingLevel = levels(p.pendingLevel);
+    return DungeonRuntime::MonsterAt(pendingLevel, world, p.pendingTileX, p.pendingTileY);
+}
+
 bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& levels, WorldRegistry& world,
                                  const ItemDatabase& items, const MonsterDatabase& monsterDb, WardenState& warden) {
     if (p.coreStats[6] <= 0) return false;

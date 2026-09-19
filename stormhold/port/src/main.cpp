@@ -56,19 +56,39 @@
 // a deliberate simplification, since nothing yet reads state in a way
 // that would make the difference observable.
 //
+// M38 layers in `PlayerMovement::MonsterInFront` (Player.
+// monsterInFront(), new this session) plus the inline "refresh
+// targetMonster" / "resolve targetMonster death" orchestration
+// GameCanvas.refreshTargetMonster()/resolveTargetMonsterDeath() (were
+// decompiled/e.java's a()/m(), also new this session -- see
+// ../src/GameCanvas.java's own header comments) describe. NEITHER of
+// those two Java methods has a reachable caller in the real game yet
+// either (their own real caller, tickMovementAndAI/e(long), remains a
+// stub) -- wired directly into this file's own tick loop anyway, same
+// as M35-M37's own precedent of wiring a confirmed-real mechanic ahead
+// of its still-stubbed original dispatcher when nothing else depends on
+// the exact original call ordering. This is also the second real call
+// site for `MessagePopup` (the "Found <Name>"/"Creature is dead!"
+// popups) and gives `render/hud_state.h`'s `HudState`/`TargetMonsterInfo`
+// (M29) their own first live values instead of a fixed all-false/
+// nullopt stand-in.
+//
 // Deliberately NOT wired here: paintFlashOverlays()/paintUnknown_b()
 // (both still gated on live tick-loop state, see docs/PORT_ROADMAP.md's
 // own "what's next"), and the still-untranscribed tick-loop helpers
 // (rollCampInterrupted is transcribed but has no reachable caller worth
 // wiring without the camp system around it; tickMovementAndAI/the real
 // per-tick action dispatcher) -- so there is still no combat INPUT
-// (only monsters attack; the player can't attack back yet), no camp
+// (only monsters attack; the player can't attack back yet -- targeting
+// now works, but nothing lets the player actually swing), no camp
 // system, and no rank-up/level-up flow. Turning (Move dir 3/4, no
 // strafe) and stepping forward/backward are the only player actions
 // this milestone wires.
 #include <windows.h>
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -81,6 +101,7 @@
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
+#include "monster/monster_runtime.h"
 #include "platform/win32/window.h"
 #include "player/player_combat_stats.h"
 #include "player/player_creation.h"
@@ -185,9 +206,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // spawnId counters would ever reach across 37 levels, avoiding a
     // collision with a REAL registered monster's own spawnId -- same
     // reasoning player/player_creation.h's own spawnId=1 stand-in
-    // documents for its own local counter.
-    int16_t ambushSpawnIdCounter = 10000;
+    // documents for its own local counter. Shared by ambush spawns
+    // (M37) AND M38's own death-drop spawnId, same "one shared counter"
+    // reasoning ESGame.nextSpawnId() itself documents (see player/
+    // player_creation.h's own class comment).
+    int16_t nextSpawnIdCounter = 10000;
     stormhold::MessagePopupState messagePopup;
+    // M38: GameCanvas.targetMonster -- refreshed every tick by
+    // PlayerMovement::MonsterInFront below.
+    std::optional<stormhold::MonsterState> targetMonster;
+    // M38: GameCanvas's own UI-flag statics resolveHudIconSet() reads
+    // (M29) -- unconfirmedAa now gets its first real live value
+    // (whether targetMonster is currently set); the other 3 stay false,
+    // still no reachable setter for any of them.
+    stormhold::HudState hudState;
 
     window.RunMessageLoop([&]() {
         if (clock.ConsumeTick()) {
@@ -211,16 +243,57 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             mKeyWasDown = mDown;
 
             gameTimeMs += stormhold::GameClock::kTickInterval.count();
+            stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
+
+            // M38: GameCanvas.refreshTargetMonster() (was e.java's a()).
+            targetMonster = stormhold::PlayerMovement::MonsterInFront(player, levelLookup, world);
+            hudState.unconfirmedAa = targetMonster.has_value();
+            if (targetMonster.has_value()) {
+                std::string name = monsters.TypeName(targetMonster->typeIndex);
+                size_t spaceAt = name.find(' ');
+                std::array<std::string, 2> lines =
+                    (spaceAt == std::string::npos)
+                        ? std::array<std::string, 2>{name, ""}
+                        : std::array<std::string, 2>{name.substr(0, spaceAt), name.substr(spaceAt + 1)};
+                stormhold::MessagePopup::Show(messagePopup, lines, 1, gameTimeMs);
+            }
+
+            // M38: GameCanvas.resolveTargetMonsterDeath() (was e.java's
+            // m()) -- currently unreachable in practice, since nothing
+            // yet lets the player actually damage targetMonster (no
+            // combat input is wired -- see this file's own header
+            // comment), but wired anyway, matching this port's own
+            // "wire the confirmed mechanic even ahead of its own
+            // trigger" precedent (M35-M37).
+            if (targetMonster.has_value() && targetMonster->currentHp <= 0) {
+                bool guaranteedDrop = (targetMonster->typeIndex == 41);
+                stormhold::MonsterRuntime::DeathDrop drop = stormhold::MonsterRuntime::OnDeath(
+                    *targetMonster, monsters, items, currentLevelMutable.tier, guaranteedDrop, nextSpawnIdCounter,
+                    combatRng);
+                if (drop.dropped) {
+                    std::array<int8_t, 7> record;
+                    for (size_t i = 0; i < record.size(); i++) record[i] = static_cast<int8_t>(drop.record[i]);
+                    stormhold::DungeonRuntime::AddDroppedItem(currentLevelMutable, world, record);
+                }
+                stormhold::DungeonRuntime::RemoveMonster(currentLevelMutable, world, targetMonster->spawnId);
+                if (stormhold::PlayerCombatStats::HasAilment(player, 4)) {
+                    int heal = 3 * player.coreStats[3] / 10;
+                    player.coreStats[2] = static_cast<int16_t>(
+                        std::min<int>(player.coreStats[2] + heal, player.coreStats[3]));
+                }
+                stormhold::MessagePopup::Show(messagePopup, {"Creature", "is dead!"}, 1, gameTimeMs);
+                targetMonster = std::nullopt;
+                hudState.unconfirmedAa = false;
+            }
 
             // M37: GameCanvas.run()'s own this.tickMonsterAI(frameStart)
             // call (see this file's own header comment on the relative-
             // order simplification). Only the player's OWN current level
             // ever ticks -- matching the real ESGame.G[]-indexed read
             // exactly, not an invented simplification.
-            stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
             bool showAttackMessage = stormhold::CombatResolution::TickMonstersOnLevel(
                 world, currentLevelMutable, player, charData, items, monsters, levels, gameTimeMs, combatRng,
-                ambushRng, ambushSpawnIdCounter);
+                ambushRng, nextSpawnIdCounter);
             if (showAttackMessage) {
                 stormhold::MessagePopup::Show(messagePopup, {"Creature", "attacks!"}, 2, gameTimeMs);
             }
@@ -256,7 +329,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             stormhold::VisibleObjectRenderer::RenderObjects(backbuffer, objectAssets, player);
             monsterRenderedLastFrame = stormhold::VisibleObjectRenderer::RenderMonsters(backbuffer, objectAssets, player);
             stormhold::GameRenderer::RenderStatusBars(backbuffer, stormhold::StatusBarPlan::Plan(player, charData));
-            int iconSet = stormhold::ResolveHudIconSet(stormhold::HudState{}, player, std::nullopt);
+            std::optional<stormhold::TargetMonsterInfo> targetMonsterInfo;
+            if (targetMonster.has_value()) {
+                targetMonsterInfo = stormhold::TargetMonsterInfo{targetMonster->tileX, targetMonster->tileY,
+                                                                  targetMonster->typeIndex};
+            }
+            int iconSet = stormhold::ResolveHudIconSet(hudState, player, targetMonsterInfo);
             stormhold::GameRenderer::RenderHud(backbuffer, hotbarAssets, iconSet);
 
             if (minimapZoomedOut) {
