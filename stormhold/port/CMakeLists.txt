@@ -30,18 +30,6 @@ add_library(stormhold_world STATIC
 target_include_directories(stormhold_world PUBLIC src)
 target_link_libraries(stormhold_world PUBLIC stormhold_assets)
 
-# M9: player character creation. M10: player movement -- see
-# docs/PORT_ROADMAP.md and src/player/.
-add_library(stormhold_player STATIC
-  src/player/player_combat_stats.cpp
-  src/player/player_creation.cpp
-  src/player/player_inventory.cpp
-  src/player/player_leveling.cpp
-  src/player/player_movement.cpp
-)
-target_include_directories(stormhold_player PUBLIC src)
-target_link_libraries(stormhold_player PUBLIC stormhold_assets stormhold_world)
-
 # M14: monster runtime state/AI-support (everything except tick()/
 # attack()'s Monster-side reads, which need Player too -- see
 # src/combat/) -- see docs/PORT_ROADMAP.md and src/monster/.
@@ -51,27 +39,39 @@ add_library(stormhold_monster STATIC
 target_include_directories(stormhold_monster PUBLIC src)
 target_link_libraries(stormhold_monster PUBLIC stormhold_assets stormhold_world)
 
-# M14: the two combat entry points needing both Player and Monster
-# (Player.attack(Monster)/Monster.tick(Player,now)) -- see
-# docs/PORT_ROADMAP.md and src/combat/.
-add_library(stormhold_combat STATIC
-  src/combat/combat_resolution.cpp
-)
-target_include_directories(stormhold_combat PUBLIC src)
-target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster)
-
 # M16: the live per-level Monster/chest/dropped-item registry
 # (WorldRegistry) plus Dungeon.java's own registry-management methods --
 # see docs/PORT_ROADMAP.md and src/dungeon/. Depends on stormhold_monster/
-# stormhold_world only; stormhold_player/stormhold_combat depend on
-# NEITHER of those going back to this (no cycle) -- wiring their own
-# deferred call sites to actually use a WorldRegistry is a later
-# milestone's job.
+# stormhold_world only -- stormhold_player/stormhold_combat depend on THIS
+# module (M17), never the other way, so there's no cycle.
 add_library(stormhold_dungeon STATIC
   src/dungeon/dungeon_runtime.cpp
 )
 target_include_directories(stormhold_dungeon PUBLIC src)
 target_link_libraries(stormhold_dungeon PUBLIC stormhold_monster stormhold_world)
+
+# M9: player character creation. M10: player movement. M17: player_movement
+# .h/player_inventory.h's own dropped-item auto-loot/drop registry wiring
+# -- see docs/PORT_ROADMAP.md and src/player/.
+add_library(stormhold_player STATIC
+  src/player/player_combat_stats.cpp
+  src/player/player_creation.cpp
+  src/player/player_inventory.cpp
+  src/player/player_leveling.cpp
+  src/player/player_movement.cpp
+)
+target_include_directories(stormhold_player PUBLIC src)
+target_link_libraries(stormhold_player PUBLIC stormhold_assets stormhold_world stormhold_dungeon)
+
+# M14: the two combat entry points needing both Player and Monster
+# (Player.attack(Monster)/Monster.tick(Player,now)). M17: target.store()/
+# Dungeon.spawnAmbushMonsters()'s own WorldRegistry wiring -- see
+# docs/PORT_ROADMAP.md and src/combat/.
+add_library(stormhold_combat STATIC
+  src/combat/combat_resolution.cpp
+)
+target_include_directories(stormhold_combat PUBLIC src)
+target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster stormhold_dungeon)
 
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
@@ -146,3 +146,7 @@ target_link_libraries(player_leveling_smoke PRIVATE stormhold_combat)
 # M16 milestone smoke test -- see src/tests/m16_dungeon_runtime_smoke.cpp.
 add_executable(dungeon_runtime_smoke src/tests/m16_dungeon_runtime_smoke.cpp)
 target_link_libraries(dungeon_runtime_smoke PRIVATE stormhold_dungeon)
+
+# M17 milestone smoke test -- see src/tests/m17_world_wiring_smoke.cpp.
+add_executable(world_wiring_smoke src/tests/m17_world_wiring_smoke.cpp)
+target_link_libraries(world_wiring_smoke PRIVATE stormhold_player)

@@ -104,7 +104,8 @@ bool PlayerInventory::TryPickUpItem(PlayerState& p, const std::array<int8_t, 7>&
 }
 
 std::optional<std::array<int8_t, 7>> PlayerInventory::DropInventoryItem(PlayerState& p, int slot,
-                                                                         const ItemDatabase& items) {
+                                                                         const ItemDatabase& items,
+                                                                         GeneratedLevel& level, WorldRegistry& world) {
     int itemId = std::abs(p.inventoryItemIds[static_cast<size_t>(slot)]);
     if (itemId == 109) {
         RemoveInventorySlot(p, slot, items);
@@ -121,6 +122,11 @@ std::optional<std::array<int8_t, 7>> PlayerInventory::DropInventoryItem(PlayerSt
     record[3] = static_cast<int8_t>(extended >> 8 & 0xFF);
     record[4] = static_cast<int8_t>(extended & 0xFF);
     record[6] = 3;
+
+    // Player.dropInventoryItem()'s own `this.currentDungeon().
+    // addDroppedItem(record)` call -- see this method's own declaration
+    // comment.
+    DungeonRuntime::AddDroppedItem(level, world, record);
 
     RemoveInventorySlot(p, slot, items);
     return record;

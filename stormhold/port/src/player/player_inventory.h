@@ -4,6 +4,7 @@
 #include <optional>
 
 #include "assets/item_database.h"
+#include "dungeon/dungeon_runtime.h"
 #include "player/player_state.h"
 
 namespace stormhold {
@@ -15,14 +16,24 @@ namespace stormhold {
 // character creation and this file share one real implementation instead
 // of two copies).
 //
-// **Deliberately NOT included here:** `dropInventoryItem()`'s real
-// counterpart, `rollShopOutcome()` (needs `skillValue()`/`rollOutcome()`,
-// combat-adjacent stat/RNG machinery -- a later combat milestone's job,
-// see docs/PORT_ROADMAP.md), and `tryPickUpItem()`'s/`dropInventoryItem()`
-// 's own world-registry side effect (`Dungeon.addDroppedItem()` -- no
-// persistent per-level dropped-item registry exists in this port yet,
-// same "caller supplies/owns world state" gap M10's `CommitMove` already
-// flagged for the analogous pickup case).
+// **M17: `DropInventoryItem` now wires its own real registry side
+// effect** (`this.currentDungeon().addDroppedItem(record)`), now that
+// `dungeon/dungeon_runtime.h`'s `WorldRegistry` exists (M16) --
+// takes the player's current `GeneratedLevel&`/`WorldRegistry&` as
+// explicit caller-supplied parameters (this port has no persistent
+// `ESGame`-equivalent session object to look `currentDungeon()` up from
+// itself), same "caller supplies/owns world state" pattern M10's
+// `CommitMove` already established for the analogous pickup case (which
+// M17 also wires, in `player/player_movement.h`).
+//
+// **Still deliberately NOT included here:** `rollShopOutcome()` (needs
+// `skillValue()`/`rollOutcome()`, combat-adjacent stat/RNG machinery -- a
+// later combat milestone's job, see docs/PORT_ROADMAP.md). `TryPickUpItem`
+// itself still does NOT touch any registry -- confirmed by reading the
+// original directly, `tryPickUpItem()` never did either; it's always the
+// CALLER (`commitMove()`) that removes the picked-up record from the
+// registry right after calling it, which is exactly what `player/
+// player_movement.h`'s own M17 wiring now does.
 class PlayerInventory {
 public:
     // Player.addInventoryItemRaw(itemId, packedValue, charge).
@@ -64,13 +75,18 @@ public:
     // `record` from wherever it came from.
     static bool TryPickUpItem(PlayerState& p, const std::array<int8_t, 7>& record);
 
-    // Player.dropInventoryItem(slot): builds the 7-byte record
-    // `Dungeon.addDroppedItem()` would receive and removes the slot --
-    // EXCEPT for item id 109 (a non-droppable special id), where no
-    // record is produced at all (empty optional) but the slot is still
-    // removed, matching the original exactly. The caller is responsible
-    // for actually inserting a non-empty result into a real dropped-item
-    // world registry, once one exists.
+    // Player.dropInventoryItem(slot): builds the 7-byte record and, EXCEPT
+    // for item id 109 (a non-droppable special id), registers it into
+    // `world` via DungeonRuntime::AddDroppedItem(level, world, record) --
+    // matching the original's own `this.currentDungeon().addDroppedItem
+    // (record)` call exactly, `level`/`world` standing in for that
+    // session lookup. For item id 109, no record is produced at all
+    // (empty optional) and `AddDroppedItem` is never called, but the slot
+    // is still removed -- matching the original exactly. `level` MUST be
+    // the GeneratedLevel for the player's OWN `p.currentLevel` (this
+    // method does not check `level.number == p.currentLevel` -- caller's
+    // responsibility, same trust-the-caller convention as `player/
+    // player_movement.h`'s LevelLookup).
     //
     // **A real, confirmed original-game quirk, preserved rather than
     // fixed:** bytes 3/4 pack the inventory slot's "packed value" (most
@@ -91,8 +107,8 @@ public:
     // round-trip cleanly -- see `player_inventory_smoke.cpp`'s own test
     // demonstrating the exact reconstructed value for a synthetic
     // out-of-range input.
-    static std::optional<std::array<int8_t, 7>> DropInventoryItem(PlayerState& p, int slot,
-                                                                    const ItemDatabase& items);
+    static std::optional<std::array<int8_t, 7>> DropInventoryItem(PlayerState& p, int slot, const ItemDatabase& items,
+                                                                    GeneratedLevel& level, WorldRegistry& world);
 
     // Player.hasCampMark().
     static bool HasCampMark(const PlayerState& p);

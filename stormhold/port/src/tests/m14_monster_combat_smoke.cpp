@@ -266,15 +266,29 @@ void TestPlayerAttack(const stormhold::CharacterData& charData, const stormhold:
 
     // Run several seeds; regardless of the roll, invariants must hold:
     // lastCombatTargetId always gets set, and HP only ever goes down
-    // (TakeDamage's own clamp-at-0 already covers the floor).
+    // (TakeDamage's own clamp-at-0 already covers the floor). A tier==0
+    // roll returns before EITHER TakeDamage or store() run at all, so
+    // store()'s registration is only expected on the seeds that actually
+    // connect -- tracked across the loop rather than asserted every time.
+    bool sawStore = false;
     for (int64_t seed = 0; seed < 20; seed++) {
         stormhold::MonsterState t = target;
+        stormhold::WorldRegistry world(37);
         stormhold::JavaRandom rng(seed);
-        stormhold::CombatResolution::PlayerAttack(player, t, charData, items, monsters, rng);
+        stormhold::CombatResolution::PlayerAttack(player, t, charData, items, monsters, rng, world);
         Expect(player.lastCombatTargetId == t.spawnId, "PlayerAttack should always set lastCombatTargetId");
         int hpAfter = t.currentHp & 0xFF;
         Expect(hpAfter <= hpBefore, "PlayerAttack should never heal the target");
+        // M17: on a connecting hit, target.store() should now actually
+        // register `t` into the registry, keyed by its own
+        // spawnId/dungeonLevel, reflecting the post-damage HP.
+        if (world.monsters[1].count(t.spawnId) == 1) {
+            sawStore = true;
+            stormhold::MonsterState stored = stormhold::MonsterRuntime::FromBytes(world.monsters[1][t.spawnId]);
+            Expect(stored.currentHp == t.currentHp, "the stored record should reflect the post-damage HP");
+        }
     }
+    Expect(sawStore, "at least one of 20 seeds should connect and trigger PlayerAttack's target.store() wiring (M17)");
 }
 
 void TestMonsterTick(const stormhold::CharacterData& charData, const stormhold::ItemDatabase& items,
@@ -282,16 +296,57 @@ void TestMonsterTick(const stormhold::CharacterData& charData, const stormhold::
     std::printf("-- MonsterTick against a real created character + a real monster type --\n");
     stormhold::PlayerState basePlayer = stormhold::PlayerCreation::CreateCharacter(0, "Defender", 7, charData, items);
     int16_t hpBefore = basePlayer.coreStats[2];
+    stormhold::GeneratedLevel level;
+    level.number = 2;
+    level.width = level.height = 35;
+    level.tiles.assign(35, std::vector<uint8_t>(35, 0));
+    stormhold::GeneratedRoomRect room;
+    room.x0 = room.y0 = 5;
+    room.x1 = room.y1 = 25;
+    level.rooms.push_back(room);
 
+    // Find a real monster type whose RAW column-11 (inflicted-ailment id)
+    // is 2 ("swarm curse") so at least some seeds actually exercise the
+    // M17 ambush-spawn wiring, not just types that never roll it.
+    int swarmType = 1;
+    bool foundSwarmType = false;
+    for (int t = 1; t <= monsters.TypeCount(); t++) {
+        if (monsters.RawStat(t, 11) == 2) {
+            swarmType = t;
+            foundSwarmType = true;
+            break;
+        }
+    }
+    if (!foundSwarmType) {
+        std::printf("  note: no real monster type has RAW column-11 == 2 -- ambush-spawn branch not exercised\n");
+    }
+
+    bool sawAmbushSpawn = false;
     for (int64_t seed = 0; seed < 20; seed++) {
         stormhold::PlayerState player = basePlayer;
-        stormhold::MonsterState m = stormhold::MonsterRuntime::Spawn(11, 1, 2, monsters);
+        stormhold::MonsterState m = stormhold::MonsterRuntime::Spawn(11, swarmType, 2, monsters);
+        stormhold::WorldRegistry world(37);
         stormhold::JavaRandom rng(seed);
-        stormhold::CombatResolution::MonsterTick(m, player, charData, items, monsters, 1000, rng);
+        stormhold::JavaRandom ambushRng(seed + 500);
+        int16_t spawnIdCounter = 100;
+        stormhold::CombatResolution::MonsterTick(m, player, charData, items, monsters, 1000, rng, level, world,
+                                                  ambushRng, spawnIdCounter);
         Expect(m.aiPhase == 1, "MonsterTick should always leave aiPhase at 1 (wound-up/waiting)");
         Expect(m.unconfirmedTimestamp == 1000, "MonsterTick should stamp the given `now` unconditionally");
         Expect(player.coreStats[2] <= hpBefore, "MonsterTick should never heal the player");
         Expect(player.coreStats[2] >= 0, "MonsterTick's HP write should stay clamped at >= 0");
+        // spawnIdCounter should only ever move forward, by exactly 3 per
+        // ambush trigger (or stay put on ticks that never triggered one).
+        Expect(spawnIdCounter == 100 || spawnIdCounter == 103,
+               "spawnIdCounter should either stay put or advance by exactly 3 (one ambush spawn batch)");
+        if (spawnIdCounter == 103) {
+            sawAmbushSpawn = true;
+            Expect(world.monsters[1].size() == 3, "an ambush trigger should register exactly 3 new monsters");
+        }
+    }
+    if (foundSwarmType) {
+        Expect(sawAmbushSpawn, "at least one of 20 seeds against a real swarm-curse monster type should trigger "
+                               "MonsterTick's ambush-spawn wiring (M17)");
     }
 }
 

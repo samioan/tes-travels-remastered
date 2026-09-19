@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <stdexcept>
 
+#include "player/player_inventory.h"
+
 namespace stormhold {
 
 void PlayerMovement::ComputeMoveTarget(PlayerState& p, int dir, const LevelLookup& levels) {
@@ -89,7 +91,8 @@ bool PlayerMovement::IsWalkableTileBits(uint8_t tileBits) {
     return (tileBits & 2) == 0;
 }
 
-bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& levels) {
+bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& levels, WorldRegistry& world,
+                                 const ItemDatabase& items) {
     if (p.coreStats[6] <= 0) return false;
     if (dir == 0) return false;
 
@@ -110,9 +113,8 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
     if (!IsWalkableTileBits(tileBits)) return false;
 
     // Deliberately NOT modeled here (see class header comment): the
-    // level-37-entry forced-respawn of the type-41 "roaming" monster,
-    // dropped-item auto-pickup, and Shop.wardenPresent's on-any-step
-    // clear.
+    // level-37-entry forced-respawn of the type-41 "roaming" monster, and
+    // Shop.wardenPresent's on-any-step clear.
 
     GeneratedLevel& oldLevel = levels(p.currentLevel);
     bool oldWalkable = IsWalkableTileBits(oldLevel.tiles[static_cast<size_t>(p.tileX)][static_cast<size_t>(p.tileY)]);
@@ -144,28 +146,95 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
         p.coreStats[6] = std::max<int16_t>(p.coreStats[6], 0);
     }
 
+    // Player.commitMove()'s dropped-item auto-loot block -- see this
+    // method's own declaration comment for the confirmed single-item/
+    // multi-item bit-test asymmetry preserved below exactly.
+    bool hasDroppedItem = (tileBits & 4) != 0;
+    if (hasDroppedItem) {
+        int levelIndex = p.currentLevel - 1;
+        int count = DungeonRuntime::CountDroppedItemsAt(world, levelIndex, p.tileX, p.tileY);
+        if (count == 1) {
+            std::array<int8_t, 7> record = *DungeonRuntime::FirstDroppedItemAt(world, levelIndex, p.tileX, p.tileY);
+            if (record[6] & 4) {
+                p.pendingLockedItemFlag = true;
+                return true;
+            }
+
+            bool picked = PlayerInventory::TryPickUpItem(p, record);
+            if (picked) {
+                DungeonRuntime::RemoveDroppedItem(target, world, record);
+                if (!(record[6] & 2)) {
+                    int itemIndex = record[2] - 1;
+                    if (items.category[static_cast<size_t>(itemIndex)] == 11) {
+                        p.giftPointsFound = static_cast<int16_t>(p.giftPointsFound +
+                                                                  items.subtype[static_cast<size_t>(itemIndex)]);
+                        // ESGame.getGameAdvancementLevel()/
+                        // checkOpenAndPopulateDungeons(): SKIPPED, see
+                        // this method's own declaration comment -- no
+                        // live ESGame session object exists yet.
+                    }
+                }
+            }
+        } else if (count > 1) {
+            // Snapshot the tile's records up front (matching
+            // Dungeon.droppedItemsAt()'s own Vector snapshot); `world`'s
+            // underlying list is then mutated in-place by
+            // RemoveDroppedItem as this loop runs, same as the original's
+            // own Enumeration-over-a-mutating-Vector shape.
+            std::vector<std::array<int8_t, 7>> records = DungeonRuntime::DroppedItemsAt(world, levelIndex, p.tileX, p.tileY);
+            for (const auto& record : records) {
+                if (record[6] & 4) {
+                    p.pendingLockedItemFlag = true;
+                    return true;
+                }
+
+                bool picked = PlayerInventory::TryPickUpItem(p, record);
+                if (picked) {
+                    DungeonRuntime::RemoveDroppedItem(target, world, record);
+                    // Real, confirmed asymmetry vs. the count==1 branch
+                    // above: THIS branch's gift-points condition is the
+                    // OPPOSITE bit test (`!= 0` here vs. `== 0` above) --
+                    // see this method's own declaration comment.
+                    if (record[6] & 2) {
+                        int itemIndex = record[2] - 1;
+                        if (items.category[static_cast<size_t>(itemIndex)] == 11) {
+                            p.giftPointsFound = static_cast<int16_t>(p.giftPointsFound +
+                                                                      items.subtype[static_cast<size_t>(itemIndex)]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (isStep && (tileBits & 8)) {
+        PlayerInventory::MarkCampAndReturnToTown(p);
+        p.justMarkedCamp = false;
+    }
+
     return true;
 }
 
-bool PlayerMovement::Move(PlayerState& p, int dir, bool strafe, const LevelLookup& levels) {
+bool PlayerMovement::Move(PlayerState& p, int dir, bool strafe, const LevelLookup& levels, WorldRegistry& world,
+                           const ItemDatabase& items) {
     if (p.coreStats[6] <= 0) return false;
 
     if (strafe && dir == 4) {
-        CommitMove(p, 4, levels);
-        bool result = CommitMove(p, 1, levels);
+        CommitMove(p, 4, levels, world, items);
+        bool result = CommitMove(p, 1, levels, world, items);
         bool savedCrossing = p.crossingLevelBoundary;
-        result = CommitMove(p, 3, levels);
+        result = CommitMove(p, 3, levels, world, items);
         p.crossingLevelBoundary = savedCrossing;
         return result;
     } else if (strafe && dir == 3) {
-        CommitMove(p, 3, levels);
-        bool result = CommitMove(p, 1, levels);
+        CommitMove(p, 3, levels, world, items);
+        bool result = CommitMove(p, 1, levels, world, items);
         bool savedCrossing = p.crossingLevelBoundary;
-        result = CommitMove(p, 4, levels);
+        result = CommitMove(p, 4, levels, world, items);
         p.crossingLevelBoundary = savedCrossing;
         return result;
     } else {
-        return CommitMove(p, dir, levels);
+        return CommitMove(p, dir, levels, world, items);
     }
 }
 

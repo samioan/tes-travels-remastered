@@ -137,9 +137,10 @@ void TestCombatAwardsSkillExp(const stormhold::CharacterData& charData, const st
     for (int64_t seed = 0; seed < 200 && !sawPlayerAttackExpGain; seed++) {
         stormhold::PlayerState player = stormhold::PlayerCreation::CreateCharacter(0, "ExpTest", 1, charData, items);
         stormhold::MonsterState target = stormhold::MonsterRuntime::Spawn(1, 1, 2, monsters);
+        stormhold::WorldRegistry world(37);
         int16_t expBefore = player.skills[0][2];
         stormhold::JavaRandom rng(seed);
-        stormhold::CombatResolution::PlayerAttack(player, target, charData, items, monsters, rng);
+        stormhold::CombatResolution::PlayerAttack(player, target, charData, items, monsters, rng, world);
         if (player.skills[0][2] > expBefore) sawPlayerAttackExpGain = true;
     }
     Expect(sawPlayerAttackExpGain, "at least one of 200 seeds should produce a tier>=2 PlayerAttack hit that awards skill exp");
@@ -147,13 +148,22 @@ void TestCombatAwardsSkillExp(const stormhold::CharacterData& charData, const st
     // MonsterTick: same idea, watching the player's DEFENSE skill (7,
     // since a Barbarian's equipped armor here isn't a shield -- see
     // M13's own DefenseSkillIndex test) for a successful-block exp award.
+    stormhold::GeneratedLevel level;
+    level.number = 2;
+    level.width = level.height = 35;
+    level.tiles.assign(35, std::vector<uint8_t>(35, 0));
+
     bool sawMonsterTickExpGain = false;
     for (int64_t seed = 0; seed < 200 && !sawMonsterTickExpGain; seed++) {
         stormhold::PlayerState player = stormhold::PlayerCreation::CreateCharacter(0, "ExpTest2", 1, charData, items);
         stormhold::MonsterState m = stormhold::MonsterRuntime::Spawn(2, 1, 2, monsters);
+        stormhold::WorldRegistry world(37);
         int16_t expBefore = player.skills[7][2];
         stormhold::JavaRandom rng(seed);
-        stormhold::CombatResolution::MonsterTick(m, player, charData, items, monsters, 0, rng);
+        stormhold::JavaRandom ambushRng(seed + 500);
+        int16_t spawnIdCounter = 0;
+        stormhold::CombatResolution::MonsterTick(m, player, charData, items, monsters, 0, rng, level, world,
+                                                  ambushRng, spawnIdCounter);
         if (player.skills[7][2] > expBefore) sawMonsterTickExpGain = true;
     }
     Expect(sawMonsterTickExpGain, "at least one of 200 seeds should produce a MonsterTick block that awards defense skill exp");

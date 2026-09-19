@@ -10,7 +10,7 @@ namespace stormhold {
 
 void CombatResolution::PlayerAttack(PlayerState& player, MonsterState& target, const CharacterData& charData,
                                      const ItemDatabase& items, const MonsterDatabase& monsterDb,
-                                     JavaRandom& globalRng) {
+                                     JavaRandom& globalRng, WorldRegistry& world) {
     player.lastCombatTargetId = target.spawnId;
     // byte type = target.typeIndex: read but never used in the original
     // (Player.java's attack()), not ported.
@@ -56,7 +56,7 @@ void CombatResolution::PlayerAttack(PlayerState& player, MonsterState& target, c
     dmg = std::max(dmg, 4);
     int scaled = dmg * static_cast<int>(MonsterRuntime::Stat(target, monsterDb, 14)) / 100;
     MonsterRuntime::TakeDamage(target, scaled);
-    // target.store(): SKIPPED, see monster/monster_runtime.h's class comment.
+    DungeonRuntime::StoreMonster(world, target);  // target.store()
 
     if (PlayerCombatStats::IsEffectActive(player, 7)) {
         if (target.scratch[1] == 0) {
@@ -89,7 +89,8 @@ void CombatResolution::PlayerAttack(PlayerState& player, MonsterState& target, c
 
 void CombatResolution::MonsterTick(MonsterState& m, PlayerState& player, const CharacterData& charData,
                                     const ItemDatabase& items, const MonsterDatabase& monsterDb, int64_t now,
-                                    JavaRandom& globalRng) {
+                                    JavaRandom& globalRng, GeneratedLevel& level, WorldRegistry& world,
+                                    JavaRandom& ambushRng, int16_t& spawnIdCounter) {
     m.aiPhase = 2;
     m.unconfirmedTimestamp = now;
 
@@ -151,8 +152,10 @@ void CombatResolution::MonsterTick(MonsterState& m, PlayerState& player, const C
             player.ailmentMask = static_cast<int8_t>(player.ailmentMask | (1 << bit));
             if (ailmentId != 1) {
                 if (ailmentId == 2) {
-                    // Dungeon.spawnAmbushMonsters(3): SKIPPED, see this
-                    // file's own class header comment.
+                    // Dungeon.spawnAmbushMonsters(3) -- see this method's
+                    // own declaration comment for why `level`/`ambushRng`
+                    // are separate parameters from `world`/`globalRng`.
+                    DungeonRuntime::SpawnAmbushMonsters(level, world, 3, ambushRng, monsterDb, spawnIdCounter);
                 } else if (ailmentId != 3) {
                     if (ailmentId == 4) {
                         player.vampirismTimer = 30000;

@@ -94,11 +94,17 @@ consumeLevelExp/the level-up attribute-point allocation ESGame.java
 performs inline rather than as a named Player method -- which finally
 unblocks the skill-exp awards M13/M14 had to defer, plus a confirmed
 finding that levelUpAttributeFlags bits are never cleared once spent),
-and M16 (a live per-level Monster/chest/dropped-item registry --
+M16 (a live per-level Monster/chest/dropped-item registry --
 WorldRegistry/DungeonRuntime, spawnId-keyed for monsters same as M14's
 own confirmed keying, position-keyed for chests -- plus a necessary
 GeneratedLevel data-model addition, its own room-rectangle list, needed
-by spawnAmbushMonsters' real room-bounded placement) are done, all
+by spawnAmbushMonsters' real room-bounded placement), and M17 (wiring
+that registry into player_movement's dropped-item auto-loot,
+player_inventory's DropInventoryItem, and combat_resolution's
+target.store()/spawnAmbushMonsters call sites -- including a real,
+confirmed bit-test asymmetry between the original's "one item on this
+tile" and "several items on this tile" dropped-item-pickup branches,
+preserved rather than unified) are done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are

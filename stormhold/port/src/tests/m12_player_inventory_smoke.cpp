@@ -74,17 +74,31 @@ void TestItemCharge(const stormhold::CharacterData& charData, const stormhold::I
     Expect(!giftCharged, "InitializeItemCharge should refuse a non-equipment-category item");
 }
 
+stormhold::GeneratedLevel MakeLevel(int number, int width = 35, int height = 35) {
+    stormhold::GeneratedLevel level;
+    level.number = number;
+    level.width = width;
+    level.height = height;
+    level.tiles.assign(static_cast<size_t>(width), std::vector<uint8_t>(static_cast<size_t>(height), 0));
+    return level;
+}
+
 void TestPickUpDropRoundTrip(const stormhold::CharacterData& charData, const stormhold::ItemDatabase& items) {
     std::printf("-- pick up / drop round trip --\n");
     stormhold::PlayerState p = stormhold::PlayerCreation::CreateCharacter(0, "Test", 7, charData, items);
     p.tileX = 5;
     p.tileY = 6;
+    p.currentLevel = 5;
+    stormhold::GeneratedLevel level = MakeLevel(5);
+    stormhold::WorldRegistry world(37);
 
-    auto record = stormhold::PlayerInventory::DropInventoryItem(p, 0, items);
+    auto record = stormhold::PlayerInventory::DropInventoryItem(p, 0, items, level, world);
     Expect(record.has_value(), "dropping a normal item should produce a record");
     Expect(p.inventoryCount == 1, "dropping should remove the slot");
     Expect((*record)[0] == 5 && (*record)[1] == 6, "the record should carry the player's tile position");
     Expect((*record)[2] == 1, "the record should carry the dropped item's id (Miner Pick = 1)");
+    Expect((level.tiles[5][6] & 4) != 0, "M17: DropInventoryItem should register the drop into the world registry");
+    Expect(world.droppedItems[4].size() == 1, "M17: the record should land in the level's own dropped-item list");
 
     stormhold::PlayerState fresh;
     bool pickedUp = stormhold::PlayerInventory::TryPickUpItem(fresh, *record);
@@ -93,23 +107,26 @@ void TestPickUpDropRoundTrip(const stormhold::CharacterData& charData, const sto
            "picking up should restore the same item id into a fresh inventory");
 
     // Item 109 -- non-droppable special id -- should still remove the
-    // slot but produce NO record at all.
+    // slot but produce NO record at all (and never touch the registry).
     stormhold::PlayerState p2 = stormhold::PlayerCreation::CreateCharacter(0, "Test", 7, charData, items);
     stormhold::PlayerInventory::AddInventoryItemRaw(p2, 109, 1, 0);
     int slot109 = p2.inventoryCount - 1;
-    auto record109 = stormhold::PlayerInventory::DropInventoryItem(p2, slot109, items);
+    auto record109 = stormhold::PlayerInventory::DropInventoryItem(p2, slot109, items, level, world);
     Expect(!record109.has_value(), "dropping item 109 should produce no record");
     Expect(p2.inventoryCount == 2, "dropping item 109 should still remove its slot");
+    Expect(world.droppedItems[4].size() == 1, "dropping item 109 should NOT add a second world registry entry");
 }
 
 void TestSpawnIdSignExtensionQuirk(const stormhold::ItemDatabase& items) {
     std::printf("-- confirmed sign-extension quirk in the packed-value round trip (preserved, not fixed) --\n");
+    stormhold::GeneratedLevel level = MakeLevel(6);
+    stormhold::WorldRegistry world(37);
 
     // Normal-range packed value (< 32768, e.g. a realistic Item.nextSpawnId()
     // result): round-trips correctly.
     stormhold::PlayerState pNormal;
     stormhold::PlayerInventory::AddInventoryItemRaw(pNormal, /*itemId=*/1, /*packedValue=*/7, /*charge=*/0);
-    auto recordNormal = stormhold::PlayerInventory::DropInventoryItem(pNormal, 0, items);
+    auto recordNormal = stormhold::PlayerInventory::DropInventoryItem(pNormal, 0, items, level, world);
     stormhold::PlayerState freshNormal;
     stormhold::PlayerInventory::TryPickUpItem(freshNormal, *recordNormal);
     Expect((freshNormal.inventoryItemData[0] >> 16) == 7, "a normal packed value (7) should round-trip correctly");
@@ -131,7 +148,7 @@ void TestSpawnIdSignExtensionQuirk(const stormhold::ItemDatabase& items) {
     // mechanical behavior exactly, demonstrated directly below.
     stormhold::PlayerState pHigh;
     stormhold::PlayerInventory::AddInventoryItemRaw(pHigh, /*itemId=*/1, /*packedValue=*/40000, /*charge=*/0);
-    auto recordHigh = stormhold::PlayerInventory::DropInventoryItem(pHigh, 0, items);
+    auto recordHigh = stormhold::PlayerInventory::DropInventoryItem(pHigh, 0, items, level, world);
     stormhold::PlayerState freshHigh;
     stormhold::PlayerInventory::TryPickUpItem(freshHigh, *recordHigh);
     int32_t reconstructed = freshHigh.inventoryItemData[0] >> 16;

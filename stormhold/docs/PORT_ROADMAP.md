@@ -913,18 +913,108 @@ read-through.
       monster-presence bit and falls inside SOME real room's bounding
       box, and `spawnIdCounter` advances by exactly 3).
 
+- [x] **M17 -- wiring the WorldRegistry into player_movement/
+      player_inventory/combat_resolution** (this session). Dawnstar's own
+      M23 equivalent -- the wiring half of the 3-way split M16 (dawnstar's
+      M22) deliberately deferred. No new module: `player/player_movement.h`,
+      `player/player_inventory.h`, and `combat/combat_resolution.h` all
+      gained `WorldRegistry&`/`GeneratedLevel&` parameters and now call
+      into M16's `DungeonRuntime` for real, replacing 4 separate
+      "SIMPLIFIED, no live registry yet" skip points flagged back at
+      M10/M12/M14:
+      - `PlayerMovement::CommitMove` now runs `Player.commitMove()`'s
+        dropped-item auto-loot block for real (single-item and
+        multi-item-on-one-tile cases, the locked-item early return, and
+        `giftPointsFound` accumulation), plus `autoMarkCampOnTile()` (a
+        bit-8 tile auto-triggers `PlayerInventory::MarkCampAndReturnToTown`
+        then immediately clears `justMarkedCamp` back to false, matching
+        the original's own sequence).
+      - `PlayerInventory::DropInventoryItem` now calls `DungeonRuntime::
+        AddDroppedItem` itself (`GeneratedLevel&`/`WorldRegistry&` added
+        as explicit params, standing in for the original's own
+        `this.currentDungeon()` session lookup) instead of just handing
+        the caller a record to insert somewhere.
+      - `CombatResolution::PlayerAttack` now calls `DungeonRuntime::
+        StoreMonster` for real (`target.store()`); `CombatResolution::
+        MonsterTick`'s ailment-2 ("swarm curse") branch now calls
+        `DungeonRuntime::SpawnAmbushMonsters` for real instead of a no-op.
+
+      **A real, confirmed bit-test asymmetry, found while transcribing
+      `commitMove()`'s dropped-item block character-by-character rather
+      than assuming its "one item here" and "several items here" branches
+      share one rule:** both branches gate whether a picked-up gift-
+      category item's subtype adds to `giftPointsFound` on `record[6]`'s
+      bit 2 ("was this item already possessed before" -- set by
+      `Player.dropInventoryItem()`, clear on a fresh monster-death/chest
+      drop) -- but the SINGLE-item branch tests `(record[6] & 2) == 0`
+      (grants points only for a NEVER-possessed item) while the
+      MULTIPLE-items-on-one-tile branch tests `(record[6] & 2) != 0` (the
+      OPPOSITE: grants points only for an ALREADY-possessed item).
+      Reads like a copy-paste inversion bug in the original, not
+      something this port introduced -- preserved exactly rather than
+      unified into one consistent rule, with `m17_world_wiring_smoke.cpp`
+      demonstrating both branches' opposite behavior directly against the
+      same kind of item.
+
+      **Two related side effects `Player.commitMove()`'s dropped-item
+      block also performs, deliberately left SKIPPED (not silently
+      dropped -- flagged at their exact omission point):**
+      `ESGame.getGameAdvancementLevel()`/`checkOpenAndPopulateDungeons()`
+      -- the progressive zone-opening system a gift-point gain can
+      trigger -- has no live `ESGame` session object to open zones on in
+      this port; `p.giftPointsFound` itself still accumulates correctly
+      (pure `PlayerState` arithmetic), only the dungeon-opening side
+      effect is dropped. And `Shop.wardenPresent`'s on-any-step clear /
+      the level-37-entry forced-respawn of the type-41 "roaming" monster
+      both stay unwired despite `WorldRegistry`/`WardenState` individually
+      now existing -- wiring a `WardenState&` through `CommitMove` (and
+      the level-37 special case) is scoped OUT of this milestone on
+      purpose, matching what docs/PORT_ROADMAP.md's own "what's next"
+      already committed M17 to, rather than silently expanding scope.
+
+      **`CombatResolution::MonsterTick`'s new `ambushRng` parameter is
+      deliberately a SEPARATE `JavaRandom&` from `globalRng`:** the real
+      `Dungeon.spawnAmbushMonsters()` draws from that `Dungeon` INSTANCE's
+      own persisted `this.rng` (the same per-level generator stream
+      `Dungeon.generate()` seeded once, that keeps advancing across the
+      level's whole live lifetime), never `ESGame`'s shared roll RNG
+      `globalRng` stands in for here -- this port has no persisted
+      per-level RNG object at all (`GeneratedLevel` doesn't carry one),
+      so the caller supplies whichever stream stands in for that level's
+      own, same "caller supplies/owns world state" pattern as everywhere
+      else in this port.
+
+      Verified by a new `world_wiring_smoke.exe` (single-item gift pickup
+      granting `giftPointsFound`, the same but already-possessed
+      correctly granting NOTHING, a locked item setting
+      `pendingLockedItemFlag` and skipping pickup with an early `return
+      true`, the confirmed multi-item bit-test asymmetry demonstrated
+      directly against two real category-11 items with distinct
+      subtypes, a non-gift item picking up cleanly with zero
+      `giftPointsFound` change, the auto-camp-mark side effect capturing
+      the JUST-STEPPED-ONTO tile as the bookmark, and a full drop-then-
+      walk-away-then-walk-back-and-re-pick-up round trip against a real
+      created character) plus new coverage added directly to the
+      existing `m14_monster_combat_smoke.cpp` (`PlayerAttack`'s
+      `target.store()` now actually registers the post-damage record on
+      any connecting hit across 20 seeds; `MonsterTick` against a real
+      monster type whose RAW column-11 is confirmed 2 ("swarm curse"),
+      confirming `SpawnAmbushMonsters` fires and registers exactly 3 new
+      monsters on at least one of 20 seeds) -- `RollOutcome`/
+      `SpawnAmbushMonsters`'s own RNG-order/room-bounding-box correctness
+      aren't re-verified here, already covered by M13/M16.
+
 ## What's next
 
-M17 onward: wiring `player/player_movement.h` (dropped-item auto-loot +
-`giftPointsFound` accumulation), `player/player_inventory.h`
-(`TryPickUpItem`/`DropInventoryItem`'s own registry side), and
-`combat/combat_resolution.h` (`target.store()`,
-`Dungeon.spawnAmbushMonsters()`'s now-real call site) to actually use
-this milestone's `WorldRegistry`; then registering M6's generation-time
-spawn lists into one (dawnstar's own M24 equivalent); and eventually the
+M18 onward: registering M6's generation-time `GeneratedMonsterSpawn`/
+`GeneratedChestSpawn` spawn lists into a `WorldRegistry` (dawnstar's own
+M24 equivalent -- the last piece of the 3-way registry split M16/M17
+worked through), then likely a `WardenState`-into-movement wiring pass
+(`Shop.wardenPresent`'s on-any-step clear, deliberately left out of M17)
+and the level-37-entry forced-respawn special case; and eventually the
 player save format (Monster's own `readFrom`/`writeTo` included, plus
 whatever caller actually drives `tryRankUpSkills()`/`Monster.tick()` in
 the original -- still not recovered, see `GameCanvas.java`'s remaining
 stubbed methods) -- following dawnstar's own later milestones roughly
 but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16 already found.
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17 already found.

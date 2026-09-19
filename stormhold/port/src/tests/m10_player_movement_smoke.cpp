@@ -63,12 +63,13 @@ void TestTurning() {
     Expect(p.facing == 1, "4 opposite turns should return to the original facing");
 }
 
-void TestStepWithinLevel() {
+void TestStepWithinLevel(const stormhold::ItemDatabase& items) {
     std::printf("-- step within a level (no boundary) --\n");
     stormhold::GeneratedLevel level = MakeLevel(5, 35, 35);
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    stormhold::WorldRegistry world(37);
 
     struct Case {
         int facing;
@@ -83,14 +84,14 @@ void TestStepWithinLevel() {
         p.tileY = 17;
         p.facing = static_cast<int8_t>(c.facing);
         p.coreStats[6] = 100;
-        bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup);
+        bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
         Expect(moved, "forward step in an open level should succeed");
         Expect(p.tileX == 17 + c.dx && p.tileY == 17 + c.dy, "forward step should move exactly one tile per facing");
         Expect(p.facing == c.facing, "a plain step should not change facing");
         Expect(cache.at(5).visited, "CommitMove should mark the target level visited");
 
         // Backward step should undo it.
-        bool movedBack = stormhold::PlayerMovement::CommitMove(p, 2, lookup);
+        bool movedBack = stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items);
         Expect(movedBack, "backward step should succeed");
         Expect(p.tileX == 17 && p.tileY == 17, "backward step should return to the starting tile");
     }
@@ -151,13 +152,14 @@ void TestStandardToStandardCrossing() {
     Expect(p.pendingTileY == 17, "standard->standard Y should pass through unchanged (both 35x35)");
 }
 
-void TestWalkabilityGating() {
+void TestWalkabilityGating(const stormhold::ItemDatabase& items) {
     std::printf("-- walkability gating --\n");
     stormhold::GeneratedLevel level = MakeLevel(5, 35, 35);
     level.tiles[18][17] = 1;  // wall, directly east of (17,17)
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    stormhold::WorldRegistry world(37);
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -165,19 +167,20 @@ void TestWalkabilityGating() {
     p.tileY = 17;
     p.facing = 2;  // east, straight into the wall
     int16_t fatigueBefore = p.coreStats[6] = 100;
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
     Expect(!moved, "stepping into a wall tile should fail");
     Expect(p.tileX == 17 && p.tileY == 17, "position should not change on a blocked move");
     Expect(p.coreStats[6] == fatigueBefore, "fatigue should not be spent on a blocked move");
 }
 
-void TestEnteredLeftLevelZoneFinding() {
+void TestEnteredLeftLevelZoneFinding(const stormhold::ItemDatabase& items) {
     std::printf("-- enteredNewLevelZone / leftLevelZone (a confirmed dead-code finding) --\n");
     stormhold::GeneratedLevel level = MakeLevel(5, 35, 35);
     level.tiles[17][17] = 32;  // player's own starting tile: blocked (unwalkable)
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    stormhold::WorldRegistry world(37);
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -185,7 +188,7 @@ void TestEnteredLeftLevelZoneFinding() {
     p.tileY = 17;
     p.facing = 2;  // step east onto a plain walkable tile
     p.coreStats[6] = 100;
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
     Expect(moved, "should be able to step off an unwalkable starting tile onto a walkable one");
     Expect(p.enteredNewLevelZone, "enteredNewLevelZone should be true (old unwalkable, new walkable)");
     Expect(!p.leftLevelZone,
@@ -215,12 +218,13 @@ void TestNoNeighborThrows() {
     Expect(threw, "crossing an edge with no neighbor should throw rather than silently misbehave");
 }
 
-void TestFatigueCost() {
+void TestFatigueCost(const stormhold::ItemDatabase& items) {
     std::printf("-- fatigue cost + ailment multiplier --\n");
     stormhold::GeneratedLevel level = MakeLevel(5, 35, 35);
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    stormhold::WorldRegistry world(37);
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -228,27 +232,28 @@ void TestFatigueCost() {
     p.tileY = 17;
     p.facing = 2;
     p.coreStats[6] = 5;
-    stormhold::PlayerMovement::CommitMove(p, 1, lookup);
+    stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
     Expect(p.coreStats[6] == 4, "a plain step should cost 1 fatigue with no ailment");
 
     p.ailmentMask = 1;  // bit 0: Stone Blood
-    stormhold::PlayerMovement::CommitMove(p, 2, lookup);
+    stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items);
     Expect(p.coreStats[6] == 1, "a step under ailment bit 0 should cost 3 fatigue (4 - 3 = 1)");
 
-    stormhold::PlayerMovement::CommitMove(p, 1, lookup);
+    stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
     Expect(p.coreStats[6] == 0, "fatigue should clamp at 0, not go negative");
 
     p.ailmentMask = 0;
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 2, lookup);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items);
     Expect(!moved, "no move should succeed once fatigue is depleted");
 }
 
-void TestStrafe() {
+void TestStrafe(const stormhold::ItemDatabase& items) {
     std::printf("-- strafe (turn, step, turn back) --\n");
     stormhold::GeneratedLevel level = MakeLevel(5, 35, 35);
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    stormhold::WorldRegistry world(37);
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -256,7 +261,7 @@ void TestStrafe() {
     p.tileY = 17;
     p.facing = 1;  // north
     p.coreStats[6] = 100;
-    stormhold::PlayerMovement::Move(p, 3, /*strafe=*/true, lookup);  // strafe right
+    stormhold::PlayerMovement::Move(p, 3, /*strafe=*/true, lookup, world, items);  // strafe right
 
     // Facing north, turning right (dir 3) faces east, stepping forward
     // moves +X, turning back restores facing to north.
@@ -283,12 +288,13 @@ void TestAgainstRealData(const std::string& root) {
 
     stormhold::PlayerState p;  // hub spawn: level 1, (9, 10), facing 1 (M9's own defaults)
     p.coreStats[6] = 200;
+    stormhold::WorldRegistry world(37);
 
     int succeeded = 0, failed = 0, thrown = 0;
     int dirs[] = {1, 3, 3, 1, 2, 4, 1, 1, 3, 1};
     for (int dir : dirs) {
         try {
-            bool moved = stormhold::PlayerMovement::Move(p, dir, /*strafe=*/false, lookup);
+            bool moved = stormhold::PlayerMovement::Move(p, dir, /*strafe=*/false, lookup, world, items);
             if (moved) {
                 succeeded++;
             } else {
@@ -310,15 +316,18 @@ int main(int argc, char** argv) {
     std::string root = argc > 1 ? argv[1] : "../../extracted";
 
     try {
+        stormhold::AssetRoot assets(root);
+        stormhold::ItemDatabase items = stormhold::ItemDatabase::Load(assets);
+
         TestTurning();
-        TestStepWithinLevel();
+        TestStepWithinLevel(items);
         TestHubToStandardCrossing();
         TestStandardToStandardCrossing();
-        TestWalkabilityGating();
-        TestEnteredLeftLevelZoneFinding();
+        TestWalkabilityGating(items);
+        TestEnteredLeftLevelZoneFinding(items);
         TestNoNeighborThrows();
-        TestFatigueCost();
-        TestStrafe();
+        TestFatigueCost(items);
+        TestStrafe(items);
         TestAgainstRealData(root);
 
         if (!g_ok) {

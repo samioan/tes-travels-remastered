@@ -107,6 +107,16 @@ struct PlayerState {
     // bookmark itself.
     bool justMarkedCamp = false;
 
+    // --- M17: touched by player/player_movement.h's CommitMove. Player
+    // .java's own `pendingLockedItemFlag` is a STATIC field (class-level,
+    // not per-instance) -- modeled here on PlayerState anyway since this
+    // port only ever has one live Player at a time, the same reasoning
+    // that already applies to every other "really static in the original"
+    // field this port carries on PlayerState. Set true (and CommitMove
+    // returns early, skipping the rest of its own dropped-item handling)
+    // when the tile's dropped item is flagged locked (record[6] bit 4).
+    bool pendingLockedItemFlag = false;
+
     // --- Deferred to a later milestone, none touched by character
     // creation, core movement, or inventory: the corridor-occlusion view
     // grid (corridorView, PlayerMovement doesn't call
