@@ -21,4 +21,6 @@ __pycache__/
 /dawnstar/port/dist/
 /oblivion/port/build/
 /stormhold/port/build/
+/stormhold/port/build-dist/
+/stormhold/port/dist/
 *.log

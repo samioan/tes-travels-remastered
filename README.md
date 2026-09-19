@@ -72,8 +72,9 @@ its own launcher; see "Playing it" below.
 **Stormhold's phase 1 is done** the same way (see
 `stormhold/docs/CLASS_MAP.md`), reusing most of Dawnstar's own findings
 where the two games' shared Vir2L "ngame" engine matches, documenting the
-real differences where it doesn't. Its own PC port (phase 3) hasn't
-started.
+real differences where it doesn't. **Phase 3 (the PC port) is underway**
+-- movement, combat and starting a new character are playable, with its
+own launcher; see "Playing it" below.
 
 **Oblivion's phase 1 has not started.** Its `.scr`/`.cml`/`.jtm` formats
 are fully opaque and will need the Superscape engine's own parsing code
@@ -81,9 +82,14 @@ read through first.
 
 ## Playing it
 
-Dawnstar has a real, downloadable build: a small launcher
-(`Dawnstar.exe`) that asks for your own copy of `TEST-Dawnstar.jar`,
-unpacks it, and starts the game -- no other setup, and it updates itself
-from this repo's [Releases](https://github.com/samioan/tes-travels-remastered/releases)
-page (tagged `dawnstar-v*`). See `dawnstar/port/src/launcher/` for how it
-works and `dawnstar/docs/ITCH_PAGE.md` for the itch.io page copy.
+Both Dawnstar and Stormhold have a real, downloadable build: a small
+launcher (`Dawnstar.exe`/`Stormhold.exe`) that asks for your own copy of
+the matching `.jar`, unpacks it, and starts the game -- no other setup,
+and each updates itself from this repo's
+[Releases](https://github.com/samioan/tes-travels-remastered/releases)
+page (tagged `dawnstar-v*`/`stormhold-v*` respectively, so the two never
+fight over "the latest release"). See `dawnstar/port/src/launcher/`/
+`stormhold/port/src/launcher/` for how each one works and
+`dawnstar/docs/ITCH_PAGE.md` for the itch.io page copy. Stormhold is
+still missing saving/loading, the inventory/skills/spells menu, and NPCs
+-- see `stormhold/docs/PORT_ROADMAP.md` for exactly what's ported so far.

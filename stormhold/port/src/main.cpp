@@ -150,6 +150,9 @@
 #include "world/dungeon_generator.h"
 #include "world/warden.h"
 
+#include <cstdlib>
+#include <filesystem>
+
 namespace {
 
 // argv[1], if given, overrides the asset root; falls back to the
@@ -165,6 +168,55 @@ std::string ResolveAssetRoot() {
         return narrow;
     }
     return "../../extracted";
+}
+
+// STORMHOLD_USER_DIR (set by the launcher to <install>/user, mirroring
+// dawnstar's own DAWNSTAR_USER_DIR/shadowkey-decomp's SK_USER_DIR) is
+// where the log file lives. Unset -- a plain dev build -- stays exactly
+// where it's always been: no log file at all.
+std::string ResolveUserDir() {
+    char* value = nullptr;
+    size_t size = 0;
+    // _dupenv_s rather than std::getenv: MSVC's own /W4 flags getenv as
+    // C4996 (not thread-safe against a concurrent SetEnvironmentVariable),
+    // and this project holds a real zero-/W4-warnings bar (see
+    // docs/PORT_ROADMAP.md's own "Decisions carried through every
+    // milestone").
+    if (_dupenv_s(&value, &size, "STORMHOLD_USER_DIR") != 0 || !value) return std::string();
+    std::string result(value);
+    free(value);
+    return result;
+}
+
+// STORMHOLD_SCALE (set by the launcher from its own window-size picker,
+// mirroring DAWNSTAR_SCALE/SK_SCALE) overrides the window's integer scale
+// over the native 176x208 backbuffer. Unset, or garbage, keeps the *2 this
+// file hardcoded before the launcher existed.
+int ResolveScale() {
+    char* value = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&value, &size, "STORMHOLD_SCALE") != 0 || !value) return 2;
+    int scale = std::atoi(value);
+    free(value);
+    if (scale < 1) scale = 1;
+    if (scale > 8) scale = 8;
+    return scale;
+}
+
+// Redirects stdout/stderr into <userDir>/stormhold_port.log so a bug
+// report has something to attach -- this is a WINAPI-subsystem app with no
+// console to print to otherwise. A no-op (same as running with no launcher
+// at all) when userDir is empty.
+void OpenLogFile(const std::string& userDir) {
+    if (userDir.empty()) return;
+    std::error_code error;
+    std::filesystem::create_directories(userDir, error);
+    const std::string path = (std::filesystem::path(userDir) / "stormhold_port.log").string();
+    FILE* unused = nullptr;
+    freopen_s(&unused, path.c_str(), "a", stdout);
+    freopen_s(&unused, path.c_str(), "a", stderr);
+    std::printf("--- stormhold_port starting ---\n");
+    std::fflush(stdout);
 }
 
 // Builds all 37 levels (M6's DungeonGenerator: BuildHubLevel for the hub,
@@ -193,6 +245,10 @@ std::vector<stormhold::GeneratedLevel> BuildWorld(const stormhold::DungeonGeomet
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+    const std::string userDir = ResolveUserDir();
+    OpenLogFile(userDir);
+    const int scale = ResolveScale();
+
     const std::string assetRootPath = ResolveAssetRoot();
     stormhold::AssetRoot assetRoot(assetRootPath);
 
@@ -221,7 +277,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     stormhold::HotbarAssets hotbarAssets = stormhold::HotbarAssets::Load(assetRoot);
     stormhold::VisibleObjectAssets objectAssets = stormhold::VisibleObjectAssets::Load(assetRoot);
 
-    stormhold::Window window(stormhold::Backbuffer::kWidth * 2, stormhold::Backbuffer::kHeight * 2,
+    stormhold::Window window(stormhold::Backbuffer::kWidth * scale, stormhold::Backbuffer::kHeight * scale,
                               L"Stormhold Port");
     stormhold::GameClock clock;
     stormhold::Backbuffer backbuffer;

@@ -1,20 +1,22 @@
 name: CI
 
-# Two things this can actually prove on a machine that has no game data:
+# Two things this can actually prove on a machine that has no game data,
+# per game (Dawnstar and Stormhold, each its own job so one game's failure
+# doesn't hide the other's result):
 #
 #   * the Debug build compiles, every target -- both the game and the
 #     launcher, plus every milestone's own smoke test.
-#   * the shipping configuration (DAWNSTAR_DIST=ON, Release, static CRT)
-#     also compiles, and the resulting port/dist/ passes check_dist.ps1
-#     (no accidentally-shipped game data, no VC++ runtime dependency, the
+#   * the shipping configuration (*_DIST=ON, Release, static CRT) also
+#     compiles, and the resulting port/dist/ passes check_dist.ps1 (no
+#     accidentally-shipped game data, no VC++ runtime dependency, the
 #     launcher's artwork actually embedded).
 #   * the launcher's own smoke test (config round-trip, jar install
 #     against a synthetic jar, the zip reader, version comparison, the
-#     tag-prefix-filtered release parser) passes -- the one dawnstar smoke
-#     test that needs neither the real game data nor a network call.
+#     tag-prefix-filtered release parser) passes -- the one smoke test per
+#     game that needs neither the real game data nor a network call.
 #
-# Scoped to Dawnstar only: Oblivion and Stormhold have no buildable port
-# yet (see NOTICE.md). Add their own build steps here once they do.
+# Oblivion has no buildable port yet (see NOTICE.md) and so no job here --
+# add one once it does, following either job below as the template.
 
 on:
   push:
@@ -23,7 +25,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  windows:
+  windows-dawnstar:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,4 +63,34 @@ jobs:
         with:
           name: dawnstar-remastered-ci-${{ github.run_number }}
           path: dawnstar/port/dist/
+          retention-days: 14
+
+  windows-stormhold:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y --no-progress
+
+      # stormhold/port/vcvars.bat finds whatever Visual Studio this machine
+      # has through vswhere, same as dawnstar/port/vcvars.bat above.
+      - name: Build Stormhold (Debug, all targets)
+        run: .\stormhold\port\build.bat
+
+      - name: Stormhold launcher smoke test
+        working-directory: stormhold/port/build
+        run: .\launcher_smoke.exe
+
+      - name: Build Stormhold (shipping configuration)
+        run: .\stormhold\port\build_dist.bat ci-${{ github.run_number }}
+
+      - name: Check the Stormhold package
+        run: .\stormhold\port\check_dist.ps1
+
+      - name: Upload the Stormhold build
+        uses: actions/upload-artifact@v4
+        with:
+          name: stormhold-remastered-ci-${{ github.run_number }}
+          path: stormhold/port/dist/
           retention-days: 14

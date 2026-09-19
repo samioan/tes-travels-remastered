@@ -1,0 +1,26 @@
+#include "resource.h"
+
+// The banner artwork, decoded at startup through stb_image -- see
+// banner.h for why this is a PNG rather than a JPEG/WIC decode.
+IDR_BANNER RCDATA "assets/banner.png"
+
+// The taskbar/Explorer icon: generated from the same artwork by
+// tools/make_icon.py. Must come before the manifest below -- the
+// lowest-numbered icon resource is the one Explorer shows for the file,
+// and IDI_APPICON is the only one here either way.
+IDI_APPICON ICON "assets/stormhold.ico"
+
+// The application manifest: visual styles for the owner-drawn buttons'
+// focus/frame metrics, and per-monitor DPI so the artwork is resampled at
+// the monitor's real density instead of being stretched by the compositor.
+//
+// Embedded here rather than passed to the linker with /MANIFESTINPUT: CMake
+// does not hand the link line to link.exe directly, it wraps it in
+// `cmake -E vs_link_exe`, which then runs mt.exe itself with its own
+// (empty) manifest list and fails. Supplying it as a resource and turning
+// CMake's generated manifest off with /MANIFEST:NO keeps one RT_MANIFEST in
+// the image, which is the limit.
+//
+// 1 is CREATEPROCESS_MANIFEST_RESOURCE_ID, 24 is RT_MANIFEST; both are
+// spelled numerically because winuser.h is not included here.
+1 24 "launcher.manifest"

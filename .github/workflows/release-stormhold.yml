@@ -1,0 +1,113 @@
+name: Release Stormhold
+
+# Push a tag, get a downloadable release:
+#
+#     git tag stormhold-v0.1.0 && git push origin stormhold-v0.1.0
+#
+# The "stormhold-v" prefix is what lets this repo publish Dawnstar's and
+# Oblivion's own releases without them fighting over "the latest release"
+# -- the launcher's own update check filters by this exact prefix (see
+# stormhold/port/src/launcher/update_check.h). The tag is the version --
+# it is what gets compiled into the launcher and shown in its corner, so a
+# release can always be identified from a screenshot. Nothing needs
+# bumping by hand anywhere. Sibling of release.yml (Dawnstar's own
+# identical workflow), scoped to stormhold/ throughout.
+
+on:
+  push:
+    tags: ['stormhold-v*']
+  # So a release can be re-cut without moving the tag, e.g. if the upload
+  # failed rather than the build.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and release (e.g. stormhold-v0.1.0)'
+        required: true
+
+permissions:
+  contents: write   # to create the release and upload to it
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Install Ninja
+        run: choco install ninja -y --no-progress
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = if ($env:INPUT_TAG) { $env:INPUT_TAG } else { $env:GITHUB_REF_NAME }
+          # The tag carries a leading "stormhold-v" by convention; the
+          # version the launcher displays does not.
+          if ($tag -notmatch '^stormhold-v(\d+\.\d+\.\d+.*)$') {
+            throw "tag '$tag' is not a Stormhold version tag -- expected something like stormhold-v0.1.0"
+          }
+          $version = $Matches[1]
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "zip=StormholdRemastered-$tag-win64.zip" >> $env:GITHUB_OUTPUT
+          Write-Host "building $tag as version $version"
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+
+      # A release that fails its own build should not exist.
+      - name: Build and test (Debug)
+        run: .\stormhold\port\build.bat
+
+      # cd into build/ first: the test's own asset paths assume it (see
+      # ci.yml's own copy of this note).
+      - name: Stormhold launcher smoke test
+        working-directory: stormhold/port/build
+        run: .\launcher_smoke.exe
+
+      - name: Build the release
+        run: .\stormhold\port\build_dist.bat ${{ steps.version.outputs.version }}
+
+      - name: Check the package
+        run: .\stormhold\port\check_dist.ps1
+
+      - name: Zip it
+        shell: pwsh
+        run: |
+          Compress-Archive -Path stormhold/port/dist/* `
+                           -DestinationPath ${{ steps.version.outputs.zip }} `
+                           -CompressionLevel Optimal
+          Get-Item ${{ steps.version.outputs.zip }} |
+            ForEach-Object { "{0}: {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      # `gh` is on the runner already, so this needs no third-party action.
+      # --verify-tag so a typo cannot invent a tag that does not exist.
+      - name: Publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $notesPath = "release_notes.md"
+          # Both encodings explicit: the template is UTF-8 without a BOM and
+          # may have typographic punctuation in it, which Windows PowerShell
+          # would read as the ANSI codepage and mangle.
+          (Get-Content .github/release_notes_template_stormhold.md -Raw -Encoding utf8).Replace('{{TAG}}', $tag) |
+            Set-Content $notesPath -Encoding utf8
+          $existing = gh release view $tag --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "release $tag already exists -- replacing its asset"
+            gh release upload $tag ${{ steps.version.outputs.zip }} --clobber
+          } else {
+            # Pre-release while the major version is 0. Tagging
+            # stormhold-v1.0.0 flips it automatically -- no workflow edit
+            # needed on the day that happens. The flag can also be flipped
+            # by hand afterwards without rebuilding.
+            $ghArgs = @('release', 'create', $tag, '${{ steps.version.outputs.zip }}',
+                        '--title', "Stormhold Remastered ${{ steps.version.outputs.version }}",
+                        '--notes-file', $notesPath, '--verify-tag')
+            if ("${{ steps.version.outputs.version }}" -match '^0\.' -or
+                "${{ steps.version.outputs.version }}" -match '-') { $ghArgs += '--prerelease' }
+            gh @ghArgs
+          }
