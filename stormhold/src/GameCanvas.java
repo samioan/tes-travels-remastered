@@ -244,7 +244,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // matches dawnstar's `messageShownAt`.
    static long messageShownAt = 0L;
    static String[] messageLines = null;
-   private static int unconfirmed_X = 0;
+   // Confirmed (phase-3 port M30): the message popup's own current
+   // priority -- showMessage()'s priority-gate state (`X` in decompiled/
+   // e.java), matches dawnstar's `messagePriority`.
+   private static int messagePriority = 0;
    static boolean unconfirmed_af = false;
    private static boolean autoRepaintEnabled = true;
    private static boolean unconfirmed_at = false;
@@ -1078,8 +1081,8 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // pass's wrong "paintMessagePopup()" (which was actually
    // paintFlashOverlays() below). This is the real message-popup box:
    // a 2-line rounded rect showing messageLines[0]/[1] while
-   // unconfirmed_ad is set (by showMessage(), still a stub -- see its
-   // own TODO below).
+   // unconfirmed_ad is set (by showMessage(), confirmed and transcribed
+   // -- phase-3 port M30).
    private void paintMessagePopup(Graphics g) {
       if (unconfirmed_ad) {
          g.setColor(13080935);
@@ -1264,12 +1267,23 @@ public class GameCanvas extends FullCanvas implements Runnable {
       }
    }
 
-   // Shows a message popup (2-line String[]) if priority `pri` beats
-   // whatever's currently showing -- signature preserved from a confirmed
-   // run() call site (`this.a(N, 1)`/`this.showMessage(MSG_REST_DISTURBED,
-   // 1)`), body not yet transcribed.
+   // Confirmed (phase-3 port M30): byte-for-byte from decompiled/e.java's
+   // a(String[],int). A message of priority `priority` only replaces
+   // whatever's currently showing if it's strictly higher (equal or
+   // lower is rejected while `priority >= 0`); a negative priority is
+   // an "always show, max priority" override, stored as 10 rather than
+   // the negative value itself. Every real call site immediately
+   // follows a `true` return with `messageShownAt = now; unconfirmed_ad
+   // = true;` (see this file's own header comment) -- not folded in
+   // here, kept exactly as the original's own separate lines.
    private boolean showMessage(String[] lines, int priority) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's a(String[],int))");
+      if (priority <= messagePriority && priority >= 0) {
+         return false;
+      }
+
+      messageLines = lines;
+      messagePriority = priority < 0 ? 10 : priority;
+      return true;
    }
 
    // Per-tick status-effect countdowns -- confirmed call site in run()
@@ -1470,7 +1484,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
                   if (this.facing == 2) {
                      this.facing = 3;
                      unconfirmed_ad = false;
-                     unconfirmed_X = 0;
+                     messagePriority = 0;
                   }
 
                   shouldRunTick = false;
@@ -1568,7 +1582,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
 
                if (frameStart - messageShownAt > 3000L) {
                   unconfirmed_ad = false;
-                  unconfirmed_X = 0;
+                  messagePriority = 0;
                }
             }
          }

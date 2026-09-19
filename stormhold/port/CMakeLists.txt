@@ -96,8 +96,10 @@ target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster
 # reason this library now links it (no cycle: stormhold_player doesn't
 # depend on stormhold_render) -- see src/render/.
 add_library(stormhold_render STATIC
+  src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
   src/render/game_renderer.cpp
+  src/render/message_popup.cpp
   src/render/status_bar_plan.cpp
   src/render/visible_object_renderer.cpp
 )
@@ -236,3 +238,7 @@ target_link_libraries(visible_object_renderer_smoke PRIVATE stormhold_render sto
 add_executable(hud_state_smoke src/tests/m29_hud_state_smoke.cpp)
 target_include_directories(hud_state_smoke PRIVATE src)
 target_link_libraries(hud_state_smoke PRIVATE stormhold_player stormhold_world)
+
+# M30 milestone smoke test -- see src/tests/m30_message_popup_smoke.cpp.
+add_executable(message_popup_smoke src/tests/m30_message_popup_smoke.cpp)
+target_link_libraries(message_popup_smoke PRIVATE stormhold_render)

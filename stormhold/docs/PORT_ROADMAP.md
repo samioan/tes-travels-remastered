@@ -1877,30 +1877,99 @@ read-through.
       them. All 27 smoke tests pass; full clean rebuild stayed at zero
       `/W4` warnings.
 
+- [x] **M30 -- `graphics/bitmap_font.h`/`Backbuffer::FillRoundRect`, this
+      port's first text rendering, wired into the message popup**
+      (this session). Closes the "paint methods need text, no primitive
+      exists yet" gap M29 deliberately deferred.
+
+      **The same genuine architecture choice dawnstar hit at its own
+      M30, put to the user again rather than silently reused just
+      because dawnstar already answered it once:** MIDP's `Font`/
+      `Graphics.drawChar`/`drawString` have no real recoverable asset
+      (a system font is platform/device-dependent, never bundled game
+      data). Asked the user directly; they again chose the hand-rolled
+      bitmap-font route (over drawing text via GDI directly), keeping
+      every future text-touching milestone testable via the same
+      pixel-level `Backbuffer` assertions everything else already uses.
+
+      `BitmapFont` (`graphics/bitmap_font.h`/`.cpp`) reuses dawnstar's
+      own identical hand-authored 30-glyph alphabet (space/`'`/`-`/`!`/
+      A-Z, 4x7 pixels each, case-folded, `kAdvance`=5px) verbatim --
+      both ports share the same unrecoverable-MIDP-font gap, so
+      inventing a second, arbitrarily different shape for the same
+      class of problem would just be gratuitous divergence. Confirmed
+      sufficient for this milestone's own real text (every `MSG_*`/
+      `npcNameLines` character in `../../../src/GameCanvas.java` is
+      space/`'`/A-Z, by direct reading rather than assumption) --
+      digits (`hotbarKeyGlyphs`, needed by `paintHud()`) are NOT yet
+      defined, deferred to whichever milestone actually wires
+      `paintHud()`'s own pixels.
+
+      `Backbuffer::FillRoundRect` ported identically to dawnstar's own
+      (a straightforward reimplementation of the documented MIDP
+      primitive -- both real call sites' `arcWidth`/`arcHeight` are
+      plain constants, no operator-precedence trap to preserve).
+
+      New `render/message_popup.h`/`.cpp` (`MessagePopupState`/
+      `MessagePopup::Show`/`Tick`/`Paint`) ports `GameCanvas.
+      showMessage()`/`paintMessagePopup()` plus `run()`'s own per-tick
+      3000ms auto-hide timeout. **`showMessage()` itself was a
+      `throw new UnsupportedOperationException` stub in `../src/
+      GameCanvas.java` until this milestone** -- filled in from
+      decompiled/`e.java`'s real `a(String[],int)` body (a simple
+      priority-gate: a message only replaces whatever's showing if
+      strictly higher priority, unless negative -- "always show" --
+      which stores as priority 10). Also renamed
+      `unconfirmed_X`->`messagePriority` now that its role is fully
+      confirmed, matching dawnstar's own field name.
+
+      **NOT ported here, unlike dawnstar's own M30:** `wordWrap()`/
+      `wrapToTwoLines()`. Every real `showMessage()` call site in
+      `GameCanvas.java` passes a pre-baked `MSG_*`/`npcNameLines`
+      `String[2]` constant directly -- confirmed by reading every real
+      call site, none ever wraps dynamic text through this popup, unlike
+      dawnstar's own shop-greeting-name popup which needed it for
+      exactly that reason. (`UIScreen.java` has its own, unrelated,
+      `wordWrap()` for a different screen entirely -- out of scope.) So
+      there was nothing real here to wrap, a genuine, confirmed scope
+      reduction rather than a shortcut.
+
+      Verified with a new `message_popup_smoke.exe`: `BitmapFont`
+      glyph-shape/case-folding/unsupported-character checks;
+      `FillRoundRect` corner-cutting/zero-arc/non-positive-size checks;
+      `Show`/`Tick`'s exact priority-gate and timeout arithmetic; and
+      `Paint`'s visible-vs-hidden gating and pixel placement against
+      real `MSG_REST_COMPLETE` content ("Rest"/"complete!", exercising
+      case-folding and punctuation together). All 28 smoke tests pass;
+      full clean rebuild stayed at zero `/W4` warnings.
+
+      **Still not wired into any live tick loop** -- `Show`/`Tick` have
+      no real caller yet (every real `showMessage()` call site lives in
+      `run()`'s still-untranscribed tick-loop helpers), same gap
+      M25/M27/M29 already flagged.
+
 ## What's next
 
-M30 onward: `paintHud()`'s own actual pixel drawing -- needs a filled
-rounded-rect primitive (`Backbuffer::FillRoundRect` or similar) and a
-character-glyph text-rendering primitive (for `hotbarKeyGlyphs`/
-`compassGlyphs`, needed by `paintHud()` itself and also
-`paintMinimapZoomedOut`/`Normal`/`paintMessagePopup`/`paintStatusBars`'
-own font uses) neither of which exist in this port at all yet, plus
-`hotbarIcons` (`DecodedImage`, M24's compositor, real filenames
-confirmed: `icon_attack`/`icon_cast`/`icon_change`/`icon_option`/
-`icon_action`/`icon_camp.png`) loaded into an asset bundle. Once a text
-primitive exists it likely unblocks several paint methods at once, not
-just this one. `paintMinimap*()` separately need the still-untranscribed
-`q()`/`p()` minimap-populate methods M22 found but didn't transcribe.
-Beyond all of that: an actual live game loop in `main.cpp` calling
-`GameRenderer`/`VisibleObjectRenderer`/`VisibleObjects::Refresh`/
-whatever M30+ adds every tick instead of presenting a blank frame; the
-still-untranscribed tick-loop helpers (`showMessage`/
-`tickStatusCountdowns`/`tickPerSecond`/`rollCampInterrupted`/
-`tickMovementAndAI`/`setSomeFlag`); and the still-unrecovered
-`tryRankUpSkills()`/`Monster.tick()`/`Monster.onDeath()` callers
-(flagged again this session, unchanged since M14/M15), which may well
-turn out to live in exactly those same tick-loop helpers. Following
-dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way
+`paintHud()`'s own actual pixel drawing -- needs digit glyphs added to
+`BitmapFont` (`hotbarKeyGlyphs` = `'1'`/`'3'`/`'5'`/`'7'`/`'9'`/`'0'`,
+not yet defined) plus `hotbarIcons` (`DecodedImage`, M24's compositor,
+real filenames confirmed: `icon_attack`/`icon_cast`/`icon_change`/
+`icon_option`/`icon_action`/`icon_camp.png`) loaded into an asset
+bundle -- both primitives it needs (`FillRoundRect`/`BitmapFont`) now
+exist as of this milestone. `paintMinimap*()` separately need the
+still-untranscribed `q()`/`p()` minimap-populate methods M22 found but
+didn't transcribe (their own compass-glyph text draws are already
+covered by `BitmapFont`'s existing N/E/S/W letters). Beyond all of
+that: an actual live game loop in `main.cpp` calling `GameRenderer`/
+`VisibleObjectRenderer`/`VisibleObjects::Refresh`/`MessagePopup::Tick`/
+whatever M31+ adds every tick instead of presenting a blank frame; the
+still-untranscribed tick-loop helpers (`tickStatusCountdowns`/
+`tickPerSecond`/`rollCampInterrupted`/`tickMovementAndAI`/
+`setSomeFlag`); and the still-unrecovered `tryRankUpSkills()`/
+`Monster.tick()`/`Monster.onDeath()` callers (flagged again this
+session, unchanged since M14/M15), which may well turn out to live in
+exactly those same tick-loop helpers. Following dawnstar's own later
+milestones roughly but expecting further Stormhold-specific divergences
+the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

@@ -35,10 +35,11 @@ in the live registry, a from-scratch indexed-color image format
 (`RawImage`), and a rendering/UI architecture (`ScreenCanvas`/`UIScreen`/
 `GameCanvas`) that does NOT map onto dawnstar's Screen/LoadingScreen/
 GameCanvas split by content, among others. Left for later phases (not
-blocking phase 2/3): `GameCanvas.java`'s tick-loop helpers
-(`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
-`rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`) and two
-brand-new `q()`/`p()` minimap-populate methods phase-3 M22 turned up --
+blocking phase 2/3): `GameCanvas.java`'s remaining tick-loop helpers
+(`tickStatusCountdowns`/`tickPerSecond`/`rollCampInterrupted`/
+`tickMovementAndAI`/`setSomeFlag` -- `showMessage` itself was filled in
+during phase-3 M30, see `PORT_ROADMAP.md`) and two brand-new `q()`/`p()`
+minimap-populate methods phase-3 M22 turned up --
 its pixel-rendering `paint*` methods are all transcribed for real now
 (phase-3 M21/M22, including two real mapping bugs found and fixed along
 the way, see `PORT_ROADMAP.md`), `ESGame.
