@@ -263,6 +263,31 @@ public:
         if (depth < 4) return grid[static_cast<size_t>(index + depth + 1)][static_cast<size_t>(depth)];
         return grid[static_cast<size_t>(index + depth)][static_cast<size_t>(depth)];
     }
+
+    // M27: Dungeon.relativeViewOffset(fromX, fromY, facing, toX, toY) --
+    // pure facing-relative coordinate math (no Dungeon/level state read at
+    // all, despite living on this class in the original), returning
+    // {dx, dy} in a 7-wide view-space grid centered at 3 -- consumed by
+    // player/visible_objects.h's ResolveSlot the same way ViewGridAt above
+    // feeds CorridorRenderPlan. The original writes into and returns a
+    // reusable `viewOffsetScratch` field; this port just returns by value
+    // (no aliasing hazard to preserve -- nothing relies on that scratch
+    // buffer's identity, only its contents, confirmed by reading every
+    // call site).
+    static std::array<int, 2> RelativeViewOffset(int fromX, int fromY, int facing, int toX, int toY) {
+        int dx = 0;
+        int dy = 0;
+        if (facing == 1 || facing == 3) {
+            int step = (facing == 1) ? 1 : -1;
+            dx = step * (toX - fromX) + 3;
+            dy = step * (toY - fromY) + 3;
+        } else if (facing == 2 || facing == 4) {
+            int step = (facing == 2) ? 1 : -1;
+            dx = step * (toY - fromY) + 3;
+            dy = 3 - step * (toX - fromX);
+        }
+        return {dx, dy};
+    }
 };
 
 }  // namespace stormhold

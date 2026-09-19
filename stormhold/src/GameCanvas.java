@@ -52,13 +52,19 @@
 //   - `paintHud()` (`d(Graphics)`) and `paintUnknown_b()` (`b(Graphics,
 //     int)`) turned out to be correctly named/mapped already; only their
 //     bodies were missing.
-// A byproduct worth tracking: `paintMonsters()`'s real body gates each
-// visible-object-slot render on the record's own `byte[6] != 0` (a live
-// Monster record's `unconfirmedFlag`, per the 28-byte layout M14/M20
-// confirmed) -- i.e. that flag may really mean something like "alive/
-// renderable", not the minor miscellaneous bit its name currently
-// suggests. Not renamed here (would ripple through M14/M17/M18/M20's
-// own code), just flagged as new evidence for a future pass.
+// **Confirmed by phase-3 M27** (was "a byproduct worth tracking" as of
+// M22): `paintMonsters()`'s real body gates each visible-object-slot
+// render on the record's own `byte[6] != 0` (a live Monster record's
+// `unconfirmedFlag`). Reading `Player.placeVisibleObject()` directly
+// shows this flag is set (unconditionally, `data[6] = 1`, an overwrite
+// not just an OR) the very first tick a monster is placed into a visible
+// slot, and NOTHING anywhere in `../src/` ever clears it back to 0/false
+// again (confirmed by grepping every write site). So it does NOT mean
+// "alive/renderable" or track combat state at all -- it means "has the
+// player ever seen this monster", permanently, matching dawnstar's own
+// identical confirmed finding for its equivalent field. Still not
+// renamed here (would ripple through M14/M17/M18/M20/M27's own code and
+// this port's `MonsterState::unconfirmedFlag`), same reasoning as before.
 //
 // Confirmed identity: `extends com.nokia.mid.ui.FullCanvas implements
 // Runnable`, with a `5x6x4 int[][][]` table (`wallSegmentTable`, was `n`)

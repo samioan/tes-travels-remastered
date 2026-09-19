@@ -169,15 +169,24 @@ Backbuffer by combining M21's CorridorRenderPlan selection logic with
 M23/M24's Blit() compositors, cross-checked pixel-by-pixel against real
 floor3.png/newwallsnok.png files and a real M6-generated level across
 36,608 floor pixels and 105,565 opaque wall pixels, zero mismatches),
-and M26 (StatusBarPlan/GameRenderer::RenderStatusBars, paintStatusBars()
--- the HP/Magicka/Fatigue HUD bars, the cheapest remaining paint method
+M26 (StatusBarPlan/GameRenderer::RenderStatusBars, paintStatusBars() --
+the HP/Magicka/Fatigue HUD bars, the cheapest remaining paint method
 since it's entirely self-contained in PlayerState/CharacterData with no
 new asset loading; confirmed a real, preserved asymmetry where only the
-Fatigue bar's width is clamped to 40, HP/Magicka have no clamp at all).
-Every OTHER paint method GameCanvas needs -- monsters/objects/HUD's
-hotkey row/minimap/message popups -- still needs live state this port
-doesn't wire up yet, and there's still no actual game loop calling any
-of this) are done, all
+Fatigue bar's width is clamped to 40, HP/Magicka have no clamp at all),
+and M27 (VisibleObjects, the 13-slot corridor-view object cache --
+Player.refreshVisibleObjectSlots()/refreshVisibleObjects()/
+resolveVisibleObjectSlot()/placeVisibleObject(), data model only, no
+pixels, unblocking paintObjects()/paintMonsters() the same way M21
+unblocked paintWalls(); confirms, rather than just flags, M22's own
+byproduct finding that a monster's unconfirmedFlag really means "has
+ever been seen", permanently, matching dawnstar's own identical finding;
+also fixed a real doc-comment-only kind-label swap in Player.java's own
+resolveVisibleObjectSlot() header comment found while reading it).
+Every OTHER paint method GameCanvas needs -- the sprite drawing off
+M27's own cache, HUD's hotkey row, minimap, message popups -- still
+needs live state this port doesn't wire up yet, and there's still no
+actual game loop calling any of this) are done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader/writer) are

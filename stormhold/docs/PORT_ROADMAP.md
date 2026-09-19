@@ -1670,27 +1670,111 @@ read-through.
       untouched. All 24 smoke tests pass; full clean rebuild stayed at
       zero `/W4` warnings.
 
+- [x] **M27 -- `VisibleObjects`, the 13-slot corridor-view object cache
+      (data model only)** (this session). Unblocks `paintObjects()`/
+      `paintMonsters()` (M22) the same way M21 unblocked `paintWalls()`:
+      mirrors that same selection-logic-vs-drawing split (this milestone
+      is the SELECTION half, no pixels), and mirrors dawnstar's own
+      identical M25 milestone for its equivalent system.
+
+      New `player/visible_objects.h`/`.cpp` (`VisibleObjects` class) ports
+      `Player.refreshVisibleObjectSlots()`/`refreshVisibleObjects()`/
+      `resolveVisibleObjectSlot()`/`placeVisibleObject()`/
+      `facingAxisDistance()`. `VisibleSlotKind`/`VisibleSlot` (new,
+      `player_state.h`) replace Java's `SLOT_EMPTY`/`SLOT_BLOCKED`/
+      `SLOT_SHADOWED` Integer-reference-identity sentinels with a tagged
+      enum, same treatment dawnstar's own `VisibleSlot`/`VisibleSlotKind`
+      already got; `visibleObjects` itself moves from a Java `static`
+      field onto `PlayerState` (harmless single-player simplification,
+      same as every other really-static-but-per-player field here). New
+      `DungeonRuntime::RelativeViewOffset` (pure facing-relative
+      coordinate math, needs no Dungeon/level state despite living on
+      `Dungeon` in the original) feeds `ResolveSlot`'s own position
+      cascade, the same way `ViewGridAt` (M21) feeds `RefreshSlots`'
+      wall-occlusion cascade.
+
+      **Two real, confirmed findings from reading this pipeline in
+      full, both preserved/fixed rather than glossed over:**
+      - `resolveVisibleObjectSlot()`'s own header comment (an earlier
+        pass's doc-comment guess, not anything from the decompiled
+        bytecode) had its `kind==4`/`else` branch labels SWAPPED --
+        said "4=dropped-item"/"else=chest", but the real callers are
+        `placeVisibleObjectIfSlotFree(2, ...)` for dropped items
+        (landing in the `else` branch) and `(4, ...)` for chests
+        (landing in the `kind==4` branch). Functionally inert (both
+        branches read the same `data[0]`/`data[1]` offsets, and both
+        record kinds are confirmed `[0]/[1]=x/y`), but fixed at the
+        source in `../src/Player.java` anyway, same discipline M22's
+        own real mapping-bug fixes used.
+      - `placeVisibleObjectIfSlotFree()` computes `facingAxisDistance()`
+        and appears to branch on it (`kind != 4 && dist != 1`) -- but
+        BOTH branches of that if/else call `placeVisibleObject()` and
+        return `true` identically, so neither the distance nor the
+        branch has any effect. `refreshVisibleObjects(includeWarden)`'s
+        own parameter is equally dead (the Warden placement reads
+        `Shop.wardenPresent` directly, never `includeWarden`; nothing
+        else uses it either). Both exposed/kept for signature fidelity
+        anyway (`VisibleObjects::FacingAxisDistance`/`Refresh`'s own
+        `includeWarden` parameter), documented rather than dropped, same
+        discipline M10's dead `leftLevelZone` and M17/M18's asymmetric
+        bit tests already used.
+      - **Also confirms, rather than just flags, M22's own "byproduct
+        worth tracking":** `placeVisibleObject()`'s monster case sets
+        `unconfirmedFlag` PERMANENTLY true (`data[6] = 1`, an overwrite)
+        the first tick a monster is ever placed into a visible slot, and
+        nothing anywhere in `../src/` ever clears it. So it means "has
+        the player ever seen this monster", not "alive/renderable" --
+        exactly dawnstar's own confirmed finding for its equivalent
+        field. `GameCanvas.java`'s own header comment updated to mark
+        this confirmed, not just flagged.
+
+      **Still no confirmed caller anywhere in `../src/`:** unlike this
+      system's own Player.java class comment ("rebuilt every move"),
+      `refreshVisibleObjects()` has no call site in the currently-
+      transcribed source at all, and `PlayerMovement::CommitMove`
+      doesn't call this port's `Refresh()` either -- same class of gap
+      as the still-untranscribed tick-loop helpers.
+
+      Verified with a new `visible_objects_smoke.exe`: `FacingAxisDistance`'s
+      exact per-facing formula; `ResolveSlot`'s position/occlusion-guard
+      cascade at hand-derived canonical positions; `RefreshSlots`' own
+      wall-occlusion cascade, INCLUDING a case specifically proving the
+      LITERAL sequential statement order (not a fixed-point loop) --
+      slot 8 ends up Shadowed purely as a second-order effect of slot 5's
+      earlier cascade, via a later check reading slot 9's freshly-written
+      Shadowed state; `Refresh()`'s own world-wiring (a dropped item/
+      chest/monster each landing in the expected slot, the monster's
+      `unconfirmedFlag` overwrite and dropped item's bit-0 OR both
+      persisted back into the registry, and the chest's record
+      confirmed untouched); Warden placement on level 1; and
+      `includeWarden=true` vs. `false` producing identical results
+      end to end. All 25 smoke tests pass; full clean rebuild stayed at
+      zero `/W4` warnings.
+
 ## What's next
 
-M27 onward: the remaining paint methods' own render passes -- each needs
-its own slice of live state this port doesn't have yet: `paintObjects()`/
-`paintMonsters()` need `Player.visibleObjects` (the 13-slot "what's
-renderable this frame" cache) actually populated from a live
-`WorldRegistry`, plus `monsterImages`/`chestImages`/`bagImages`/
-`crystalImages` (`RawImage`, M23's compositor) loaded; `paintHud()` needs
-`hotbarIcons` (`DecodedImage`, M24's compositor, real filenames not yet
-grepped from `ESGame.java`) plus `resolveHudIconSet()`'s own
-`unconfirmed_aa`/`_m`/`_R`/`_W` flags and `isNpcDialogueDue()` (a `Shop`/
-`targetMonster` dependency) -- none of which have a port-side home yet,
-likely a small new "HUD/UI state" struct alongside `PlayerState`, not a
-`PlayerState` field itself (these are `GameCanvas`'s own static fields in
-the original, not `Player`'s); `paintMinimap*()` need the
-still-untranscribed `q()`/`p()` minimap-populate methods M22 found but
-didn't transcribe (not paint methods themselves, but needed before the
-minimap can show anything live). Beyond that: an actual live game loop in
-`main.cpp` calling `GameRenderer`/whatever M27+ adds every tick instead
-of presenting a blank frame; the still-untranscribed tick-loop helpers
-(`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
+M28 onward: `paintObjects()`/`paintMonsters()` themselves -- the actual
+sprite rendering off M27's now-populated `PlayerState::visibleObjects`,
+the natural next "selection logic done, now draw it" pairing (M21->M25,
+now M27->M28). Needs `monsterImages`/`chestImages`/`bagImages`/
+`crystalImages` (`RawImage`, M23's compositor, real filenames still not
+grepped from `ESGame.java`) loaded into a `CorridorAssets`-shaped bundle,
+plus porting the actual per-slot sprite-selection logic (near/mid/far
+zone row resolution, `hasCrystalGlow()`, mirroring) M22 already
+transcribed into `GameCanvas.java`'s `renderObjectAt`/`renderMonsterSpriteForSlot`
+family. Beyond that: `paintHud()` needs `hotbarIcons` (`DecodedImage`,
+M24's compositor, real filenames not yet grepped) plus
+`resolveHudIconSet()`'s own `unconfirmed_aa`/`_m`/`_R`/`_W` flags and
+`isNpcDialogueDue()` (a `Shop`/`targetMonster` dependency) -- none of
+which have a port-side home yet, likely a small new "HUD/UI state"
+struct alongside `PlayerState`, not a `PlayerState` field itself (these
+are `GameCanvas`'s own static fields in the original, not `Player`'s);
+`paintMinimap*()` need the still-untranscribed `q()`/`p()` minimap-
+populate methods M22 found but didn't transcribe. And still open across
+all of the above: an actual live game loop in `main.cpp` calling
+`GameRenderer`/`VisibleObjects::Refresh`/whatever M28+ adds every tick
+instead of presenting a blank frame; the still-untranscribed tick-loop
+helpers (`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
 `rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`); and the
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
 onDeath()` callers (flagged again this session, unchanged since

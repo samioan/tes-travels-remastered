@@ -1255,12 +1255,25 @@ public class Player {
       }
    }
 
-   // kind: 1=monster(4/5-index xy),4=dropped-item(0/1-index xy),5=Warden
-   // (fixed Shop.shopX/Y[6]), else=chest(0/1-index xy). Computes the
-   // object's relative view offset via Dungeon.relativeViewOffset() and
-   // resolves it to one of the 13 visibleObjects slots via a fixed
-   // position cascade, each guarded by "and none of these other slots are
-   // already occupied" checks (occlusion priority).
+   // kind: 1=monster(4/5-index xy),4=chest(0/1-index xy),5=Warden (fixed
+   // Shop.shopX/Y[6]), else=dropped item(0/1-index xy). **Phase-3 M27
+   // correction:** an earlier pass's comment here had the kind==4 and
+   // else branches' own labels SWAPPED (said "4=dropped-item"/
+   // "else=chest") -- the real callers are refreshVisibleObjects()'s
+   // placeVisibleObjectIfSlotFree(2, ...) for dropped items (landing in
+   // the else branch) and placeVisibleObjectIfSlotFree(4, ...) for
+   // chests (landing in the kind==4 branch), confirmed by reading those
+   // call sites directly. Purely a doc-comment bug in this port's own
+   // earlier transcription, not an original-game one, and functionally
+   // inert either way -- both branches read data[0]/data[1], and
+   // dropped-item/chest records both confirmed ([0]/[1]=x/y, M12/M16) to
+   // use those same offsets, so the swap never changed behavior. Fixed
+   // here rather than just flagged, same discipline M22's own real
+   // mapping-bug fixes used. Computes the object's relative view offset
+   // via Dungeon.relativeViewOffset() and resolves it to one of the 13
+   // visibleObjects slots via a fixed position cascade, each guarded by
+   // "and none of these other slots are already occupied" checks
+   // (occlusion priority).
    boolean resolveVisibleObjectSlot(int kind, Object obj) {
       Dungeon level = this.currentDungeon();
       byte ox;

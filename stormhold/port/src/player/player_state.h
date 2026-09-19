@@ -5,6 +5,27 @@
 
 namespace stormhold {
 
+// M27: renamed-source counterpart of Player.java's visibleObjects slot
+// markers -- EMPTY_SLOT/BLOCKED_SLOT/SHADOWED_SLOT there are distinguished
+// by Integer reference identity (SLOT_EMPTY=new Integer(0), SLOT_BLOCKED=
+// new Integer(1), SLOT_SHADOWED=new Integer(-1)); a tagged enum is the
+// natural C++ equivalent, same treatment dawnstar's own identical M25
+// milestone already gave its equivalent field. `Warden` has no associated
+// record -- Player.refreshVisibleObjects() places the literal String "W"
+// there directly (resolveVisibleObjectSlot(5, "W")), never going through
+// placeVisibleObject at all (see player/visible_objects.h's own header
+// comment), so there's no byte record to carry.
+enum class VisibleSlotKind : uint8_t { Empty, Blocked, Shadowed, Monster, Chest, DroppedItem, Warden };
+
+// One of Player.visibleObjects' 13 slots. Only one of the three record
+// fields is meaningful, selected by `kind`.
+struct VisibleSlot {
+    VisibleSlotKind kind = VisibleSlotKind::Empty;
+    std::array<uint8_t, 28> monsterRecord{};
+    std::array<int8_t, 8> chestRecord{};
+    std::array<int8_t, 7> droppedItemRecord{};
+};
+
 // Renamed-source counterpart of ../../../src/Player.java's runtime instance
 // state -- just what character creation (player_creation.h, M9) touches:
 // applyClassTemplate(), resetState(classIndex, false)'s "new character"
@@ -143,13 +164,17 @@ struct PlayerState {
     // WarpToCampMark) wired.
     std::array<std::array<uint8_t, 5>, 9> corridorView{};
 
+    // --- M27: touched by player/visible_objects.h. Player.visibleObjects
+    // itself (a Java `static Vector`) -- the 13-slot "what's renderable
+    // this frame" cache `paintObjects()`/`paintMonsters()` (M22) need,
+    // moved from a class-level static into PlayerState, same harmless
+    // single-player-instance simplification every other Java-`static`-
+    // but-really-per-player field on this struct already gets.
+    std::array<VisibleSlot, 13> visibleObjects{};
+
     // --- Deferred to a later milestone, none touched by character
     // creation, core movement, or inventory: UI/rendering-only scratch
-    // state (endOfGameTriggered, stateByteAb), and visibleObjects (the
-    // 13-slot "what's renderable this frame" cache paintObjects()/
-    // paintMonsters() need -- corridorView alone is only enough to render
-    // GameCanvas.paintWalls(), see render/game_renderer.h's own scope
-    // note).
+    // state (endOfGameTriggered, stateByteAb).
 };
 
 }  // namespace stormhold

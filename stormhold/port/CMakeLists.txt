@@ -72,6 +72,7 @@ add_library(stormhold_player STATIC
   src/player/player_leveling.cpp
   src/player/player_movement.cpp
   src/player/player_save.cpp
+  src/player/visible_objects.cpp
 )
 target_include_directories(stormhold_player PUBLIC src)
 target_link_libraries(stormhold_player PUBLIC stormhold_assets stormhold_world stormhold_dungeon)
@@ -214,3 +215,7 @@ target_link_libraries(game_renderer_smoke PRIVATE stormhold_render stormhold_pla
 # M26 milestone smoke test -- see src/tests/m26_status_bar_smoke.cpp.
 add_executable(status_bar_smoke src/tests/m26_status_bar_smoke.cpp)
 target_link_libraries(status_bar_smoke PRIVATE stormhold_render stormhold_player)
+
+# M27 milestone smoke test -- see src/tests/m27_visible_objects_smoke.cpp.
+add_executable(visible_objects_smoke src/tests/m27_visible_objects_smoke.cpp)
+target_link_libraries(visible_objects_smoke PRIVATE stormhold_player)
