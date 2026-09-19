@@ -31,18 +31,28 @@
 // nothing yet sets any ailment bit (Monster.tick() itself still has no
 // wired caller), but no longer a placeholder.
 //
+// M36 layers in the second tick-loop helper, `PlayerCombatStats::
+// TickPerSecond` (GameCanvas.tickPerSecond(), also a throw-stub until
+// this session): 3 more per-real-second mechanics (see its own header
+// comment). Accumulated with a plain `secondAccumulatorMs`, matching
+// GameCanvas.run()'s own "secondAccumulator += deltaMs; if (>1000)
+// {-=1000; tickPerSecond();}" pattern exactly, just against
+// `GameClock::kTickInterval` (a fixed 250ms) instead of a real
+// wall-clock delta -- this port's own ticks are already fixed-interval,
+// so the two are equivalent here.
+//
 // Deliberately NOT wired here: paintFlashOverlays()/paintUnknown_b() (both
 // still gated on live tick-loop state, see docs/PORT_ROADMAP.md's own
 // "what's next"), the message popup (MessagePopup::Show has no reachable
 // real call site yet either -- every one lives inside a still-
 // untranscribed tick-loop helper), and the still-untranscribed tick-loop
-// helpers themselves (tickPerSecond/rollCampInterrupted/
-// tickMovementAndAI/setSomeFlag) -- so there is still no monster AI, no
-// per-second regen/drain, and no combat input yet. Turning (Move dir
-// 3/4, no strafe) and stepping forward/backward are the only player
-// actions this milestone wires.
+// helpers themselves (rollCampInterrupted/tickMovementAndAI/setSomeFlag)
+// -- so there is still no monster AI and no combat input yet. Turning
+// (Move dir 3/4, no strafe) and stepping forward/backward are the only
+// player actions this milestone wires.
 #include <windows.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -145,6 +155,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // own doc comment: this tick's tickStatusCountdowns reads whatever
     // the last repaint set, not this tick's own not-yet-run one).
     bool monsterRenderedLastFrame = false;
+    int64_t secondAccumulatorMs = 0;
 
     window.RunMessageLoop([&]() {
         if (clock.ConsumeTick()) {
@@ -173,6 +184,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // faithfully).
             stormhold::PlayerCombatStats::TickStatusCountdowns(
                 player, static_cast<int64_t>(stormhold::GameClock::kTickInterval.count()), monsterRenderedLastFrame);
+
+            // M36: GameCanvas.run()'s own secondAccumulator gate (see
+            // this file's own header comment).
+            secondAccumulatorMs += stormhold::GameClock::kTickInterval.count();
+            if (secondAccumulatorMs > 1000) {
+                secondAccumulatorMs -= 1000;
+                stormhold::PlayerCombatStats::TickPerSecond(player, items);
+            }
 
             // M27: no live tick loop yet refreshes this automatically (see
             // this file's own header comment) -- refreshed unconditionally

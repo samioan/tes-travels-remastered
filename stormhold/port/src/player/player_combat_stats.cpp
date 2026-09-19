@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstdlib>
 
+#include "player/player_inventory.h"
+
 namespace stormhold {
 
 int PlayerCombatStats::SkillValue(const PlayerState& p, const CharacterData& charData, int skillIndex,
@@ -230,6 +232,37 @@ void PlayerCombatStats::TickStatusCountdowns(PlayerState& p, int64_t deltaMs, bo
         if (p.terrifiedTimer < 0) {
             p.terrifiedTimer = 0;
             p.ailmentMask = static_cast<int8_t>(p.ailmentMask & ~(1 << 6));
+        }
+    }
+}
+
+void PlayerCombatStats::TickPerSecond(PlayerState& p, const ItemDatabase& items) {
+    for (int i = 0; i < 25; i++) {
+        if (p.effectDurations[static_cast<size_t>(i)] > 0) {
+            p.effectDurations[static_cast<size_t>(i)]--;
+            if (p.effectDurations[static_cast<size_t>(i)] <= 0) {
+                p.effectDurations[static_cast<size_t>(i)] = 0;
+                if (i == 5) {
+                    int slot = PlayerInventory::FindEquippedSlotForItem(p, 109);
+                    PlayerInventory::RemoveInventorySlot(p, slot, items);
+                }
+            }
+        }
+    }
+
+    if (HasAilment(p, 4)) {
+        int drain = 2 * p.coreStats[3] / 100;
+        drain = std::max(drain, 0);
+        p.coreStats[2] = static_cast<int16_t>(p.coreStats[2] - drain);
+    }
+
+    if (HasAilment(p, 5)) {
+        int regen = p.coreStats[5] / 10;
+        p.coreStats[4] = static_cast<int16_t>(p.coreStats[4] + regen);
+        if (p.coreStats[4] >= p.coreStats[5]) {
+            p.coreStats[4] = 0;
+            int burn = p.coreStats[5] / 10;
+            p.coreStats[2] = static_cast<int16_t>(p.coreStats[2] - burn);
         }
     }
 }

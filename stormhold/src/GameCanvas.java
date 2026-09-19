@@ -1355,11 +1355,80 @@ public class GameCanvas extends FullCanvas implements Runnable {
       }
    }
 
-   // Once-per-real-second passive regen/drain, and the Warden-visit gate
-   // -- confirmed call site in run() (`this.l()`), body not yet
-   // transcribed.
+   // Confirmed (phase-3 port M36): byte-for-byte from decompiled/e.java's
+   // l(). REPLACES an earlier, less careful pass's wrong "and the
+   // Warden-visit gate" header note -- there is no Shop/Warden reference
+   // anywhere in this method's real body at all; that claim looks like a
+   // guess made before the method was actually read.
+   //
+   // Three independent per-second mechanics:
+   //  1. EVERY currently counting-down effectDurations[] slot (all 25,
+   //     not just the 3 specific ailments tickStatusCountdowns's own
+   //     millisecond timers separately track) decrements by 1. When
+   //     slot 5 (effect id 6) reaches exactly zero THIS tick, item 109
+   //     ("daedric weapon" per the original's own debug println, kept
+   //     verbatim) is located by its equipped-slot search and removed
+   //     outright (removeInventorySlot(), NOT the dropInventoryItem()
+   //     path -- the weapon simply vanishes when its own temporary
+   //     effect wears off, no world copy is dropped).
+   //  2. hasAilment(4) ("vampirism") drains 2% of maxHP from HP every
+   //     second.
+   //  3. hasAilment(5) ("mana burn") regenerates 10% of maxMagicka into
+   //     Magicka every second; the moment Magicka reaches or exceeds
+   //     its own max, it resets to EXACTLY ZERO (not clamped to max)
+   //     and HP takes a 10%-of-maxMagicka hit instead -- a real,
+   //     punishing overflow-and-burn mechanic, not a clamp bug.
+   //
+   // **A 4th piece, transcribed here for a complete record but a
+   // confirmed, provably inert dead write, NOT reproduced in the C++
+   // port (see docs/PORT_ROADMAP.md):** a loop over every monster
+   // currently registered on the player's own level decrements each
+   // one's scratch[7] (clearing scratch[6] once it hits zero) -- but
+   // `Monster.fromBytesShared()` (was decompiled/d.java's own static
+   // `a(byte[])`) COPIES bytes into a shared scratch Monster instance
+   // rather than aliasing the registry's own stored byte[] record, and
+   // this loop never calls `store()` afterward. So every mutation here
+   // is thrown away the instant the loop moves to the next monster --
+   // confirmed by reading `Monster.fromBytesShared()`'s own byte-by-byte
+   // copy directly, not assumed from the missing store() call alone.
    private void tickPerSecond() {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's l())");
+      for (int i = 0; i < 25; i++) {
+         if (this.player.effectDurations[i] > 0) {
+            this.player.effectDurations[i]--;
+            if (this.player.effectDurations[i] <= 0) {
+               this.player.effectDurations[i] = 0;
+               if (i == 5) {
+                  System.out.println("Removing daedric weapon!");
+                  int slot = this.player.findEquippedSlotForItem(109);
+                  System.out.println("Removing daedric weapon!: index is " + slot);
+                  this.player.removeInventorySlot(slot);
+               }
+            }
+         }
+      }
+
+      if (this.player.hasAilment(4)) {
+         int drain = 2 * this.player.coreStats[3] / 100;
+         drain = Math.max(drain, 0);
+         this.player.coreStats[2] = (short)(this.player.coreStats[2] - drain);
+      }
+
+      if (this.player.hasAilment(5)) {
+         int regen = this.player.coreStats[5] / 10;
+         this.player.coreStats[4] = (short)(this.player.coreStats[4] + regen);
+         if (this.player.coreStats[4] >= this.player.coreStats[5]) {
+            this.player.coreStats[4] = 0;
+            int burn = this.player.coreStats[5] / 10;
+            this.player.coreStats[2] = (short)(this.player.coreStats[2] - burn);
+         }
+      }
+
+      // Dead write over the per-level monster registry -- see this
+      // method's own header comment above. Not transcribed: it would
+      // just be `Dungeon.monstersOnThisLevel()`-shaped iteration
+      // mutating a throwaway decoded copy with no observable effect
+      // anywhere, matching this file's established "document, don't
+      // mechanically reproduce, a provably dead branch" discipline.
    }
 
    // Stops the game thread (join()), starts a fresh one -- bodies ARE

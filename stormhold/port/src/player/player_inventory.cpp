@@ -1,6 +1,7 @@
 #include "player/player_inventory.h"
 
 #include <cmath>
+#include <stdexcept>
 
 namespace stormhold {
 
@@ -64,6 +65,11 @@ bool PlayerInventory::EquipLastPickedUpItem(PlayerState& p, bool allowSwap, cons
 }
 
 bool PlayerInventory::RemoveInventorySlot(PlayerState& p, int slot, const ItemDatabase& items) {
+    if (slot < 0) {
+        throw std::runtime_error("PlayerInventory::RemoveInventorySlot: negative slot -- the real "
+                                  "removeInventorySlot() has no guard here either, so the original would "
+                                  "throw ArrayIndexOutOfBoundsException reading this.H[-1]");
+    }
     if (slot >= p.inventoryCount) return false;
 
     UnequipSlot(p, slot, items);
@@ -76,6 +82,14 @@ bool PlayerInventory::RemoveInventorySlot(PlayerState& p, int slot, const ItemDa
 
     p.inventoryCount--;
     return true;
+}
+
+int PlayerInventory::FindEquippedSlotForItem(const PlayerState& p, int itemId) {
+    int8_t target = static_cast<int8_t>(-std::abs(itemId));
+    for (int i = 0; i < p.inventoryCount; i++) {
+        if (target == p.inventoryItemIds[static_cast<size_t>(i)]) return i;
+    }
+    return -1;
 }
 
 bool PlayerInventory::InitializeItemCharge(PlayerState& p, int slot, const ItemDatabase& items) {

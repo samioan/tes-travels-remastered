@@ -2236,23 +2236,91 @@ read-through.
 
 ## What's next
 
-The remaining still-untranscribed tick-loop helpers (`tickPerSecond`/
-`rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`, one of which --
-`a(boolean)` -- is confirmed as `q()`/`p()`'s own real caller) -- these
-gate monster AI, per-second regen/drain, and the Warden/message-popup
-call sites `main.cpp` doesn't reach yet. `tickPerSecond()` in
-particular looks like the natural next one: decompiled/`e.java`'s `l()`
-is short, self-contained, and (per M32's own header-comment reference to
-`ESGame.G[]`) already has real 1:1 field mappings mostly worked out.
-`paintFlashOverlays()`/`paintUnknown_b()` (the two remaining
-unported-pixel paint methods, both gated on that same live state). The
-still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/
-`Monster.onDeath()` callers (flagged again this session, unchanged
-since M14/M15) may well turn out to live in exactly those same
-tick-loop helpers. Beyond that: real combat input (attack/cast), a
-character-creation UI (`main.cpp` still hardcodes class 0), and the
-message-popup call sites once their own tick-loop helper exists.
-Following dawnstar's own later milestones roughly but expecting
-further Stormhold-specific divergences the way
+- [x] **M36 -- `PlayerCombatStats::TickPerSecond`, the second tick-loop
+      helper** (this session). `GameCanvas.tickPerSecond()` (was
+      decompiled/e.java's `l()`) was a throw-stub in
+      `../src/GameCanvas.java` until now -- filled in and ported.
+      **Also fixed a stale header comment on this exact method** that
+      claimed it included "the Warden-visit gate" -- there is no Shop/
+      Warden reference anywhere in its real body at all; that looks
+      like a guess made before the method was ever actually read.
+
+      Three independent per-real-second mechanics, byte-for-byte:
+      1. EVERY currently counting-down `effectDurations[]` slot (all
+         25, not just the 3 millisecond-timer ailments M35's
+         `TickStatusCountdowns` separately tracks) decrements by 1.
+         When slot 5 (effect id 6) reaches exactly zero THIS call, item
+         109 ("daedric weapon", per the original's own debug println)
+         is located by a new `PlayerInventory::FindEquippedSlotForItem`
+         (`Player.findEquippedSlotForItem`, already named/transcribed
+         in Java but not yet ported) and removed outright via the
+         existing `RemoveInventorySlot` -- **not** the drop-into-the-
+         world path `DropInventoryItem` uses; the weapon simply
+         vanishes when its own temporary effect wears off.
+      2. `HasAilment(4)` ("vampirism") drains 2% of maxHP from HP.
+      3. `HasAilment(5)` ("mana burn") regenerates 10% of maxMagicka
+         into Magicka; the moment Magicka reaches or exceeds its own
+         max, it resets to EXACTLY ZERO (not clamped to max) and HP
+         takes a 10%-of-maxMagicka hit instead -- a real, punishing
+         overflow-and-burn mechanic, not a clamp bug.
+
+      **A confirmed but provably inert 4th piece, transcribed into Java
+      for a complete record but deliberately NOT reproduced in the C++
+      port:** the original also loops over every monster registered on
+      the player's current level, decrementing a byte pair on a
+      throwaway DECODED COPY of each record -- `Monster.
+      fromBytesShared()` (decompiled/d.java's own static `a(byte[])`)
+      copies bytes into a shared scratch instance rather than aliasing
+      the registry's own stored array, and the loop never calls
+      `store()` afterward. Confirmed by reading `fromBytesShared()`'s
+      own byte-by-byte copy directly (not assumed from the missing
+      `store()` call alone) to have zero observable effect anywhere --
+      same "document, don't mechanically port, a provably dead branch"
+      treatment M10's own dead chest-record byte already got.
+
+      **A real latent crash this port had to guard against rather than
+      silently corrupt memory on:** if effect 6 expires while item 109
+      is nowhere in inventory, `FindEquippedSlotForItem` returns -1 and
+      `RemoveInventorySlot(-1, ...)` -- the real decompiled `y(int)` has
+      NO lower-bound guard either (only an upper one), so the original
+      would throw `ArrayIndexOutOfBoundsException` reading `this.H[-1]`.
+      `RemoveInventorySlot` now throws `std::runtime_error` for a
+      negative slot explicitly, same discipline as M18's `RemoveMonster`/
+      M28's `unconfirmedTable_a` OOB guard -- silent out-of-bounds
+      `operator[]` access would be strictly worse than the original's
+      own clean crash.
+
+      Wired into `main.cpp`'s tick loop with its own `secondAccumulatorMs`
+      gate, matching `run()`'s own "accumulate deltaMs, fire once past
+      1000ms" pattern exactly (against `GameClock`'s fixed 250ms
+      interval rather than a real wall-clock delta -- equivalent here,
+      since this port's own ticks are already fixed-interval).
+
+      Verified with a new `tick_per_second_smoke.exe`: the decay loop's
+      ordinary-slot vs. slot-5 branches; the daedric-weapon removal
+      (including the compaction it leaves behind); the negative-slot
+      crash-guard; both ailment branches (drain, and regen-then-
+      overflow-burn) independently; and a real-data check that item 109
+      actually exists in `itemsin.dat`. All 33 smoke tests pass; full
+      clean rebuild stayed at zero `/W4` warnings. `javac` recompiled
+      clean (8 expected warnings only). Re-verified the real windowed
+      exe still launches and runs after the `main.cpp` changes.
+
+## What's next
+
+The remaining still-untranscribed tick-loop helpers
+(`rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`, one of which
+-- `a(boolean)` -- is confirmed as `q()`/`p()`'s own real caller) --
+these gate monster AI and the Warden/message-popup call sites
+`main.cpp` doesn't reach yet. `paintFlashOverlays()`/`paintUnknown_b()`
+(the two remaining unported-pixel paint methods, both gated on that
+same live state). The still-unrecovered `tryRankUpSkills()`/
+`Monster.tick()`/`Monster.onDeath()` callers (flagged again this
+session, unchanged since M14/M15) may well turn out to live in exactly
+those same tick-loop helpers. Beyond that: real combat input (attack/
+cast), a character-creation UI (`main.cpp` still hardcodes class 0),
+and the message-popup call sites once their own tick-loop helper
+exists. Following dawnstar's own later milestones roughly but
+expecting further Stormhold-specific divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

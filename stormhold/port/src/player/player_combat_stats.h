@@ -157,6 +157,39 @@ public:
     // supplies whatever `RenderMonsters` most recently returned, same
     // "caller supplies/owns state" pattern this port uses throughout.
     static void TickStatusCountdowns(PlayerState& p, int64_t deltaMs, bool monsterRenderedThisFrame);
+
+    // GameCanvas.tickPerSecond() (M36, phase-3 port): 3 independent
+    // per-real-second mechanics, transcribed byte-for-byte --
+    //  1. EVERY currently counting-down `effectDurations[]` slot (all
+    //     25, not just the 3 specific ailments `TickStatusCountdowns`'s
+    //     own millisecond timers separately track) decrements by 1.
+    //     When slot 5 (effect id 6) reaches exactly zero THIS call,
+    //     item 109 ("daedric weapon", per the original's own debug
+    //     println) is located by `PlayerInventory::
+    //     FindEquippedSlotForItem` and removed outright via
+    //     `PlayerInventory::RemoveInventorySlot` -- NOT the drop-into-
+    //     the-world path `DropInventoryItem` would use; the weapon
+    //     simply vanishes when its own temporary effect wears off.
+    //  2. `HasAilment(4)` ("vampirism") drains 2% of maxHP from HP.
+    //  3. `HasAilment(5)` ("mana burn") regenerates 10% of maxMagicka
+    //     into Magicka; the moment Magicka reaches or exceeds its own
+    //     max, it resets to EXACTLY ZERO (not clamped to max) and HP
+    //     takes a 10%-of-maxMagicka hit instead -- a real, punishing
+    //     overflow-and-burn mechanic, not a clamp bug.
+    //
+    // **NOT reproduced here, a confirmed but provably inert original
+    // dead write (see ../../../src/GameCanvas.java's own header
+    // comment on `tickPerSecond()` for the full writeup):** a 4th
+    // piece in the original iterates every monster registered on the
+    // player's current level, mutating a byte pair on a throwaway
+    // DECODED COPY of each record (`Monster.fromBytesShared()` copies
+    // bytes rather than aliasing the registry's own stored array) and
+    // never stores the result back -- confirmed to have zero observable
+    // effect anywhere, so mechanically reproducing it here would just
+    // be dead code, same "document, don't mechanically port, a
+    // provably dead branch" discipline this port already used for
+    // world/dungeon_generator.h's own dead chest-record byte.
+    static void TickPerSecond(PlayerState& p, const ItemDatabase& items);
 };
 
 }  // namespace stormhold

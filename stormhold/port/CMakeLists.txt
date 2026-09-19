@@ -263,3 +263,7 @@ target_link_libraries(minimap_renderer_smoke PRIVATE stormhold_render)
 # M35 milestone smoke test -- see src/tests/m35_status_countdowns_smoke.cpp.
 add_executable(status_countdowns_smoke src/tests/m35_status_countdowns_smoke.cpp)
 target_link_libraries(status_countdowns_smoke PRIVATE stormhold_player)
+
+# M36 milestone smoke test -- see src/tests/m36_tick_per_second_smoke.cpp.
+add_executable(tick_per_second_smoke src/tests/m36_tick_per_second_smoke.cpp)
+target_link_libraries(tick_per_second_smoke PRIVATE stormhold_player)

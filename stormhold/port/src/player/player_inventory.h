@@ -44,7 +44,28 @@ public:
     // including NOT clearing inventoryItemData for the slot that ends up
     // past the new inventoryCount after compaction (stale leftover data,
     // harmless since nothing reads past inventoryCount).
+    //
+    // Throws std::runtime_error for `slot < 0`, a case the real
+    // decompiled `y(int)` has NO guard for either -- Java's own array
+    // bounds check would throw ArrayIndexOutOfBoundsException reading
+    // `this.H[-1]`, a real latent crash the original never guards
+    // against. C++'s `operator[]` has no such free safety net, so a
+    // negative slot here would silently read/write out of bounds
+    // instead -- strictly worse than the original's own crash, not a
+    // faithful port of it. Same discipline as `dungeon/dungeon_runtime.h`'s
+    // `RemoveMonster`/M28's `unconfirmedTable_a` OOB guard. (`slot >=
+    // inventoryCount` is a REAL, deliberate guard in the original --
+    // that case still just returns false, unchanged.)
     static bool RemoveInventorySlot(PlayerState& p, int slot, const ItemDatabase& items);
+
+    // Player.findEquippedSlotForItem(itemId) (M36, phase-3 port): the
+    // slot index currently holding `itemId` in its EQUIPPED (negative)
+    // encoding, or -1 if not found -- confirmed the "equipped" sign
+    // convention `EquipItem`'s own `-std::abs(id)` write already
+    // establishes, not independently re-derived. Only real confirmed
+    // caller so far: `PlayerCombatStats::TickPerSecond`'s own "remove
+    // the daedric weapon when its temporary effect expires" branch.
+    static int FindEquippedSlotForItem(const PlayerState& p, int itemId);
 
     // Player.unequipSlot(slot).
     static void UnequipSlot(PlayerState& p, int slot, const ItemDatabase& items);
