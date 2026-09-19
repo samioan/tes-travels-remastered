@@ -9,9 +9,20 @@ if(MSVC)
   add_compile_options(/W4 /utf-8)
 endif()
 
-# M2/M3/M4: asset foundations -- see docs/PORT_ROADMAP.md and src/assets/.
+# M24: vendored stb_image (PNG decoding) -- see
+# third_party/stb/PROVENANCE.md.
+add_library(stb_image STATIC third_party/stb/stb_image_impl.cpp)
+target_include_directories(stb_image PUBLIC third_party/stb)
+if(MSVC)
+  # Vendored third-party source, not held to this project's own /W4.
+  target_compile_options(stb_image PRIVATE /W3)
+endif()
+
+# M2/M3/M4/M24: asset foundations -- see docs/PORT_ROADMAP.md and
+# src/assets/.
 add_library(stormhold_assets STATIC
   src/assets/character_data.cpp
+  src/assets/decoded_image.cpp
   src/assets/dungeon_geometry.cpp
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
@@ -20,6 +31,7 @@ add_library(stormhold_assets STATIC
   src/assets/spell_database.cpp
 )
 target_include_directories(stormhold_assets PUBLIC src)
+target_link_libraries(stormhold_assets PRIVATE stb_image)
 
 # M6: procedural dungeon generation -- see docs/PORT_ROADMAP.md and
 # src/world/.
@@ -182,3 +194,8 @@ target_link_libraries(corridor_render_plan_smoke PRIVATE stormhold_render)
 add_executable(backbuffer_blit_smoke src/tests/m23_backbuffer_blit_smoke.cpp)
 target_include_directories(backbuffer_blit_smoke PRIVATE src)
 target_link_libraries(backbuffer_blit_smoke PRIVATE stormhold_assets)
+
+# M24 milestone smoke test -- see src/tests/m24_decoded_image_smoke.cpp.
+add_executable(decoded_image_smoke src/tests/m24_decoded_image_smoke.cpp)
+target_include_directories(decoded_image_smoke PRIVATE src)
+target_link_libraries(decoded_image_smoke PRIVATE stormhold_assets)

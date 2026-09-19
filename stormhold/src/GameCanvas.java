@@ -390,12 +390,18 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // are each a SINGLE shared Image (matching this class's own field
    // declarations, `static Image floorTexture; static Image wallTexture;`
    // -- no separate ice/plain/gate Image fields the way dawnstar has 5).
-   // Whether floorTexture/wallTexture are loaded from a `.cus` file (M7's
-   // RawImage format) or a plain MIDP-native Image resource is NOT
-   // determined by this pass -- none of M7's own 37 confirmed `.cus`
-   // files read as a wall/floor texture by name, so this is flagged as an
-   // open question for whichever milestone actually wires image loading,
-   // not resolved here.
+   // **Resolved by phase-3 M24:** floorTexture/wallTexture are plain
+   // MIDP-native Image resources, NOT M7's RawImage/`.cus` format --
+   // confirmed directly by ESGame.java's own asset-loading call sites
+   // (`GameCanvas.floorTexture = this.createImage("floor3.png");`/
+   // `GameCanvas.wallTexture = this.createImage("newwallsnok.png");`).
+   // M24's own decoded-PNG smoke test cross-checks this against the real
+   // files too: floor3.png is exactly 36px wide per the `col * 36` tiling
+   // this method's own floor-drawing loop uses, and newwallsnok.png is
+   // exactly 144px wide -- 8 real 18px-wide frames, matching
+   // drawWallSegment()'s own "frame > 7 mirrors frame-8" logic exactly
+   // (8 physical frames covering a logical 0-15 frame range via
+   // mirroring, not 16 separately stored frames).
    //
    // **NOTE, NOT fixed here:** `paintFloor()` (still a stub immediately
    // below) is called separately by paintGameView() right after this

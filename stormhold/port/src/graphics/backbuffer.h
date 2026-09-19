@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "assets/decoded_image.h"
 #include "assets/raw_image.h"
 
 namespace stormhold {
@@ -102,6 +103,35 @@ public:
                                              static_cast<size_t>(srcX)];
                 if (!IsOpaquePixel(pixel)) continue;
                 pixels_[static_cast<size_t>(dy) * kWidth + static_cast<size_t>(dx)] = Argb4444ToRgb565(pixel);
+            }
+        }
+    }
+
+    // M24: the plain-PNG counterpart of Blit() above, for floorTexture/
+    // wallTexture/effectImages/hotbarIcons -- GameCanvas's own plain
+    // `Image` fields (confirmed real `.png` files via ESGame.java's own
+    // asset-loading call sites, e.g. "floor3.png"/"newwallsnok.png"; see
+    // assets/decoded_image.h's own header comment), decoded through
+    // stb_image rather than M7's from-scratch RawImage/.cus decoder.
+    // Alpha-tested only (A == 0 fully transparent, anything else fully
+    // opaque) -- same "MIDP hardware this old has no partial alpha
+    // blending" reasoning Blit() above and dawnstar's own identical
+    // DecodedImage-Blit already use, not a simplification specific to
+    // this overload.
+    void Blit(int x, int y, const DecodedImage& img, int clipX0 = 0, int clipX1 = kWidth, bool mirrorX = false) {
+        int x0 = std::max(clipX0, 0);
+        int x1 = std::min(clipX1, kWidth);
+
+        for (int sy = 0; sy < img.height; sy++) {
+            int dy = y + sy;
+            if (dy < 0 || dy >= kHeight) continue;
+            for (int sx = 0; sx < img.width; sx++) {
+                int dx = x + sx;
+                if (dx < x0 || dx >= x1) continue;
+                int srcX = mirrorX ? (img.width - 1 - sx) : sx;
+                if (img.A(srcX, sy) == 0) continue;
+                pixels_[static_cast<size_t>(dy) * kWidth + static_cast<size_t>(dx)] =
+                    PackRGB565(img.R(srcX, sy), img.G(srcX, sy), img.B(srcX, sy));
             }
         }
     }

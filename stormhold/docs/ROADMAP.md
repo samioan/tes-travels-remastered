@@ -153,10 +153,16 @@ instead of hotbarContext] since the very first partial pass), and M23
 (Backbuffer::Blit(), the real alpha-test/clip/mirror RawImage
 compositor GameCanvas's own drawRawImageFull()/drawRawImageFrame() [M22]
 both reduce to -- verified against a real M7-confirmed .cus sprite
-pixel-by-pixel, not just synthetic data, though still not yet wired
-into an actual render pass: no asset loading, no live
-PlayerState::corridorView, no GameCanvas-equivalent render function
-calling it yet) are
+pixel-by-pixel, not just synthetic data), and M24 (DecodedImage, a
+vendored-stb_image PNG decoder resolving M21's own open question --
+floorTexture/wallTexture turn out to be plain .png files, confirmed by
+grepping ESGame.java's own asset-loading call sites, not M7's RawImage
+format -- plus a matching Backbuffer::Blit(DecodedImage) overload,
+cross-checked against the real floor3.png/newwallsnok.png files: their
+decoded widths [36px, 144px] match paintWalls()'s/drawWallSegment()'s
+own tiling constants exactly. Still not yet wired into an actual render
+pass: no single live asset bundle, no PlayerState::corridorView, no
+GameCanvas-equivalent render function calling any of this yet) are
 done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small

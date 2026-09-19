@@ -1493,19 +1493,80 @@ read-through.
       isolation, wire the pipeline later" shape M21 already used for
       `CorridorRenderPlan` itself.
 
+- [x] **M24 -- `DecodedImage`, the plain-PNG decoder** (this session).
+      Resolves phase-3 M21's own open question -- whether
+      `floorTexture`/`wallTexture` load from a `.cus` file (M7's
+      from-scratch `RawImage` format) or a plain MIDP-native `Image`
+      resource -- by grepping `ESGame.java`'s own asset-loading call
+      sites directly: `GameCanvas.floorTexture = this.createImage(
+      "floor3.png")`/`GameCanvas.wallTexture = this.createImage(
+      "newwallsnok.png")`, both real, plain `.png` files (confirmed
+      present in `extracted/`), same for `effectImages`/`hotbarIcons`.
+      Vendors `stb_image` (copied verbatim, same pinned commit, from the
+      sibling `dawnstar` project's own identical M10 vendoring -- see
+      `third_party/stb/PROVENANCE.md`) rather than writing a PNG/DEFLATE
+      decoder from scratch, same reasoning dawnstar and
+      `shadowkey-decomp` already used it for. New
+      `assets/decoded_image.h`/`.cpp` (`DecodedImage::Load(AssetRoot,
+      name)`, RGBA8, structurally copied from dawnstar's own
+      `DecodedImage` but reading through `AssetRoot`'s plain directory
+      instead of an archive) and a new `Backbuffer::Blit(DecodedImage,
+      ...)` overload -- the plain-PNG counterpart of M23's `RawImage`
+      one, same signature shape (position, `[clipX0,clipX1)` column
+      clip, `mirrorX`), same binary alpha test (`A == 0` transparent,
+      anything else opaque -- no partial blending, matching M23's own
+      `RawImage` `Blit()` and dawnstar's identical precedent).
+
+      **Two real cross-checks against the actual files, not just
+      synthetic data:** `floor3.png` decodes to exactly 36px wide,
+      matching `paintWalls()`'s own `col * 36` floor-tiling loop (M21)
+      exactly; `newwallsnok.png` decodes to exactly 144px wide -- 8 real
+      18px-wide frames, confirming `drawWallSegment()`'s own "frame > 7
+      mirrors frame-8" logic (M21/M22) means 8 PHYSICAL frames covering
+      a logical 0-15 frame range via mirroring, not 16 separately stored
+      frames. `GameCanvas.java`'s own `paintWalls()` doc comment updated
+      to mark the open question resolved.
+
+      Verified with a new `decoded_image_smoke.exe`: synthetic
+      known-value RGBA8 pixels convert/alpha-test identically to M23's
+      `RawImage` version; the same "shift then clip" frame-slicing idiom
+      and mirroring behave identically too; and all 4 real `.png` files
+      GameCanvas actually loads (`floor3.png`/`newwallsnok.png`/
+      `blood1.png`/`icon_camp.png`) decode to sane, non-empty buffers,
+      with `icon_camp.png` blitted onto a filled backbuffer matching
+      `DecodedImage`'s own `R()`/`G()`/`B()`/`A()` accessors pixel-by-
+      pixel (246 opaque / 474 transparent pixels, zero mismatches). All
+      checks passed on the first attempt; full clean rebuild stayed at
+      zero `/W4` warnings (the vendored `stb_image` library itself
+      compiles at `/W3`, same carve-out dawnstar's own vendoring uses);
+      all 22 smoke tests pass.
+
+      **Still deliberately NOT wired into an actual render pass** -- same
+      "primitive first, pipeline later" framing M21/M23 already used.
+      `chestImages`/`bagImages`/`crystalImages`/`monsterImages` (all
+      `RawImage`, M23's territory) and now `floorTexture`/`wallTexture`/
+      `effectImages`/`hotbarIcons` (all `DecodedImage`, this milestone's)
+      can BOTH now actually be decoded and blitted -- what's still
+      missing is loading them into a single live asset bundle, a real
+      `PlayerState::corridorView` field, and a render function that
+      calls `CorridorRenderPlan::Plan()` (M21) + both `Blit()` overloads
+      together.
+
 ## What's next
 
-M24 onward: wiring an actual render pass together -- asset loading for
-`floorTexture`/`wallTexture`/`monsterImages`/`chestImages`/`bagImages`/
-`crystalImages`/`effectImages`/`hotbarIcons` (all still unloaded in the
-C++ port), a live `PlayerState::corridorView` field populated by
-`DungeonRuntime::SampleCorridorView` (M21), and a real per-frame
-render function that calls `CorridorRenderPlan::Plan()` (M21) +
-`Backbuffer::Blit()` (M23) together to actually put pixels on screen.
-Also still open: the brand-new `q()`/`p()` minimap-populate methods M22
-found but didn't transcribe (not paint methods, but needed before the
-minimap can actually show anything live); the still-untranscribed
-tick-loop helpers (`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
+M25 onward: wiring an actual render pass together -- a single live asset
+bundle loading every image `GameCanvas` needs (`floorTexture`/
+`wallTexture`/`effectImages`/`hotbarIcons` via `DecodedImage::Load`,
+`monsterImages`/`chestImages`/`bagImages`/`crystalImages` via
+`RawImage::Load`, all confirmed real filenames), a live
+`PlayerState::corridorView` field populated by
+`DungeonRuntime::SampleCorridorView` (M21), and a real per-frame render
+function that calls `CorridorRenderPlan::Plan()` (M21) + `Backbuffer::
+Blit()` (M23/M24) together to actually put pixels on screen. Also still
+open: the brand-new `q()`/`p()` minimap-populate methods M22 found but
+didn't transcribe (not paint methods, but needed before the minimap can
+actually show anything live); the still-untranscribed tick-loop helpers
+(`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
 `rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`); and the
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
 onDeath()` callers (flagged again this session, unchanged since
