@@ -226,3 +226,13 @@ target_link_libraries(visible_objects_smoke PRIVATE stormhold_player)
 add_executable(visible_object_renderer_smoke src/tests/m28_visible_object_renderer_smoke.cpp)
 target_include_directories(visible_object_renderer_smoke PRIVATE src)
 target_link_libraries(visible_object_renderer_smoke PRIVATE stormhold_render stormhold_player)
+
+# M29 milestone smoke test -- see src/tests/m29_hud_state_smoke.cpp.
+# render/hud_state.h is header-only (a small facing/isNpcDialogueDue
+# helper, no pixels yet) but pulls in player/player_state.h and
+# world/warden.h, so this links stormhold_player/stormhold_world for
+# their real symbols even though this test itself only touches the
+# header's own inline functions.
+add_executable(hud_state_smoke src/tests/m29_hud_state_smoke.cpp)
+target_include_directories(hud_state_smoke PRIVATE src)
+target_link_libraries(hud_state_smoke PRIVATE stormhold_player stormhold_world)

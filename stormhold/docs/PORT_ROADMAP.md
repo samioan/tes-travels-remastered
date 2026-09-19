@@ -1831,26 +1831,76 @@ read-through.
       gap M25/M27 already flagged, `main.cpp` still just presents a
       blank frame.
 
+- [x] **M29 -- `HudState`/`IsAdjacentToVarus`/`IsNpcDialogueDue`/
+      `ResolveHudIconSet`, `paintHud()`'s own SELECTION logic (data
+      only)** (this session). Same "selection logic first, pixels later"
+      split M21->M25 and M27->M28 already used -- deferred here
+      specifically because `paintHud()` itself needs TWO primitives this
+      port doesn't have at all yet: a filled rounded-rect and character-
+      glyph text rendering (`hotbarKeyGlyphs`). Rather than build those
+      under time pressure just to unblock one milestone, this milestone
+      ports everything ELSE `paintHud()` depends on that doesn't need
+      pixels.
+
+      New `render/hud_state.h` (header-only): `HudState` (the 4
+      `GameCanvas`-level UI flags `resolveHudIconSet()` reads --
+      deliberately NOT on `PlayerState`, matching the class-boundary
+      distinction M25's own `corridorView` comment already draws, just
+      the other direction), `TargetMonsterInfo` (the minimal shape of
+      `GameCanvas.targetMonster` `IsNpcDialogueDue()` itself needs --
+      position + typeIndex, `std::nullopt` for `null`; **no confirmed
+      setter exists anywhere in `../src/` yet**, same class of gap as
+      the still-untranscribed tick-loop helpers -- the caller supplies
+      whatever it currently believes this to be, same pattern
+      `CorridorRenderPlan`'s own already-sampled view uses),
+      `IsAdjacentToVarus` (`Shop.isAdjacentToVarus`, reusing
+      `WardenState::kShopX`/`kShopY` (M8) rather than standing up a
+      whole `Shop` module for one distance check), `IsNpcDialogueDue`,
+      and `ResolveHudIconSet`.
+
+      **A real, stale-comment discrepancy noticed while reading
+      `Shop.isAdjacentToVarus()` directly, flagged rather than "fixed"
+      (out of scope for this milestone -- `Shop.java` itself wasn't
+      touched):** that method's own header comment mentions a
+      "confirmed-required state (`player.j == 1`)" the method doesn't
+      actually check anywhere in its real body (just the level/distance
+      test) -- looks like a leftover from an earlier, less certain pass,
+      not a missing condition this port should reproduce.
+
+      Verified with a new `hud_state_smoke.exe`: every cardinal-adjacent/
+      diagonal/same-tile/off-level case for `IsAdjacentToVarus`; both of
+      `IsNpcDialogueDue`'s branches (Varus short-circuits true
+      regardless of any target monster; the level-37/typeIndex-41/
+      adjacency conditions for the target-monster branch, including the
+      wrong-type, wrong-level, and non-adjacent negatives); and all 4 of
+      `ResolveHudIconSet`'s branches including the priority order between
+      them. All 27 smoke tests pass; full clean rebuild stayed at zero
+      `/W4` warnings.
+
 ## What's next
 
-M29 onward: `paintHud()` needs `hotbarIcons` (`DecodedImage`, M24's
-compositor, real filenames not yet grepped from `ESGame.java`) plus
-`resolveHudIconSet()`'s own `unconfirmed_aa`/`_m`/`_R`/`_W` flags and
-`isNpcDialogueDue()` (a `Shop`/`targetMonster` dependency) -- none of
-which have a port-side home yet, likely a small new "HUD/UI state"
-struct alongside `PlayerState`, not a `PlayerState` field itself (these
-are `GameCanvas`'s own static fields in the original, not `Player`'s);
-`paintMinimap*()` need the still-untranscribed `q()`/`p()` minimap-
-populate methods M22 found but didn't transcribe. Beyond that: an actual
-live game loop in `main.cpp` calling `GameRenderer`/
-`VisibleObjectRenderer`/`VisibleObjects::Refresh`/whatever M29+ adds
-every tick instead of presenting a blank frame; the still-untranscribed
-tick-loop helpers (`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
-`rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`); and the
-still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
-onDeath()` callers (flagged again this session, unchanged since
-M14/M15), which may well turn out to live in exactly those same
-tick-loop helpers. Following dawnstar's own later milestones roughly but
-expecting further Stormhold-specific divergences the way
+M30 onward: `paintHud()`'s own actual pixel drawing -- needs a filled
+rounded-rect primitive (`Backbuffer::FillRoundRect` or similar) and a
+character-glyph text-rendering primitive (for `hotbarKeyGlyphs`/
+`compassGlyphs`, needed by `paintHud()` itself and also
+`paintMinimapZoomedOut`/`Normal`/`paintMessagePopup`/`paintStatusBars`'
+own font uses) neither of which exist in this port at all yet, plus
+`hotbarIcons` (`DecodedImage`, M24's compositor, real filenames
+confirmed: `icon_attack`/`icon_cast`/`icon_change`/`icon_option`/
+`icon_action`/`icon_camp.png`) loaded into an asset bundle. Once a text
+primitive exists it likely unblocks several paint methods at once, not
+just this one. `paintMinimap*()` separately need the still-untranscribed
+`q()`/`p()` minimap-populate methods M22 found but didn't transcribe.
+Beyond all of that: an actual live game loop in `main.cpp` calling
+`GameRenderer`/`VisibleObjectRenderer`/`VisibleObjects::Refresh`/
+whatever M30+ adds every tick instead of presenting a blank frame; the
+still-untranscribed tick-loop helpers (`showMessage`/
+`tickStatusCountdowns`/`tickPerSecond`/`rollCampInterrupted`/
+`tickMovementAndAI`/`setSomeFlag`); and the still-unrecovered
+`tryRankUpSkills()`/`Monster.tick()`/`Monster.onDeath()` callers
+(flagged again this session, unchanged since M14/M15), which may well
+turn out to live in exactly those same tick-loop helpers. Following
+dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

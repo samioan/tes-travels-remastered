@@ -192,10 +192,15 @@ but it actually has 31, and typeIndex 32-40 -- confirmed real,
 spawnable monster types at deep dungeon tiers, not dead code -- index
 past the end of it if they ever reach the player's near-view slot;
 preserved as a thrown exception in the port, not silently read out of
-bounds). Every OTHER paint method GameCanvas needs -- HUD's hotkey row,
-minimap, message popups -- still needs live state this port doesn't
-wire up yet, and there's still no actual game loop calling any of this)
-are done, all
+bounds), and M29 (paintHud()'s own SELECTION logic only --
+IsAdjacentToVarus/IsNpcDialogueDue/ResolveHudIconSet, data only, no
+pixels: paintHud() itself needs a filled-rounded-rect primitive and a
+character-glyph text primitive neither of which exist in this port yet,
+so those two are deliberately deferred rather than built under time
+pressure). Every OTHER paint method GameCanvas needs -- HUD's own pixel
+drawing, minimap, message popups -- still needs live state or missing
+primitives this port doesn't have yet, and there's still no actual game
+loop calling any of this) are done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader/writer) are
