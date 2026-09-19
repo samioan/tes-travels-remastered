@@ -1435,16 +1435,77 @@ read-through.
       framing), so the existing 20 smoke tests are unaffected and were
       not re-run.
 
+- [x] **M23 -- `Backbuffer::Blit()`, the real alpha-test/clip/mirror
+      compositor** (this session). Now that M22 gave every `GameCanvas`
+      paint method a real Java body to port from, this implements the
+      ONE primitive both of its RawImage-drawing idioms
+      (`drawRawImageFull()`/`drawRawImageFrame()`) reduce to once
+      `Graphics.setClip()` is modeled as an extra column-range argument
+      instead of real stateful clipping: draw a whole `RawImage` at
+      `(x, y)`, optionally mirrored horizontally first (the
+      `DirectGraphics` manipulation flag 8192/`TRANS_MIRROR`
+      `drawWallSegment()`/`renderWardenCompassIcon()` both use),
+      alpha-tested, clipped to both the backbuffer itself and an
+      additional `[clipX0, clipX1)` column range. `drawRawImageFrame()`'s
+      own frame-slicing idiom (draw the WHOLE spritesheet shifted left by
+      `frame * frameWidth`, then let an external clip crop it to one
+      frame-wide column) is reproduced exactly, not specially-cased --
+      the caller just passes `x - frame*frameWidth` as `Blit()`'s `x` and
+      `[x, x+frameWidth)` as the clip range.
+
+      New `graphics/backbuffer.h` free functions `IsOpaquePixel()`/
+      `Argb4444ToRgb565()`: `RawImage`'s own decoded pixel format (M7) is
+      Nokia UI API's `TYPE_USHORT_4444_ARGB` (the literal `4444`
+      `GameCanvas`'s `drawPixels()` calls pass as their own `format`
+      argument) -- top nibble is a binary alpha TEST bit (real MIDP
+      hardware this old has no partial alpha blending, matching
+      dawnstar's own `Blit()` precedent exactly), the low 12 bits R/G/B
+      nibbles, each widened to a full 8-bit channel before repacking to
+      RGB565.
+
+      Verified with a new `backbuffer_blit_smoke.exe`: synthetic
+      known-value ARGB4444 pixels convert to the exact expected RGB565
+      output and the alpha test skips exactly the transparent one;
+      `drawRawImageFrame()`'s own "shift then clip" idiom demonstrated
+      directly against a synthetic 3-frame spritesheet (only the
+      requested frame's columns land, its neighbors on both sides stay
+      untouched); mirroring reverses column order on a 3-pixel synthetic
+      image; five blits straddling every edge/corner of the backbuffer
+      (including two placed 1000px off-screen entirely) neither crash
+      nor corrupt in-bounds pixels; and a real M7-confirmed `.cus`
+      sprite (`chestnearclosed.cus`, 80x68, 4430 opaque / 1010
+      transparent pixels) blitted onto a filled backbuffer has EVERY
+      pixel match `Blit()`'s own `IsOpaquePixel()`/`Argb4444ToRgb565()`
+      rules exactly, cross-checked pixel-by-pixel against the source
+      `RawImage` directly. One test bug caught and fixed during
+      verification (an out-of-bounds check asserted about a corner none
+      of its own blit calls actually touched); no bugs in `Blit()`
+      itself. All checks passed after that fix; full clean rebuild
+      stayed at zero `/W4` warnings; all 21 smoke tests pass.
+
+      **Deliberately does NOT wire this into an actual render pass yet**
+      -- there's still no `PlayerState::corridorView` field, no asset
+      loading for `floorTexture`/`wallTexture`/`monsterImages`/etc, and
+      no live `GameCanvas`-equivalent render function calling
+      `CorridorRenderPlan::Plan()` (M21) or any of M22's Java render
+      methods. `Blit()` is the composited-pixel PRIMITIVE those future
+      pieces will call into, same "build the primitive, verify it in
+      isolation, wire the pipeline later" shape M21 already used for
+      `CorridorRenderPlan` itself.
+
 ## What's next
 
-M23 onward: the real `Backbuffer::Blit()`/alpha-test compositor for M7's
-`RawImage` sprites -- now that ALL of `GameCanvas`'s paint methods have
-real, verified Java bodies to port from, this is the natural next step,
-following dawnstar's own later-milestone shape. Also still open: the
-brand-new `q()`/`p()` minimap-populate methods M22 found but didn't
-transcribe (not paint methods, but needed before the minimap can
-actually show anything live); the still-untranscribed tick-loop helpers
-(`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
+M24 onward: wiring an actual render pass together -- asset loading for
+`floorTexture`/`wallTexture`/`monsterImages`/`chestImages`/`bagImages`/
+`crystalImages`/`effectImages`/`hotbarIcons` (all still unloaded in the
+C++ port), a live `PlayerState::corridorView` field populated by
+`DungeonRuntime::SampleCorridorView` (M21), and a real per-frame
+render function that calls `CorridorRenderPlan::Plan()` (M21) +
+`Backbuffer::Blit()` (M23) together to actually put pixels on screen.
+Also still open: the brand-new `q()`/`p()` minimap-populate methods M22
+found but didn't transcribe (not paint methods, but needed before the
+minimap can actually show anything live); the still-untranscribed
+tick-loop helpers (`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
 `rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`); and the
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
 onDeath()` callers (flagged again this session, unchanged since

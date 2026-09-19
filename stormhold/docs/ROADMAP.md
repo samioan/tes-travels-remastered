@@ -149,7 +149,14 @@ paints the floor itself], likewise paintMessagePopup() and the old
 paintUnknown_l() [the flash-overlay renderer had stolen the message-
 popup's name], and paintHotbar1()/paintHotbar2() turned out to be the
 two minimap zoom levels, gated by the wrong field [hotbarActionSet
-instead of hotbarContext] since the very first partial pass) are
+instead of hotbarContext] since the very first partial pass), and M23
+(Backbuffer::Blit(), the real alpha-test/clip/mirror RawImage
+compositor GameCanvas's own drawRawImageFull()/drawRawImageFrame() [M22]
+both reduce to -- verified against a real M7-confirmed .cus sprite
+pixel-by-pixel, not just synthetic data, though still not yet wired
+into an actual render pass: no asset loading, no live
+PlayerState::corridorView, no GameCanvas-equivalent render function
+calling it yet) are
 done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small

@@ -175,3 +175,10 @@ target_link_libraries(save_format_smoke PRIVATE stormhold_player stormhold_monst
 # M21 milestone smoke test -- see src/tests/m21_corridor_render_plan_smoke.cpp.
 add_executable(corridor_render_plan_smoke src/tests/m21_corridor_render_plan_smoke.cpp)
 target_link_libraries(corridor_render_plan_smoke PRIVATE stormhold_render)
+
+# M23 milestone smoke test -- see src/tests/m23_backbuffer_blit_smoke.cpp.
+# graphics/backbuffer.h is header-only but now includes assets/raw_image.h,
+# so this needs stormhold_assets to link RawImage::Load's real body.
+add_executable(backbuffer_blit_smoke src/tests/m23_backbuffer_blit_smoke.cpp)
+target_include_directories(backbuffer_blit_smoke PRIVATE src)
+target_link_libraries(backbuffer_blit_smoke PRIVATE stormhold_assets)

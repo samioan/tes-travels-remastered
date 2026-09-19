@@ -22,9 +22,9 @@ namespace stormhold {
 // instead: binary on/off transparency baked directly into the pixel value
 // (RawImage.load()'s `pixel & -61441` / `pixel | 61440`), no separate alpha
 // mask. Kept as the same raw ARGB4444-ish uint16_t the Java stores, not
-// converted to RGB565 here -- compositing onto Backbuffer (alpha test +
-// format conversion) is a later milestone's job, same as
-// docs/PORT_ROADMAP.md's Backbuffer header comment already flags.
+// converted to RGB565 here -- M23 does that conversion (and the alpha
+// test) at composite time instead, in graphics/backbuffer.h's own
+// Blit()/IsOpaquePixel()/Argb4444ToRgb565(), not in this class.
 class RawImage {
 public:
     static RawImage Load(const AssetRoot& assets, const std::string& name);
