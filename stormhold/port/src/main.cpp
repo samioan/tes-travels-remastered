@@ -73,17 +73,27 @@
 // (M29) their own first live values instead of a fixed all-false/
 // nullopt stand-in.
 //
+// M39 layers in `CombatResolution::ResolveAttackInput`
+// (GameCanvas.resolveAttackInput(), was decompiled/e.java's d(long),
+// also new this session) -- the player's own attack input, finally
+// giving the player a way to actually swing at `targetMonster`. Bound
+// to a new SPACE key (polled the same way as the arrow keys -- the
+// original's own real gate, `unconfirmed_av`/key '1' with
+// `hotbarActionSet == 1`, isn't reproduced, since `hotbarActionSet`
+// itself is out of scope -- input handling in general, same gap M29/
+// M31 already flagged). `ResolveAttackInput`'s own internal 500ms
+// cooldown means holding SPACE auto-repeats at that rate, same as
+// holding an arrow key auto-repeats movement once per tick.
+//
 // Deliberately NOT wired here: paintFlashOverlays()/paintUnknown_b()
 // (both still gated on live tick-loop state, see docs/PORT_ROADMAP.md's
 // own "what's next"), and the still-untranscribed tick-loop helpers
 // (rollCampInterrupted is transcribed but has no reachable caller worth
 // wiring without the camp system around it; tickMovementAndAI/the real
-// per-tick action dispatcher) -- so there is still no combat INPUT
-// (only monsters attack; the player can't attack back yet -- targeting
-// now works, but nothing lets the player actually swing), no camp
-// system, and no rank-up/level-up flow. Turning (Move dir 3/4, no
-// strafe) and stepping forward/backward are the only player actions
-// this milestone wires.
+// per-tick action dispatcher) -- so there is still no camp system and
+// no rank-up/level-up flow. Turning (Move dir 3/4, no strafe), stepping
+// forward/backward, and now attacking are the only player actions this
+// milestone wires.
 #include <windows.h>
 
 #include <array>
@@ -220,6 +230,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // (whether targetMonster is currently set); the other 3 stay false,
     // still no reachable setter for any of them.
     stormhold::HudState hudState;
+    // M39: GameCanvas.unconfirmed_av's own port-side stand-in --
+    // ResolveAttackInput's own job to clear it again either way.
+    bool attackRequested = false;
+    int64_t lastAttackTimeMs = 0;
 
     window.RunMessageLoop([&]() {
         if (clock.ConsumeTick()) {
@@ -228,6 +242,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             bool left = (GetAsyncKeyState(VK_LEFT) & 0x8000) != 0;
             bool right = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0;
             bool mDown = (GetAsyncKeyState('M') & 0x8000) != 0;
+            if (GetAsyncKeyState(VK_SPACE) & 0x8000) attackRequested = true;
 
             if (up) {
                 stormhold::PlayerMovement::Move(player, 1, false, levelLookup, world, items, monsters, warden);
@@ -284,6 +299,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 stormhold::MessagePopup::Show(messagePopup, {"Creature", "is dead!"}, 1, gameTimeMs);
                 targetMonster = std::nullopt;
                 hudState.unconfirmedAa = false;
+            }
+
+            // M39: GameCanvas.resolveAttackInput() (was e.java's
+            // d(long)) -- see this file's own header comment for the
+            // input-binding simplification.
+            if (attackRequested) {
+                stormhold::CombatResolution::ResolveAttackInput(player, targetMonster, attackRequested, gameTimeMs,
+                                                                  lastAttackTimeMs, charData, items, monsters,
+                                                                  combatRng, world);
             }
 
             // M37: GameCanvas.run()'s own this.tickMonsterAI(frameStart)

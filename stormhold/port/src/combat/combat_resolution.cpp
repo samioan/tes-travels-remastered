@@ -210,4 +210,20 @@ bool CombatResolution::TickMonstersOnLevel(WorldRegistry& world, GeneratedLevel&
     return showAttackMessage;
 }
 
+bool CombatResolution::ResolveAttackInput(PlayerState& player, std::optional<MonsterState>& target,
+                                           bool& attackRequested, int64_t now, int64_t& lastAttackTimeMs,
+                                           const CharacterData& charData, const ItemDatabase& items,
+                                           const MonsterDatabase& monsterDb, JavaRandom& globalRng,
+                                           WorldRegistry& world) {
+    bool attacked = false;
+    if (now - lastAttackTimeMs >= 500 && target.has_value()) {
+        PlayerAttack(player, *target, charData, items, monsterDb, globalRng, world);
+        lastAttackTimeMs = now;
+        attacked = true;
+    }
+
+    attackRequested = false;
+    return attacked;
+}
+
 }  // namespace stormhold

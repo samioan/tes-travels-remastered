@@ -2437,19 +2437,66 @@ read-through.
       `javac` recompiled clean (8 expected warnings only). Re-verified
       the real windowed exe still launches and runs.
 
+- [x] **M39 -- `CombatResolution::ResolveAttackInput`, real player
+      attack input** (this session). `GameCanvas.resolveAttackInput()`
+      (was decompiled/e.java's `d(long)`) is new this session -- no
+      GameCanvas.java-side stub existed before now, found by the same
+      `tickMovementAndAI`/`e(long)` dispatch-branch reconnaissance M38's
+      own `a()`/`m()` came from. The player finally has a way to
+      actually swing at `targetMonster`, not just target it.
+
+      Once at least 500ms have passed since the player's own last
+      attack (`lastAttackTimeMs`, a new instance field -- was
+      decompiled/e.java's `B`) AND `targetMonster` is set, calls
+      `Player.attack(targetMonster)` -- already fully ported since
+      M14/M17 -- stamps `lastAttackTimeMs`, and sets `unconfirmed_S`
+      (`paintFlashOverlays()`'s own monster-hit flash trigger, M22).
+      Clears `unconfirmed_av` (the attack-request flag `keyPressed()`'s
+      own '1' key already sets, gated there on `hotbarActionSet == 1`)
+      either way, whether or not an attack actually connected -- a key
+      press that arrives mid-cooldown is simply dropped, not queued.
+
+      **Not reproduced in the C++ port:** the original's own `at` flag,
+      set here (and in a couple of still-untranscribed sibling dispatch
+      branches) to gate a per-tick passive-regen call inside
+      `tickMovementAndAI`/`e(long)`'s own body -- that whole consumer
+      isn't ported, so `at` would have no observable effect either way.
+
+      Wired into `main.cpp`'s tick loop the same way M35-M38 wired
+      their own confirmed-but-not-yet-dispatched mechanics, bound to a
+      new SPACE key (polled the same way as the arrow keys) rather than
+      reproducing the original's own `hotbarActionSet`-gated numeric-key
+      binding, since `hotbarActionSet` itself remains out of scope
+      (input handling in general, same gap M29/M31 already flagged).
+      `ResolveAttackInput`'s own internal 500ms cooldown means holding
+      SPACE auto-repeats attacks at that rate, the same way holding an
+      arrow key auto-repeats movement once per tick.
+
+      Verified with a new `attack_input_smoke.exe`: the no-target gate,
+      the 500ms cooldown gate (including the exact `>=` boundary, not
+      `>`), `attackRequested` clearing either way, and a real
+      successful attack actually reaching `PlayerAttack` (cross-checked
+      against `player.lastCombatTargetId`, the same invariant M14's own
+      `PlayerAttack` test already relies on). All 36 smoke tests pass;
+      full clean rebuild stayed at zero `/W4` warnings. `javac`
+      recompiled clean (8 expected warnings only). Re-verified the real
+      windowed exe still launches and runs.
+
 ## What's next
 
 The remaining still-untranscribed tick-loop helper, `tickMovementAndAI`
 (the real per-tick action dispatcher, decompiled/e.java's `e(long)`) --
 gates a whole further web of interconnected methods (`f()`/`g(long)`/
-`h(long)`/`n()`/`d(long)`, all confirmed to exist and roughly what they
-each do this session, just not yet transcribed -- `a()`/`m()` are now
-done, M38) -- this is where real combat input (`d(long)`, confirmed to
-call the already-ported `Player.attack()`/`PlayerAttack`) and camp/rest
+`h(long)`/`n()`, all confirmed to exist and roughly what they each do
+this session, just not yet transcribed -- `a()`/`m()`/`d(long)` are now
+done, M38/M39) -- this is where camp/rest and the level-up/rank-up flow
 most likely live. `paintFlashOverlays()`/`paintUnknown_b()` (the two
 remaining unported-pixel paint methods, both gated on that same live
-state). Beyond that: a character-creation UI (`main.cpp` still
-hardcodes class 0). Following dawnstar's own later milestones roughly
-but expecting further Stormhold-specific divergences the way
+state -- `paintFlashOverlays()`'s own `unconfirmed_S` trigger is now
+real, M39, so that one in particular may be a short follow-on rather
+than a fresh investigation). Beyond that: a character-creation UI
+(`main.cpp` still hardcodes class 0). Following dawnstar's own later
+milestones roughly but expecting further Stormhold-specific
+divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

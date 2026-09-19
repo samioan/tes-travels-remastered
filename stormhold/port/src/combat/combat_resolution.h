@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "assets/character_data.h"
@@ -141,6 +142,32 @@ public:
                                      const MonsterDatabase& monsterDb, std::vector<GeneratedLevel>& levels,
                                      int64_t now, JavaRandom& globalRng, JavaRandom& ambushRng,
                                      int16_t& spawnIdCounter);
+
+    // GameCanvas.resolveAttackInput() (M39, phase-3 port; was
+    // decompiled/e.java's d(long)) -- the player's own attack input,
+    // one of tickMovementAndAI/e(long)'s own dispatch branches (gated
+    // there on `unconfirmed_av`, set by `keyPressed()`'s own '1' key --
+    // already fully wired -- when `hotbarActionSet == 1`; that whole
+    // dispatcher itself remains a stub, so this is wired directly into
+    // the caller's own tick loop instead, same precedent M35-M38 all
+    // used). Once at least 500ms have passed since `lastAttackTimeMs`
+    // AND `target` is present, calls `PlayerAttack` (already ported)
+    // and stamps `lastAttackTimeMs`; `attackRequested` is cleared
+    // either way, matching `unconfirmed_av`'s own "clear even on a
+    // dropped, mid-cooldown press" semantics exactly.
+    //
+    // Returns whether an attack actually happened -- the caller's own
+    // cue for the monster-hit flash (`GameCanvas.unconfirmed_S`,
+    // `paintFlashOverlays()`'s own trigger, M22) -- not modeled further
+    // here since that paint method isn't ported yet. Also NOT modeled:
+    // the original's own `at` flag (see `../../../src/GameCanvas.java`'s
+    // own header comment on `resolveAttackInput()` for why -- its only
+    // real consumer, `tickMovementAndAI`/`e(long)`'s own passive-regen
+    // gate, isn't ported either).
+    static bool ResolveAttackInput(PlayerState& player, std::optional<MonsterState>& target, bool& attackRequested,
+                                    int64_t now, int64_t& lastAttackTimeMs, const CharacterData& charData,
+                                    const ItemDatabase& items, const MonsterDatabase& monsterDb,
+                                    JavaRandom& globalRng, WorldRegistry& world);
 };
 
 }  // namespace stormhold

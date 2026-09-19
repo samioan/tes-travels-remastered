@@ -234,6 +234,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // keyPressed().
    static int hotbarActionSet;
    static boolean unconfirmed_av = false;
+   // Timestamp of the player's own last resolved attack -- gates
+   // resolveAttackInput()'s own 500ms cooldown between attacks (was
+   // decompiled/e.java's instance field `B`).
+   long lastAttackTimeMs = 0L;
    static boolean unconfirmed_ay = false;
    static boolean unconfirmed_I = false;
    static boolean unconfirmed_Z = false;
@@ -1898,6 +1902,37 @@ public class GameCanvas extends FullCanvas implements Runnable {
          targetMonster = null;
          unconfirmed_aa = false;
       }
+   }
+
+   // Confirmed (phase-3 port M39): byte-for-byte from decompiled/e.java's
+   // d(long) -- one of tickMovementAndAI/e(long)'s own dispatch
+   // branches (gated on unconfirmed_av, set by keyPressed()'s own '1'
+   // key when hotbarActionSet==1 -- already wired), still not itself
+   // reachable from run() since e(long) remains a stub. The player's
+   // own attack input: once at least 500ms have passed since the last
+   // attack AND a targetMonster is currently set, calls
+   // Player.attack(targetMonster) (already fully ported), stamps
+   // lastAttackTimeMs, and sets unconfirmed_S (paintFlashOverlays()'s
+   // own monster-hit flash trigger, M22). Always clears unconfirmed_av
+   // at the end, whether or not an attack actually happened -- a key
+   // press that arrives mid-cooldown is simply dropped, not queued.
+   //
+   // **NOT reproduced in the C++ port yet:** the original also sets a
+   // GameCanvas-level `at` flag here (and in a couple of the still-
+   // untranscribed sibling dispatch branches) that gates a per-tick
+   // passive-regen call inside tickMovementAndAI/e(long)'s own body --
+   // since that whole consumer isn't ported yet, `at` has no observable
+   // effect anywhere in this port either way; not modeled until its
+   // real consumer is.
+   private void resolveAttackInput(long now) {
+      if (now - this.lastAttackTimeMs >= 500L && targetMonster != null) {
+         this.player.attack(targetMonster);
+         System.out.println("monster health is " + targetMonster.currentHp);
+         this.lastAttackTimeMs = now;
+         unconfirmed_S = true;
+      }
+
+      unconfirmed_av = false;
    }
 
    private void tickMovementAndAI(long now, long deltaMs) {

@@ -275,3 +275,7 @@ target_link_libraries(monster_ai_tick_smoke PRIVATE stormhold_combat stormhold_p
 # M38 milestone smoke test -- see src/tests/m38_target_monster_smoke.cpp.
 add_executable(target_monster_smoke src/tests/m38_target_monster_smoke.cpp)
 target_link_libraries(target_monster_smoke PRIVATE stormhold_player)
+
+# M39 milestone smoke test -- see src/tests/m39_attack_input_smoke.cpp.
+add_executable(attack_input_smoke src/tests/m39_attack_input_smoke.cpp)
+target_link_libraries(attack_input_smoke PRIVATE stormhold_combat stormhold_player)
