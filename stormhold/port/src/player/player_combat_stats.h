@@ -1,4 +1,6 @@
 #pragma once
+#include <cstdint>
+
 #include "assets/character_data.h"
 #include "assets/item_database.h"
 #include "player/player_state.h"
@@ -128,6 +130,33 @@ public:
     // established.
     static int RollShopOutcome(const PlayerState& p, const CharacterData& charData, int action, int interactionCount,
                                 JavaRandom& rng);
+
+    // GameCanvas.tickStatusCountdowns(deltaMs) (M35, phase-3 port):
+    // per-tick ailment-timer countdowns. While each of 3 specific
+    // ailments (`HasAilment(id)`, NOT `IsEffectActive(id)` -- a
+    // similarly-shaped but genuinely different check, easy to confuse;
+    // confirmed directly from decompiled/e.java, which reads
+    // `Player.hasAilment` here, not `isEffectActive`) is currently
+    // active, its own dedicated millisecond timer (`vampirismTimer`/
+    // `manaBurnTimer`/`terrifiedTimer` -- Monster.tick()'s own confirmed
+    // ailment-4/5 appliers, ../../../src/Monster.java) counts down by
+    // `deltaMs`; once it drops below 0, it's clamped to 0 and the
+    // ailment bit clears (bit index = ailmentId - 1, same convention
+    // `HasAilment` itself already uses).
+    //
+    // **A real, surprising coupling, preserved rather than smoothed
+    // over:** ailment 7's own timer additionally requires
+    // `monsterRenderedThisFrame` -- GameCanvas's own `unconfirmed_A`,
+    // the SAME flag `render/visible_object_renderer.h`'s
+    // `VisibleObjectRenderer::RenderMonsters` (M28) already returns,
+    // set true only when it actually draws a real monster sprite that
+    // same frame (never for the Warden). So ailment 7's countdown only
+    // progresses on a tick where a monster was ALSO just rendered -- a
+    // real dependency between this port's paint and tick passes, not
+    // independently confirmed anywhere else. The caller (`main.cpp`)
+    // supplies whatever `RenderMonsters` most recently returned, same
+    // "caller supplies/owns state" pattern this port uses throughout.
+    static void TickStatusCountdowns(PlayerState& p, int64_t deltaMs, bool monsterRenderedThisFrame);
 };
 
 }  // namespace stormhold

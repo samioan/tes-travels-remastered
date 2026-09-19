@@ -19,16 +19,28 @@
 // logic ported here, pure wiring of already-verified pieces, following
 // dawnstar's own precedent for this exact milestone number/shape.
 //
+// M35 layers in the first tick-loop helper, `PlayerCombatStats::
+// TickStatusCountdowns` (GameCanvas.tickStatusCountdowns(), was a
+// throw-stub until this session): 3 ailment-timer countdowns, called
+// once per tick ahead of this frame's own render pass, using whatever
+// the PREVIOUS frame's `RenderMonsters` returned (see
+// `monsterRenderedLastFrame`'s own comment below) for its own
+// real, confirmed paint/tick coupling. `RenderCorridorView`'s own
+// ailment3/4 flags are also now real (`PlayerCombatStats::HasAilment`)
+// instead of hardcoded false -- currently a no-op either way, since
+// nothing yet sets any ailment bit (Monster.tick() itself still has no
+// wired caller), but no longer a placeholder.
+//
 // Deliberately NOT wired here: paintFlashOverlays()/paintUnknown_b() (both
 // still gated on live tick-loop state, see docs/PORT_ROADMAP.md's own
 // "what's next"), the message popup (MessagePopup::Show has no reachable
 // real call site yet either -- every one lives inside a still-
 // untranscribed tick-loop helper), and the still-untranscribed tick-loop
-// helpers themselves (tickStatusCountdowns/tickPerSecond/
-// rollCampInterrupted/tickMovementAndAI/setSomeFlag) -- so there is no
-// monster AI, no status-effect ticking, and no combat input yet. Turning
-// (Move dir 3/4, no strafe) and stepping forward/backward are the only
-// player actions this milestone wires.
+// helpers themselves (tickPerSecond/rollCampInterrupted/
+// tickMovementAndAI/setSomeFlag) -- so there is still no monster AI, no
+// per-second regen/drain, and no combat input yet. Turning (Move dir
+// 3/4, no strafe) and stepping forward/backward are the only player
+// actions this milestone wires.
 #include <windows.h>
 
 #include <string>
@@ -43,6 +55,7 @@
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
 #include "platform/win32/window.h"
+#include "player/player_combat_stats.h"
 #include "player/player_creation.h"
 #include "player/player_movement.h"
 #include "player/visible_objects.h"
@@ -126,6 +139,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
     bool minimapZoomedOut = true;
     bool mKeyWasDown = false;
+    // M35: GameCanvas's own unconfirmed_A -- whether paintMonsters() drew
+    // a real monster sprite, carried over from the PREVIOUS tick's own
+    // RenderMonsters call (see PlayerCombatStats::TickStatusCountdowns's
+    // own doc comment: this tick's tickStatusCountdowns reads whatever
+    // the last repaint set, not this tick's own not-yet-run one).
+    bool monsterRenderedLastFrame = false;
 
     window.RunMessageLoop([&]() {
         if (clock.ConsumeTick()) {
@@ -148,6 +167,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             if (mDown && !mKeyWasDown) minimapZoomedOut = !minimapZoomedOut;
             mKeyWasDown = mDown;
 
+            // M35: GameCanvas.run()'s own this.c(deltaMs) call, ahead of
+            // this tick's own repaint (see monsterRenderedLastFrame's own
+            // comment above for why that arrives one frame stale here,
+            // faithfully).
+            stormhold::PlayerCombatStats::TickStatusCountdowns(
+                player, static_cast<int64_t>(stormhold::GameClock::kTickInterval.count()), monsterRenderedLastFrame);
+
             // M27: no live tick loop yet refreshes this automatically (see
             // this file's own header comment) -- refreshed unconditionally
             // every tick here instead, harmless since nothing else in this
@@ -156,10 +182,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             stormhold::VisibleObjects::Refresh(player, world, /*includeWarden=*/false, warden);
 
             backbuffer.Fill(stormhold::PackRGB565(0, 0, 0));
-            stormhold::GameRenderer::RenderCorridorView(backbuffer, corridorAssets, player.corridorView,
-                                                         /*ailment3Active=*/false, /*ailment4Active=*/false);
+            stormhold::GameRenderer::RenderCorridorView(
+                backbuffer, corridorAssets, player.corridorView,
+                /*ailment3Active=*/stormhold::PlayerCombatStats::HasAilment(player, 3),
+                /*ailment4Active=*/stormhold::PlayerCombatStats::HasAilment(player, 4));
             stormhold::VisibleObjectRenderer::RenderObjects(backbuffer, objectAssets, player);
-            stormhold::VisibleObjectRenderer::RenderMonsters(backbuffer, objectAssets, player);
+            monsterRenderedLastFrame = stormhold::VisibleObjectRenderer::RenderMonsters(backbuffer, objectAssets, player);
             stormhold::GameRenderer::RenderStatusBars(backbuffer, stormhold::StatusBarPlan::Plan(player, charData));
             int iconSet = stormhold::ResolveHudIconSet(stormhold::HudState{}, player, std::nullopt);
             stormhold::GameRenderer::RenderHud(backbuffer, hotbarAssets, iconSet);

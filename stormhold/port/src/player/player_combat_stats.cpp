@@ -208,4 +208,30 @@ int PlayerCombatStats::RollShopOutcome(const PlayerState& p, const CharacterData
     return RollOutcome(rng, b, a);
 }
 
+void PlayerCombatStats::TickStatusCountdowns(PlayerState& p, int64_t deltaMs, bool monsterRenderedThisFrame) {
+    if (HasAilment(p, 4)) {
+        p.vampirismTimer = static_cast<int16_t>(p.vampirismTimer - deltaMs);
+        if (p.vampirismTimer < 0) {
+            p.vampirismTimer = 0;
+            p.ailmentMask = static_cast<int8_t>(p.ailmentMask & ~(1 << 3));
+        }
+    }
+
+    if (HasAilment(p, 5)) {
+        p.manaBurnTimer = static_cast<int16_t>(p.manaBurnTimer - deltaMs);
+        if (p.manaBurnTimer < 0) {
+            p.manaBurnTimer = 0;
+            p.ailmentMask = static_cast<int8_t>(p.ailmentMask & ~(1 << 4));
+        }
+    }
+
+    if (HasAilment(p, 7) && monsterRenderedThisFrame) {
+        p.terrifiedTimer = static_cast<int16_t>(p.terrifiedTimer - deltaMs);
+        if (p.terrifiedTimer < 0) {
+            p.terrifiedTimer = 0;
+            p.ailmentMask = static_cast<int8_t>(p.ailmentMask & ~(1 << 6));
+        }
+    }
+}
+
 }  // namespace stormhold

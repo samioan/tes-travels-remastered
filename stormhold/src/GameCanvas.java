@@ -1307,10 +1307,52 @@ public class GameCanvas extends FullCanvas implements Runnable {
       return true;
    }
 
-   // Per-tick status-effect countdowns -- confirmed call site in run()
-   // (`this.c(var5)`), body not yet transcribed.
+   // Confirmed (phase-3 port M35): byte-for-byte from decompiled/e.java's
+   // c(long). Per-tick ailment-timer countdowns: while each of 3 specific
+   // ailments (Player.hasAilment(id), NOT Player.isEffectActive(id) --
+   // decompiled/j.java's own k(int) checks ailmentMask directly, unlike
+   // t(int)'s effectDurations-array countdown a much easier-to-confuse
+   // similarly-shaped method) is currently active, its own dedicated
+   // millisecond timer (Player.vampirismTimer/manaBurnTimer/
+   // terrifiedTimer -- Monster.tick()'s own confirmed ailment-4/5
+   // appliers, ../../docs/CLASS_MAP.md) counts down by `deltaMs`; once it
+   // drops below 0, it's clamped to 0 and the ailment bit clears
+   // (Util.clearBit(bitIndex, ailmentMask), bitIndex = ailmentId - 1,
+   // same convention Player.hasAilment/cureRandomAilment already use).
+   //
+   // **A real, surprising coupling confirmed by reading this exact
+   // method, not smoothed over:** ailment 7's own timer additionally
+   // requires `unconfirmed_A` -- the SAME flag paintMonsters() (M22)
+   // sets true only when it actually draws a real monster sprite that
+   // same frame (never for the Warden), reset false at the top of that
+   // method every call. So ailment 7's countdown only progresses on a
+   // tick where a monster was ALSO just rendered -- a real dependency
+   // between this port's paint and tick passes, not independently
+   // confirmed anywhere else, and not "fixed" into a plain timer here.
    private void tickStatusCountdowns(long deltaMs) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's c(long))");
+      if (this.player.hasAilment(4)) {
+         this.player.vampirismTimer = (short)(this.player.vampirismTimer - deltaMs);
+         if (this.player.vampirismTimer < 0) {
+            this.player.vampirismTimer = 0;
+            this.player.ailmentMask = (byte)Util.clearBit(3, this.player.ailmentMask);
+         }
+      }
+
+      if (this.player.hasAilment(5)) {
+         this.player.manaBurnTimer = (short)(this.player.manaBurnTimer - deltaMs);
+         if (this.player.manaBurnTimer < 0) {
+            this.player.manaBurnTimer = 0;
+            this.player.ailmentMask = (byte)Util.clearBit(4, this.player.ailmentMask);
+         }
+      }
+
+      if (this.player.hasAilment(7) && unconfirmed_A) {
+         this.player.terrifiedTimer = (short)(this.player.terrifiedTimer - deltaMs);
+         if (this.player.terrifiedTimer < 0) {
+            this.player.terrifiedTimer = 0;
+            this.player.ailmentMask = (byte)Util.clearBit(6, this.player.ailmentMask);
+         }
+      }
    }
 
    // Once-per-real-second passive regen/drain, and the Warden-visit gate

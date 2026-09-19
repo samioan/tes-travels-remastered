@@ -2182,15 +2182,68 @@ read-through.
       smoke tests still pass; full clean rebuild stayed at zero `/W4`
       warnings.
 
+- [x] **M35 -- `PlayerCombatStats::TickStatusCountdowns`, the first
+      tick-loop helper** (this session). `GameCanvas.
+      tickStatusCountdowns()` (was decompiled/e.java's `c(long)`) was a
+      throw-stub in `../src/GameCanvas.java` until now -- filled in and
+      ported, the same "confirmed and transcribed" treatment M30 gave
+      `showMessage()`.
+
+      Per-tick countdowns for exactly 3 ailments (4/"vampirism", 5/
+      "mana burn", 7/"terrified" -- `PlayerState::vampirismTimer`/
+      `manaBurnTimer`/`terrifiedTimer`, already present on `PlayerState`
+      since an earlier milestone even though nothing used them yet):
+      while `Player.hasAilment(id)` -- **NOT** `Player.isEffectActive
+      (id)`, confirmed by reading decompiled/`j.java`'s own `k(int)`
+      (reads `ailmentMask` directly) vs. `t(int)` (reads
+      `effectDurations[]`) directly, a real risk of confusing the two
+      given their near-identical shape -- the matching timer counts
+      down by `deltaMs`; once it drops below 0, it clamps to 0 and the
+      ailment bit clears.
+
+      **A real, surprising coupling, confirmed by reading this exact
+      method and preserved rather than smoothed over:** ailment 7's own
+      timer additionally requires `unconfirmed_A` -- the SAME flag
+      `paintMonsters()` (M22, ported as `VisibleObjectRenderer::
+      RenderMonsters`, M28) sets true only when it actually draws a
+      real monster sprite that frame, reset false at the top of that
+      method every call, never set by a Warden render. So ailment 7's
+      countdown only progresses on a tick where a monster was ALSO just
+      rendered -- a real dependency between this port's paint and tick
+      passes. Modeled as a plain `monsterRenderedThisFrame` parameter
+      (caller-supplied, same pattern this port uses throughout) rather
+      than inventing mutable static state for it.
+
+      Wired into `main.cpp`'s tick loop, ahead of that tick's own
+      render pass, fed by whichever `RenderMonsters` call the
+      *previous* tick made (matching the original's own "tick runs
+      before this frame's repaint" ordering exactly -- confirmed, not
+      assumed). Also replaced `RenderCorridorView`'s own hardcoded
+      `ailment3Active`/`ailment4Active` = false,false with real
+      `HasAilment(3)`/`HasAilment(4)` reads -- currently a no-op either
+      way (nothing yet sets any ailment bit, `Monster.tick()` itself
+      still has no wired caller), but no longer a placeholder.
+
+      Verified with a new `status_countdowns_smoke.exe`: the ailment
+      gate itself (untouched without the bit set); the countdown-then-
+      clamp-and-clear transition for all 3 ailments independently; and
+      ailment 7's own extra `monsterRenderedThisFrame` gate in both
+      states. All 32 smoke tests pass; full clean rebuild stayed at
+      zero `/W4` warnings. `javac` recompiled clean (8 expected
+      warnings only) after the `GameCanvas.java` fill-in. Re-verified
+      the real windowed exe still launches and runs after the `main.cpp`
+      changes.
+
 ## What's next
 
-The still-untranscribed tick-loop helpers (`tickStatusCountdowns`/
-`tickPerSecond`/`rollCampInterrupted`/`tickMovementAndAI`/
-`setSomeFlag`, one of which -- `a(boolean)` -- is now confirmed as
-`q()`/`p()`'s own real caller) -- these gate monster AI, status-effect
-ticking, and the Warden/message-popup call sites `main.cpp` doesn't
-reach yet. Once even one of them is transcribed and wired, `main.cpp`
-gains its first real tick-driven (not just input-driven) behavior.
+The remaining still-untranscribed tick-loop helpers (`tickPerSecond`/
+`rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`, one of which --
+`a(boolean)` -- is confirmed as `q()`/`p()`'s own real caller) -- these
+gate monster AI, per-second regen/drain, and the Warden/message-popup
+call sites `main.cpp` doesn't reach yet. `tickPerSecond()` in
+particular looks like the natural next one: decompiled/`e.java`'s `l()`
+is short, self-contained, and (per M32's own header-comment reference to
+`ESGame.G[]`) already has real 1:1 field mappings mostly worked out.
 `paintFlashOverlays()`/`paintUnknown_b()` (the two remaining
 unported-pixel paint methods, both gated on that same live state). The
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/

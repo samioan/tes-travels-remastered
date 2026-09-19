@@ -259,3 +259,7 @@ target_link_libraries(minimap_sample_smoke PRIVATE stormhold_dungeon)
 # M33 milestone smoke test -- see src/tests/m33_minimap_renderer_smoke.cpp.
 add_executable(minimap_renderer_smoke src/tests/m33_minimap_renderer_smoke.cpp)
 target_link_libraries(minimap_renderer_smoke PRIVATE stormhold_render)
+
+# M35 milestone smoke test -- see src/tests/m35_status_countdowns_smoke.cpp.
+add_executable(status_countdowns_smoke src/tests/m35_status_countdowns_smoke.cpp)
+target_link_libraries(status_countdowns_smoke PRIVATE stormhold_player)
