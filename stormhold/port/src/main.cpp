@@ -94,6 +94,25 @@
 // no rank-up/level-up flow. Turning (Move dir 3/4, no strafe), stepping
 // forward/backward, and now attacking are the only player actions this
 // milestone wires.
+//
+// M40 layers in `MenuFlow` (ui/menu_flow.h, new this session) --
+// src/UIScreen.java + src/ESGame.java's own commandAction() screenGroups
+// 2 (main menu)/3-6 (class select/confirm/info/character-created)/7+101
+// (welcome/intro/into-gameplay)/305 (no-saved-game), fused into one
+// small state machine (see menu_flow.h's own class comment for exactly
+// what's modeled vs. simplified). Until now this file hardcoded a
+// class-0 "Traveler" character and jumped straight into the live tick
+// loop on launch (M34's own placeholder, called out explicitly in that
+// milestone's header comment as "there's no character-creation UI
+// yet") -- this milestone replaces that with the real flow: Main Menu,
+// then New Game -> class select -> class confirm (with a real "See
+// Class Info" summary) -> character created -> enter a name (typed via
+// GetAsyncKeyState on 'A'-'Z'/'0'-'9'/Backspace, the same polling-based
+// input model every other key in this file already uses -- no WM_CHAR
+// plumbing added to platform/win32/window.cpp for this) -> welcome ->
+// intro, before finally handing off into the same tick/render pipeline
+// M34-M39 already built. The live gameplay loop itself is completely
+// unchanged; only what runs BEFORE it changed.
 #include <windows.h>
 
 #include <array>
@@ -107,6 +126,7 @@
 #include "assets/dungeon_geometry.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "assets/shop_dialogue.h"
 #include "combat/combat_resolution.h"
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
@@ -125,6 +145,7 @@
 #include "render/status_bar_plan.h"
 #include "render/visible_object_assets.h"
 #include "render/visible_object_renderer.h"
+#include "ui/menu_flow.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
 #include "world/warden.h"
@@ -179,14 +200,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     stormhold::MonsterDatabase monsters = stormhold::MonsterDatabase::Load(assetRoot);
     stormhold::DungeonGeometry geometry = stormhold::DungeonGeometry::Load(assetRoot);
     stormhold::CharacterData charData = stormhold::CharacterData::Load(assetRoot);
+    stormhold::ShopDialogue dialogue = stormhold::ShopDialogue::Load(assetRoot);
 
     stormhold::WorldRegistry world(37);
     std::vector<stormhold::GeneratedLevel> levels = BuildWorld(geometry, items, monsters, world);
     auto levelLookup = [&](int levelNumber) -> stormhold::GeneratedLevel& { return levels[static_cast<size_t>(levelNumber - 1)]; };
 
     stormhold::WardenState warden;
-    stormhold::PlayerState player =
-        stormhold::PlayerCreation::CreateCharacter(0, "Traveler", 1, charData, items);
+    // M40: no longer created up front -- MenuFlowState::draft holds the
+    // in-progress character through the whole Main Menu/new-game flow;
+    // `player` itself is only given real content once that flow reaches
+    // MenuScreen::Finished (see the transition block inside the idle
+    // callback below). Default-constructed here is safe: nothing reads
+    // `player` before that transition runs.
+    stormhold::PlayerState player;
+    stormhold::MenuFlowState menuState;
+    bool gameStarted = false;
 
     stormhold::CorridorAssets corridorAssets = stormhold::CorridorAssets::Load(assetRoot);
     stormhold::HotbarAssets hotbarAssets = stormhold::HotbarAssets::Load(assetRoot);
@@ -235,7 +264,59 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool attackRequested = false;
     int64_t lastAttackTimeMs = 0;
 
+    // M40: edge-triggered key state for the Main Menu/new-game flow --
+    // one MenuFlow action per physical keypress rather than once per
+    // idle-callback poll, since a held key has no "auto-repeat" meaning
+    // in a menu the way it does for movement/attack below. Shared
+    // across every virtual-key code the menu ever reads (navigation,
+    // Ok/Cancel, and every letter/digit EnterName accepts).
+    std::array<bool, 256> keyDownLast{};
+    auto KeyEdge = [&](int vk) {
+        bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+        bool edge = down && !keyDownLast[static_cast<size_t>(vk)];
+        keyDownLast[static_cast<size_t>(vk)] = down;
+        return edge;
+    };
+
     window.RunMessageLoop([&]() {
+        if (menuState.screen != stormhold::MenuScreen::Finished) {
+            if (KeyEdge(VK_UP)) stormhold::MenuFlow::MoveSelection(menuState, -1, charData);
+            if (KeyEdge(VK_DOWN)) stormhold::MenuFlow::MoveSelection(menuState, 1, charData);
+            if (KeyEdge(VK_RETURN)) stormhold::MenuFlow::Confirm(menuState, charData, items);
+            if (KeyEdge(VK_ESCAPE)) stormhold::MenuFlow::Cancel(menuState);
+
+            if (menuState.screen == stormhold::MenuScreen::EnterName) {
+                // No WM_CHAR plumbing added to platform/win32/window.h
+                // for this -- GetAsyncKeyState('A'..'Z'/'0'..'9') reads
+                // those exact keys directly, same polling-based input
+                // model as every other key in this file, and sufficient
+                // since graphics/bitmap_font.h only ever renders
+                // uppercase letters and digits anyway.
+                for (int vk = 'A'; vk <= 'Z'; vk++) {
+                    if (KeyEdge(vk)) stormhold::MenuFlow::TypeChar(menuState, static_cast<char>(vk));
+                }
+                for (int vk = '0'; vk <= '9'; vk++) {
+                    if (KeyEdge(vk)) stormhold::MenuFlow::TypeChar(menuState, static_cast<char>(vk));
+                }
+                if (KeyEdge(VK_BACK)) stormhold::MenuFlow::Backspace(menuState);
+            }
+
+            backbuffer.Fill(stormhold::PackRGB565(0, 0, 0));
+            stormhold::MenuFlow::Render(backbuffer, menuState, charData, dialogue);
+            window.Present(backbuffer);
+            if (menuState.exitRequested) window.RequestClose();
+            return;
+        }
+
+        if (!gameStarted) {
+            // commandAction()'s own screenGroup==101 branch: gameCanvas.
+            // player=player -- the draft built across the whole New Game
+            // flow finally becomes the live `player` right here, once.
+            if (menuState.draft.has_value()) player = std::move(*menuState.draft);
+            stormhold::PlayerMovement::RefreshCorridorView(player, levelLookup(player.currentLevel), levelLookup);
+            gameStarted = true;
+        }
+
         if (clock.ConsumeTick()) {
             bool up = (GetAsyncKeyState(VK_UP) & 0x8000) != 0;
             bool down = (GetAsyncKeyState(VK_DOWN) & 0x8000) != 0;

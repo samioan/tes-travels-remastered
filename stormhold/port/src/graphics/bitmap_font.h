@@ -21,7 +21,8 @@ namespace stormhold {
 // ports visually consistent rather than inventing a second, arbitrarily
 // different one for no real reason.
 //
-// SIMPLIFIED character set: space, ' - ! , A-Z, and 0-9 (40 glyphs) --
+// SIMPLIFIED character set: space, apostrophe, hyphen, !, A-Z, 0-9, and
+// (M40) period and comma (42 glyphs) --
 // confirmed sufficient for every real string this port's two real
 // consumers actually display: render/message_popup.h's MessagePopup::
 // Paint (GameCanvas's own MSG_*/npcNameLines String constants -- every

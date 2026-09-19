@@ -27,6 +27,13 @@ public:
     // Presents the backbuffer, nearest-neighbor scaled to the client area.
     void Present(const Backbuffer& backbuffer);
 
+    // M40: lets the app itself end RunMessageLoop from inside its own
+    // onIdle callback (ui/menu_flow.h's own MenuFlowState::exitRequested,
+    // set by the Main Menu's "Exit" item) -- same effect as the user
+    // clicking the window's own close button (WM_CLOSE), just triggered
+    // from application logic instead of a window message.
+    void RequestClose();
+
     bool ShouldClose() const { return shouldClose_; }
 
     // Opaque pimpl -- public only so window.cpp's free-function WndProc

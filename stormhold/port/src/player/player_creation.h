@@ -56,6 +56,18 @@ public:
     // resetState() and ESGame.java's level-up-confirm handler both call
     // this one method).
     static void ComputeDerivedStats(PlayerState& p);
+
+    // Player.characterSummaryShort() (M40, for the new port-only class-
+    // confirm "See Class Info" screen -- ui/menu_flow.h): race/class,
+    // then HP/Magicka/Fatigue (PlayerCombatStats::EffectiveStat), then
+    // all 8 attributes, then every skill with a nonzero rank, one
+    // '\n'-separated entry per line, matching the original's own field
+    // order exactly. Uses a plain space rather than the original's ": "
+    // between label and value -- graphics/bitmap_font.h has no colon
+    // glyph, and every value here is presentation text only (not a
+    // byte-exact save/wire format), so this is a harmless port-only
+    // formatting simplification.
+    static std::string CharacterSummaryShort(const PlayerState& p, const CharacterData& charData);
 };
 
 }  // namespace stormhold

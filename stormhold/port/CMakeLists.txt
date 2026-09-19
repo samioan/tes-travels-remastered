@@ -102,6 +102,7 @@ add_library(stormhold_render STATIC
   src/render/message_popup.cpp
   src/render/status_bar_plan.cpp
   src/render/visible_object_renderer.cpp
+  src/ui/menu_flow.cpp
 )
 target_include_directories(stormhold_render PUBLIC src)
 target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets stormhold_player)
@@ -279,3 +280,7 @@ target_link_libraries(target_monster_smoke PRIVATE stormhold_player)
 # M39 milestone smoke test -- see src/tests/m39_attack_input_smoke.cpp.
 add_executable(attack_input_smoke src/tests/m39_attack_input_smoke.cpp)
 target_link_libraries(attack_input_smoke PRIVATE stormhold_combat stormhold_player)
+
+# M40 milestone smoke test -- see src/tests/m40_menu_flow_smoke.cpp.
+add_executable(menu_flow_smoke src/tests/m40_menu_flow_smoke.cpp)
+target_link_libraries(menu_flow_smoke PRIVATE stormhold_render stormhold_player)

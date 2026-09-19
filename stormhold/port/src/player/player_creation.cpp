@@ -1,5 +1,6 @@
 #include "player/player_creation.h"
 
+#include "player/player_combat_stats.h"
 #include "player/player_inventory.h"
 
 namespace stormhold {
@@ -157,6 +158,29 @@ PlayerState PlayerCreation::CreateCharacter(int classIndex, const std::string& n
     ResetForNewCharacter(p);
     GrantStartingItems(p, classIndex, spawnId, items);
     return p;
+}
+
+std::string PlayerCreation::CharacterSummaryShort(const PlayerState& p, const CharacterData& charData) {
+    std::string out = charData.raceNames[static_cast<size_t>(p.raceIndex)] + " " +
+                       charData.classNames[static_cast<size_t>(p.classIndex)] + "\n";
+    out += charData.statLabels[0] + " " + std::to_string(p.coreStats[0]) + "\n";
+    out += charData.statLabels[2] + " " + std::to_string(PlayerCombatStats::EffectiveStat(p, charData, 2)) + "\n";
+    out += charData.statLabels[4] + " " + std::to_string(PlayerCombatStats::EffectiveStat(p, charData, 4)) + "\n";
+    out += charData.statLabels[6] + " " + std::to_string(PlayerCombatStats::EffectiveStat(p, charData, 6)) + "\n";
+
+    for (int i = 0; i < 8; i++) {
+        out += charData.attributeNames[static_cast<size_t>(2 * i)] + " " +
+               std::to_string(p.attributes[static_cast<size_t>(2 * i)]) + "\n";
+    }
+
+    for (int i = 0; i < 14; i++) {
+        if (p.skills[static_cast<size_t>(i)][0] > 0) {
+            out += charData.skillNames[static_cast<size_t>(i)] + " " +
+                   std::to_string(p.skills[static_cast<size_t>(i)][0]) + "\n";
+        }
+    }
+
+    return out;
 }
 
 void PlayerCreation::ComputeDerivedStats(PlayerState& p) {

@@ -2482,21 +2482,114 @@ read-through.
       recompiled clean (8 expected warnings only). Re-verified the real
       windowed exe still launches and runs.
 
+- [x] **M40 -- `MenuFlow`, the Main Menu / new-game character-creation
+      flow** (this session). Until now `main.cpp` hardcoded a class-0
+      "Traveler" character and jumped straight into the live tick loop
+      on launch (M34's own explicitly-flagged placeholder) -- this
+      milestone closes that gap, the last one this "What's next"
+      section had been carrying since M34: `main.cpp` no longer
+      hardcodes a class.
+
+      New `ui/menu_flow.h`/`.cpp` (`stormhold_render`): a small
+      state machine standing in for `src/UIScreen.java` (its own
+      mode-driven paint/keyPressed dispatch) fused with
+      `src/ESGame.java`'s `commandAction()` screenGroups 2 (main menu),
+      3-6 (class select/confirm/info/character-created), 7/101
+      (welcome/intro/into-gameplay), and 305 (no-saved-game) -- the
+      same class of "fuse several real call sites into one port-only
+      flow" simplification `player/player_creation.h`'s own
+      `CreateCharacter` already documents for its own two-step fusion.
+      Real flow, walked end to end against real `charin.dat`/
+      `npcstrings.dat` data: Main Menu (New Game/Continue Game/
+      Credits/Exit) -> class select (all 7 real classes) -> class
+      confirm ("You selected: <class>", See Class Info/Create
+      Character) -> class info (new `PlayerCreation::
+      CharacterSummaryShort`, `Player.characterSummaryShort()`'s
+      counterpart -- race/class, HP/Magicka/Fatigue, all 8 attributes,
+      every skill with a nonzero rank) -> character created -> enter a
+      name (rejects under 3 letters, matching the real `TextField`
+      validation exactly) -> welcome -> intro (real
+      `ShopDialogue.groups[7][3]` body text) -> hands off into the
+      exact same tick/render pipeline M34-M39 already built.
+
+      **Deliberately not modeled:** Help (`loadHelpTopicBodies()`'s own
+      Java transcription is itself incomplete past topic index 4 -- a
+      real, pre-existing gap, not one this milestone introduces) and
+      Continue Game's real load path (this port has no persisted
+      save file at all yet -- `PlayerSave`, M20, only round-trips a
+      `PlayerState` in memory, no `WorldRegistry`/master-list save
+      format exists) -- selecting "Continue Game" always takes the
+      real game's own "no saved game" branch, which is simply the
+      truth for every run of this port today. Also: the real
+      `classInfoUI`'s own commandAction branch (screenGroup 5) only
+      reacts to `cmdBack`, but the only command ever added to that
+      screen is `cmdOk` -- reading the whole dispatcher shows pressing
+      its one softkey does nothing at all in the original (likely a
+      genuine original dead end, not knowingly reproduced); this port's
+      own Confirm/Cancel both just return to ClassConfirm from there.
+
+      New-glyph addition to `graphics/bitmap_font.h`/`.cpp`: period and
+      comma (appended, not inserted, so no earlier glyph's index
+      shifts), needed for the real dialogue/message body text this
+      milestone is the first to actually display at length.
+
+      Name entry is typed via `GetAsyncKeyState('A'-'Z'/'0'-'9'/
+      Backspace)`, edge-triggered the same one-key-per-press way all of
+      this milestone's own menu navigation is -- no `WM_CHAR` plumbing
+      added to `platform/win32/window.h` for this (a new
+      `Window::RequestClose()` was added instead, for the Main Menu's
+      own "Exit" item, since nothing else needed the window to close
+      itself from inside its own idle callback before now). Message
+      screens (class info/character-created/no-saved-game/credits/
+      welcome/intro) repurpose Up/Down as a simple line-scroll instead
+      of list selection -- confirmed necessary for real: the Intro
+      body text alone word-wraps to more lines than fit on screen at
+      once.
+
+      Also folded in here, opportunistically, since the same transition
+      point needed touching anyway: the very first live-game frame now
+      calls `PlayerMovement::RefreshCorridorView` once right after the
+      real character replaces the old hardcoded stand-in, so the
+      corridor view is real from the first rendered frame instead of
+      blank until the player's first keypress (a real, if minor, gap
+      M34 never flagged explicitly).
+
+      Verified with a new `menu_flow_smoke.exe`: the whole flow walked
+      programmatically against real asset data (Main Menu clamping,
+      Continue Game's no-saved-game branch, Credits round-tripping,
+      class select/confirm/info, the too-short-name rejection then a
+      successful 3-letter name, Welcome -> Intro -> Finished, Cancel()
+      at every screen that has one, and Exit's own `exitRequested`
+      flag) -- 37 smoke tests now pass in total. Full clean rebuild
+      stayed at zero `/W4` warnings. No `.java` files changed this
+      milestone (the real Java-side flow was already fully
+      transcribed; this was pure port-side wiring), so no `javac`
+      recompile was needed. Manually walked the ENTIRE flow in the real
+      windowed exe via `PrintWindow`/`keybd_event` (Main Menu -> class
+      select -> Nightblade -> class confirm -> class info -> character
+      created -> name "AB" rejected, "ABC" accepted -> welcome -> intro
+      (scrolled) -> live game, corridor rendering immediately) and
+      confirmed every screen's text and the final hand-off render
+      correctly.
+
 ## What's next
 
-The remaining still-untranscribed tick-loop helper, `tickMovementAndAI`
-(the real per-tick action dispatcher, decompiled/e.java's `e(long)`) --
+`tickMovementAndAI` (the real per-tick action dispatcher, decompiled/
+e.java's `e(long)`) remains the biggest still-untranscribed piece --
 gates a whole further web of interconnected methods (`f()`/`g(long)`/
-`h(long)`/`n()`, all confirmed to exist and roughly what they each do
-this session, just not yet transcribed -- `a()`/`m()`/`d(long)` are now
-done, M38/M39) -- this is where camp/rest and the level-up/rank-up flow
-most likely live. `paintFlashOverlays()`/`paintUnknown_b()` (the two
-remaining unported-pixel paint methods, both gated on that same live
-state -- `paintFlashOverlays()`'s own `unconfirmed_S` trigger is now
-real, M39, so that one in particular may be a short follow-on rather
-than a fresh investigation). Beyond that: a character-creation UI
-(`main.cpp` still hardcodes class 0). Following dawnstar's own later
-milestones roughly but expecting further Stormhold-specific
+`h(long)`/`n()`, all confirmed to exist and roughly what they each do,
+just not yet transcribed -- `a()`/`m()`/`d(long)` are done, M38/M39) --
+this is where camp/rest and the level-up/rank-up flow most likely live.
+`paintFlashOverlays()`/`paintUnknown_b()` (the two remaining
+unported-pixel paint methods, both gated on that same live state --
+`paintFlashOverlays()`'s own `unconfirmed_S` trigger is real since M39,
+so that one in particular may be a short follow-on rather than a fresh
+investigation). Beyond that: a real save/load system (`PlayerSave`
+exists, M20, but there's no `WorldRegistry`/master-list save format,
+and `main.cpp`'s own Main Menu "Continue Game" item always takes the
+no-saved-game branch until one exists, M40); Help topics (the Java
+transcription itself stops at topic index 4). Following dawnstar's own
+later milestones roughly but expecting further Stormhold-specific
 divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

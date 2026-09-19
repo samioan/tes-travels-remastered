@@ -6,13 +6,16 @@ namespace stormhold {
 
 namespace {
 
-// Glyph order: space, ', -, !, then A-Z. Each glyph is 7 rows, each
-// row's low 4 bits are its pixels (bit 3 = leftmost column, bit 0 =
-// rightmost) -- see bitmap_font.h's own doc comment: hand-authored,
-// not decompiled data, kept identical to dawnstar's own invented font
-// for cross-port visual consistency.
+// Glyph order: space, ', -, !, then A-Z, then 0-9, then . and , (M40,
+// appended rather than inserted, so no earlier glyph's index shifts).
+// Each glyph is 7 rows, each row's low 4 bits are its pixels (bit 3 =
+// leftmost column, bit 0 = rightmost) -- see bitmap_font.h's own doc
+// comment: hand-authored, not decompiled data, kept identical to
+// dawnstar's own invented font for cross-port visual consistency (M30/
+// M31's own glyphs; '.'/',' are new here, dawnstar has no equivalent
+// need yet, so these two are this port's own invention).
 // clang-format off
-constexpr uint8_t kGlyphRows[40][7] = {
+constexpr uint8_t kGlyphRows[42][7] = {
     // space
     {0b0000, 0b0000, 0b0000, 0b0000, 0b0000, 0b0000, 0b0000},
     // '
@@ -93,6 +96,10 @@ constexpr uint8_t kGlyphRows[40][7] = {
     {0b0110, 0b1001, 0b1001, 0b0110, 0b1001, 0b1001, 0b0110},
     // 9
     {0b0110, 0b1001, 0b1001, 0b0111, 0b0001, 0b0001, 0b0110},
+    // . (M40, for menu/message body text)
+    {0b0000, 0b0000, 0b0000, 0b0000, 0b0000, 0b0110, 0b0110},
+    // , (M40)
+    {0b0000, 0b0000, 0b0000, 0b0000, 0b0110, 0b0110, 0b0100},
 };
 // clang-format on
 
@@ -106,6 +113,8 @@ int GlyphIndex(char c) {
     char upper = (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c;
     if (upper >= 'A' && upper <= 'Z') return 4 + (upper - 'A');
     if (c >= '0' && c <= '9') return 30 + (c - '0');
+    if (c == '.') return 40;
+    if (c == ',') return 41;
     return -1;
 }
 

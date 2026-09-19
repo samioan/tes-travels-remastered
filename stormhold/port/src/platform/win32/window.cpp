@@ -106,6 +106,8 @@ void Window::RunMessageLoop(const IdleCallback& onIdle) {
     shouldClose_ = true;
 }
 
+void Window::RequestClose() { impl_->closed = true; }
+
 void Window::Present(const Backbuffer& backbuffer) {
     HDC hdc = GetDC(impl_->hwnd);
 
