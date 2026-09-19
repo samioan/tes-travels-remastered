@@ -1090,18 +1090,84 @@ read-through.
       generation. All checks passed on the first attempt; full clean
       rebuild stayed at zero warnings; all 17 smoke tests pass.
 
+- [x] **M19 -- the last two CommitMove side effects: Warden clearing +
+      level-37 boss respawn** (this session). `player/player_movement.h`'s
+      `CommitMove` gains `monsterDb`/`warden` parameters and now wires the
+      two side effects M17 deliberately scoped out (flagged there as
+      needing `WorldRegistry`/`WardenState` individually, but not yet
+      threaded through):
+      - Entering level 37 from anywhere else
+        (`p.pendingLevel == 37 && p.currentLevel != 37`) scans every
+        monster M18's `RegisterGeneratedSpawns` already put into level
+        37's registry and fully heals the one with `typeIndex == 41`
+        (the forced "roaming" monster from M6's own last-room special
+        case) back to the type's own max-HP column, then re-stores it --
+        a "level 37's boss is always at full health when you arrive"
+        mechanic. Moving WITHIN level 37 (not entering it) never
+        re-triggers this, matching the original's own `currentLevel !=
+        37` guard exactly.
+      - A successful STEP (not a turn) clears `WardenState::present`
+        straight to `false` if it was set.
+
+      **A real, confirmed inconsistency, found by reading `Player.java`'s
+      own `commitMove()` character-by-character rather than assuming it
+      calls `Shop.wardenLeaves()` (M8's own `WardenState::Leave`) the way
+      a first read might expect:** it doesn't. This is a direct,
+      unconditional `Shop.wardenPresent = false;` -- no `wardenLeaves()`
+      call, no tile mutation at all, and no `GeneratedLevel&` for the hub
+      even needed at this call site. That means taking a single step
+      ANYWHERE in the game while the Warden happens to be visiting
+      silently makes `warden.present` read `false` again, while the
+      hub's own tile bit 32 at Varus's position (set by `WardenState::
+      Arrive`) stays SET until whatever caller actually drives
+      `WardenState::Leave` on its own schedule eventually runs -- that
+      caller still isn't recovered (same class of gap as `Monster.
+      tick()`'s own missing driver, `tryRankUpSkills()`'s, and now
+      `Monster.onDeath()`'s, none of which have a confirmed call site in
+      `../src/` yet). Reads like the original genuinely intends
+      `wardenPresent` as a lightweight "has the player acted since he
+      arrived" gate, distinct from the tile's own visible state -- ported
+      exactly as two independent mechanisms, not unified or "fixed" into
+      one consistent story.
+
+      `(byte) m.stat(14)`'s masked-then-narrowed HP reset is ported as
+      `static_cast<int8_t>(MonsterRuntime::Stat(m, monsterDb, 14))`
+      rather than jumping straight to the equivalent (and already-
+      established) `RawStat` shortcut, to mirror the original's exact
+      call -- both are proven bit-identical (masking to `uint8_t` then
+      narrowing back to `int8_t` always reproduces the same underlying
+      byte `RawStat` reads directly), noted in the method's own doc
+      comment rather than silently substituted.
+
+      All existing `CommitMove`/`Move` callers across
+      `m10_player_movement_smoke.cpp`/`m17_world_wiring_smoke.cpp` were
+      updated to pass a `MonsterDatabase`/`WardenState` (none of their
+      own scenarios touch level 37 or the Warden, so a default-
+      constructed pair changes nothing about what they were already
+      checking).
+
+      Verified by a new `warden_and_boss_respawn_smoke.exe`: a damaged
+      type-41 monster on level 37 gets healed back to its real
+      `monstersin.dat` max-HP column on entry from another level while an
+      also-damaged non-type-41 monster on the same level stays untouched;
+      moving within level 37 itself never re-triggers the heal; a
+      successful step clears `warden.present` while leaving
+      `WardenState::visitCount` (only touched by `Arrive`/`Leave`)
+      untouched and never even looking up a hub-level object; and a TURN
+      (dir 3/4) leaves `warden.present` alone entirely, confirming the
+      real `isStep`-only gate. All checks passed on the first attempt;
+      full clean rebuild stayed at zero warnings; all 18 smoke tests
+      pass.
+
 ## What's next
 
-M19 onward: likely a `WardenState`-into-movement wiring pass (`Shop.
-wardenPresent`'s on-any-step clear, deliberately left out of M17) and
-the level-37-entry forced-respawn special case player_movement.h's
-CommitMove still flags as skipped; then the player save format
-(Monster's own `readFrom`/`writeTo` included, plus whatever caller
-actually drives `tryRankUpSkills()`/`Monster.tick()`/`onDeath()` in the
-original -- none of their real callers are recovered yet, see
-`GameCanvas.java`'s remaining stubbed methods); and eventually starting
-on the rendering/UI side (`GameCanvas`'s ~15 still-stubbed pixel methods)
-now that a real, wired-together game-logic core exists to render --
-following dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18 already found.
+M20 onward: the player save format (`Monster.readFrom`/`writeTo`
+included, needing a `BinaryWriter` this port doesn't have yet), plus
+whatever caller actually drives `tryRankUpSkills()`/`Monster.tick()`/
+`Monster.onDeath()` in the original -- none of their real callers are
+recovered yet, see `GameCanvas.java`'s remaining stubbed methods; and
+likely starting on the rendering/UI side (`GameCanvas`'s ~15
+still-stubbed pixel methods) now that a real, wired-together game-logic
+core exists to render -- following dawnstar's own later milestones
+roughly but expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19 already found.

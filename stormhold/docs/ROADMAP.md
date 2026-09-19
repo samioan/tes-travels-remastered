@@ -111,7 +111,12 @@ confirmed-unavoidable simplification where a random 2-bit "tier bits"
 value the original packs into a chest record byte has no surviving data
 to reconstruct from, and a confirmed subtlety that the record's
 low/high item-id byte split uses a different, unrelated condition than
-the loot roll's own packing rule) are done, all
+the loot roll's own packing rule), and M19 (the last two CommitMove side
+effects -- Shop.wardenPresent's on-any-step clear and the level-37-entry
+forced-respawn/heal of the type-41 "roaming" monster -- including a
+confirmed inconsistency where the movement-triggered Warden clear is a
+direct flag write, never actually calling the buggy tile-mutating
+wardenLeaves() at all) are done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are

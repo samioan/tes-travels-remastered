@@ -72,6 +72,8 @@ void TestSingleItemNotPossessedBeforeGrantsGiftPoints(const stormhold::ItemDatab
 
     stormhold::GeneratedLevel level = MakeLevel(5);
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
     std::array<int8_t, 7> record = {10, 10, static_cast<int8_t>(gift.idA), 0, 0, 0, 1};  // bit2 clear: not possessed
     stormhold::DungeonRuntime::AddDroppedItem(level, world, record);
 
@@ -86,7 +88,7 @@ void TestSingleItemNotPossessedBeforeGrantsGiftPoints(const stormhold::ItemDatab
     p.facing = 2;  // east, straight onto the dropped item's tile
     p.coreStats[6] = 100;
 
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(moved, "stepping onto the dropped item's tile should succeed");
     Expect(p.inventoryCount == 1, "the item should be auto-picked-up");
     Expect(p.giftPointsFound == gift.subtypeA, "giftPointsFound should grow by the item's own subtype value");
@@ -101,6 +103,8 @@ void TestSingleItemAlreadyPossessedSkipsGiftPoints(const stormhold::ItemDatabase
 
     stormhold::GeneratedLevel level = MakeLevel(6);
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
     std::array<int8_t, 7> record = {10, 10, static_cast<int8_t>(gift.idA), 0, 0, 0, 3};  // bit2 SET: already possessed
     stormhold::DungeonRuntime::AddDroppedItem(level, world, record);
 
@@ -115,7 +119,7 @@ void TestSingleItemAlreadyPossessedSkipsGiftPoints(const stormhold::ItemDatabase
     p.facing = 2;
     p.coreStats[6] = 100;
 
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(moved, "stepping onto the dropped item's tile should succeed");
     Expect(p.inventoryCount == 1, "the item should still be auto-picked-up regardless of the possessed flag");
     Expect(p.giftPointsFound == 0,
@@ -127,6 +131,8 @@ void TestSingleItemLockedSetsPendingFlagAndSkipsPickup(const stormhold::ItemData
     std::printf("-- single dropped item, LOCKED -> pendingLockedItemFlag, no pickup, early return --\n");
     stormhold::GeneratedLevel level = MakeLevel(7);
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
     std::array<int8_t, 7> record = {10, 10, 1, 0, 0, 0, 5};  // bit4 (locked) | bit0
     stormhold::DungeonRuntime::AddDroppedItem(level, world, record);
 
@@ -141,7 +147,7 @@ void TestSingleItemLockedSetsPendingFlagAndSkipsPickup(const stormhold::ItemData
     p.facing = 2;
     p.coreStats[6] = 100;
 
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(moved, "CommitMove should still return true on a locked-item tile (the original's own early `return "
                   "true`, not a failed move)");
     Expect(p.pendingLockedItemFlag, "pendingLockedItemFlag should be set");
@@ -160,6 +166,8 @@ void TestMultiItemAsymmetryOppositeOfSingleItem(const stormhold::ItemDatabase& i
 
     stormhold::GeneratedLevel level = MakeLevel(8);
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
     // Item A: bit2 CLEAR ("not possessed before") -- per the MULTI-item
     // branch's own (record[6] & 2) != 0 condition, this one should NOT
     // grant gift points (opposite of the single-item branch's rule).
@@ -182,7 +190,7 @@ void TestMultiItemAsymmetryOppositeOfSingleItem(const stormhold::ItemDatabase& i
     p.facing = 2;
     p.coreStats[6] = 100;
 
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(moved, "stepping onto a tile with 2 dropped items should succeed");
     Expect(p.inventoryCount == 2, "both items should be picked up");
     Expect(p.giftPointsFound == gift.subtypeB,
@@ -204,6 +212,8 @@ void TestNonGiftItemPicksUpWithNoPointsChange(const stormhold::CharacterData& ch
 
     stormhold::GeneratedLevel level = MakeLevel(9);
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
     std::array<int8_t, 7> record = {10, 10, 1, 0, 0, 0, 1};  // item id 1 (Miner Pick), category != 11
     stormhold::DungeonRuntime::AddDroppedItem(level, world, record);
 
@@ -211,7 +221,7 @@ void TestNonGiftItemPicksUpWithNoPointsChange(const stormhold::CharacterData& ch
     cache[9] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
 
-    stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(p.inventoryCount == startCount + 1, "a non-gift item should still be auto-picked-up");
     Expect(p.giftPointsFound == 0, "a non-category-11 item should never affect giftPointsFound");
 }
@@ -221,6 +231,8 @@ void TestAutoMarkCampOnTile() {
     stormhold::GeneratedLevel level = MakeLevel(10);
     level.tiles[10][10] = 8;  // bit 8: auto-camp-mark tile
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
     stormhold::ItemDatabase items{};  // unused by this path -- no dropped item on this tile
 
     std::map<int, stormhold::GeneratedLevel> cache;
@@ -234,7 +246,7 @@ void TestAutoMarkCampOnTile() {
     p.facing = 2;
     p.coreStats[6] = 100;
 
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(moved, "stepping onto a bit-8 tile should succeed");
     Expect(p.campLevel == 10 && p.campX == 10 && p.campY == 10,
            "the camp bookmark should capture the JUST-STEPPED-ONTO tile (commitMove updates position BEFORE the "
@@ -256,6 +268,8 @@ void TestDropThenWalkBackPicksItUpAgain(const stormhold::CharacterData& charData
 
     stormhold::GeneratedLevel level = MakeLevel(11);
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
 
     auto dropped = stormhold::PlayerInventory::DropInventoryItem(p, 0, items, level, world);
     Expect(dropped.has_value(), "dropping slot 0 should produce a record");
@@ -268,11 +282,11 @@ void TestDropThenWalkBackPicksItUpAgain(const stormhold::CharacterData& charData
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
 
     // Step away, then back.
-    bool steppedAway = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    bool steppedAway = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(steppedAway, "stepping away from the drop tile should succeed");
     Expect(p.inventoryCount == startCount - 1, "walking away should not pick anything up");
 
-    bool steppedBack = stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items);
+    bool steppedBack = stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items, monsters, warden);
     Expect(steppedBack, "stepping back onto the drop tile should succeed");
     Expect(p.inventoryCount == startCount, "walking back onto the drop tile should auto-pick the item back up");
     Expect(world.droppedItems[10].empty(), "the registry entry should be removed after re-pickup");

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdexcept>
 
+#include "monster/monster_runtime.h"
 #include "player/player_inventory.h"
 
 namespace stormhold {
@@ -92,7 +93,7 @@ bool PlayerMovement::IsWalkableTileBits(uint8_t tileBits) {
 }
 
 bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& levels, WorldRegistry& world,
-                                 const ItemDatabase& items) {
+                                 const ItemDatabase& items, const MonsterDatabase& monsterDb, WardenState& warden) {
     if (p.coreStats[6] <= 0) return false;
     if (dir == 0) return false;
 
@@ -112,9 +113,18 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
     uint8_t tileBits = target.tiles[static_cast<size_t>(p.pendingTileX)][static_cast<size_t>(p.pendingTileY)];
     if (!IsWalkableTileBits(tileBits)) return false;
 
-    // Deliberately NOT modeled here (see class header comment): the
-    // level-37-entry forced-respawn of the type-41 "roaming" monster, and
-    // Shop.wardenPresent's on-any-step clear.
+    // M19: entering level 37 from anywhere else fully heals the
+    // registered type-41 "roaming" monster -- see this method's own
+    // declaration comment.
+    if (p.pendingLevel == 37 && p.currentLevel != 37) {
+        for (auto& [spawnId, record] : world.monsters[36]) {
+            MonsterState m = MonsterRuntime::FromBytes(record);
+            if (m.typeIndex == 41) {
+                m.currentHp = static_cast<int8_t>(MonsterRuntime::Stat(m, monsterDb, 14));
+                DungeonRuntime::StoreMonster(world, m);
+            }
+        }
+    }
 
     GeneratedLevel& oldLevel = levels(p.currentLevel);
     bool oldWalkable = IsWalkableTileBits(oldLevel.tiles[static_cast<size_t>(p.tileX)][static_cast<size_t>(p.tileY)]);
@@ -141,6 +151,13 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
     target.visited = true;
 
     if (isStep) {
+        // M19: `Shop.wardenPresent`'s on-any-step clear -- a direct flag
+        // reset, NOT a call to `WardenState::Leave` (no tile touched at
+        // all). See this method's own declaration comment for the
+        // confirmed inconsistency this leaves between the flag and the
+        // Warden's own hub tile.
+        if (warden.present) warden.present = false;
+
         int fatigueCostMultiplier = (p.ailmentMask & 1) ? 3 : 1;
         p.coreStats[6] = static_cast<int16_t>(p.coreStats[6] - 1 * fatigueCostMultiplier);
         p.coreStats[6] = std::max<int16_t>(p.coreStats[6], 0);
@@ -216,25 +233,25 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
 }
 
 bool PlayerMovement::Move(PlayerState& p, int dir, bool strafe, const LevelLookup& levels, WorldRegistry& world,
-                           const ItemDatabase& items) {
+                           const ItemDatabase& items, const MonsterDatabase& monsterDb, WardenState& warden) {
     if (p.coreStats[6] <= 0) return false;
 
     if (strafe && dir == 4) {
-        CommitMove(p, 4, levels, world, items);
-        bool result = CommitMove(p, 1, levels, world, items);
+        CommitMove(p, 4, levels, world, items, monsterDb, warden);
+        bool result = CommitMove(p, 1, levels, world, items, monsterDb, warden);
         bool savedCrossing = p.crossingLevelBoundary;
-        result = CommitMove(p, 3, levels, world, items);
+        result = CommitMove(p, 3, levels, world, items, monsterDb, warden);
         p.crossingLevelBoundary = savedCrossing;
         return result;
     } else if (strafe && dir == 3) {
-        CommitMove(p, 3, levels, world, items);
-        bool result = CommitMove(p, 1, levels, world, items);
+        CommitMove(p, 3, levels, world, items, monsterDb, warden);
+        bool result = CommitMove(p, 1, levels, world, items, monsterDb, warden);
         bool savedCrossing = p.crossingLevelBoundary;
-        result = CommitMove(p, 4, levels, world, items);
+        result = CommitMove(p, 4, levels, world, items, monsterDb, warden);
         p.crossingLevelBoundary = savedCrossing;
         return result;
     } else {
-        return CommitMove(p, dir, levels, world, items);
+        return CommitMove(p, dir, levels, world, items, monsterDb, warden);
     }
 }
 

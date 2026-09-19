@@ -70,6 +70,8 @@ void TestStepWithinLevel(const stormhold::ItemDatabase& items) {
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
 
     struct Case {
         int facing;
@@ -84,14 +86,14 @@ void TestStepWithinLevel(const stormhold::ItemDatabase& items) {
         p.tileY = 17;
         p.facing = static_cast<int8_t>(c.facing);
         p.coreStats[6] = 100;
-        bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+        bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
         Expect(moved, "forward step in an open level should succeed");
         Expect(p.tileX == 17 + c.dx && p.tileY == 17 + c.dy, "forward step should move exactly one tile per facing");
         Expect(p.facing == c.facing, "a plain step should not change facing");
         Expect(cache.at(5).visited, "CommitMove should mark the target level visited");
 
         // Backward step should undo it.
-        bool movedBack = stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items);
+        bool movedBack = stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items, monsters, warden);
         Expect(movedBack, "backward step should succeed");
         Expect(p.tileX == 17 && p.tileY == 17, "backward step should return to the starting tile");
     }
@@ -160,6 +162,8 @@ void TestWalkabilityGating(const stormhold::ItemDatabase& items) {
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -167,7 +171,7 @@ void TestWalkabilityGating(const stormhold::ItemDatabase& items) {
     p.tileY = 17;
     p.facing = 2;  // east, straight into the wall
     int16_t fatigueBefore = p.coreStats[6] = 100;
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(!moved, "stepping into a wall tile should fail");
     Expect(p.tileX == 17 && p.tileY == 17, "position should not change on a blocked move");
     Expect(p.coreStats[6] == fatigueBefore, "fatigue should not be spent on a blocked move");
@@ -181,6 +185,8 @@ void TestEnteredLeftLevelZoneFinding(const stormhold::ItemDatabase& items) {
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -188,7 +194,7 @@ void TestEnteredLeftLevelZoneFinding(const stormhold::ItemDatabase& items) {
     p.tileY = 17;
     p.facing = 2;  // step east onto a plain walkable tile
     p.coreStats[6] = 100;
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(moved, "should be able to step off an unwalkable starting tile onto a walkable one");
     Expect(p.enteredNewLevelZone, "enteredNewLevelZone should be true (old unwalkable, new walkable)");
     Expect(!p.leftLevelZone,
@@ -225,6 +231,8 @@ void TestFatigueCost(const stormhold::ItemDatabase& items) {
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -232,18 +240,18 @@ void TestFatigueCost(const stormhold::ItemDatabase& items) {
     p.tileY = 17;
     p.facing = 2;
     p.coreStats[6] = 5;
-    stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(p.coreStats[6] == 4, "a plain step should cost 1 fatigue with no ailment");
 
     p.ailmentMask = 1;  // bit 0: Stone Blood
-    stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items);
+    stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items, monsters, warden);
     Expect(p.coreStats[6] == 1, "a step under ailment bit 0 should cost 3 fatigue (4 - 3 = 1)");
 
-    stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items);
+    stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(p.coreStats[6] == 0, "fatigue should clamp at 0, not go negative");
 
     p.ailmentMask = 0;
-    bool moved = stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items);
+    bool moved = stormhold::PlayerMovement::CommitMove(p, 2, lookup, world, items, monsters, warden);
     Expect(!moved, "no move should succeed once fatigue is depleted");
 }
 
@@ -254,6 +262,8 @@ void TestStrafe(const stormhold::ItemDatabase& items) {
     cache[5] = level;
     stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
     stormhold::WorldRegistry world(37);
+    stormhold::MonsterDatabase monsters{};
+    stormhold::WardenState warden{};
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -261,7 +271,7 @@ void TestStrafe(const stormhold::ItemDatabase& items) {
     p.tileY = 17;
     p.facing = 1;  // north
     p.coreStats[6] = 100;
-    stormhold::PlayerMovement::Move(p, 3, /*strafe=*/true, lookup, world, items);  // strafe right
+    stormhold::PlayerMovement::Move(p, 3, /*strafe=*/true, lookup, world, items, monsters, warden);  // strafe right
 
     // Facing north, turning right (dir 3) faces east, stepping forward
     // moves +X, turning back restores facing to north.
@@ -289,12 +299,13 @@ void TestAgainstRealData(const std::string& root) {
     stormhold::PlayerState p;  // hub spawn: level 1, (9, 10), facing 1 (M9's own defaults)
     p.coreStats[6] = 200;
     stormhold::WorldRegistry world(37);
+    stormhold::WardenState warden{};
 
     int succeeded = 0, failed = 0, thrown = 0;
     int dirs[] = {1, 3, 3, 1, 2, 4, 1, 1, 3, 1};
     for (int dir : dirs) {
         try {
-            bool moved = stormhold::PlayerMovement::Move(p, dir, /*strafe=*/false, lookup, world, items);
+            bool moved = stormhold::PlayerMovement::Move(p, dir, /*strafe=*/false, lookup, world, items, monsters, warden);
             if (moved) {
                 succeeded++;
             } else {

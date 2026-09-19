@@ -154,3 +154,7 @@ target_link_libraries(world_wiring_smoke PRIVATE stormhold_player)
 # M18 milestone smoke test -- see src/tests/m18_registered_spawns_smoke.cpp.
 add_executable(registered_spawns_smoke src/tests/m18_registered_spawns_smoke.cpp)
 target_link_libraries(registered_spawns_smoke PRIVATE stormhold_dungeon)
+
+# M19 milestone smoke test -- see src/tests/m19_warden_and_boss_respawn_smoke.cpp.
+add_executable(warden_and_boss_respawn_smoke src/tests/m19_warden_and_boss_respawn_smoke.cpp)
+target_link_libraries(warden_and_boss_respawn_smoke PRIVATE stormhold_player)
