@@ -89,6 +89,45 @@ MonsterState MonsterRuntime::FromBytes(const std::array<uint8_t, 28>& in) {
     return m;
 }
 
+MonsterState MonsterRuntime::ReadFrom(BinaryReader& in) {
+    MonsterState m;
+    m.spawnId = in.ReadS16();
+    m.typeIndex = in.ReadS8();
+    m.currentHp = in.ReadS8();
+    m.tileX = in.ReadS8();
+    m.tileY = in.ReadS8();
+    m.unconfirmedFlag = in.ReadU8() != 0;
+    m.dungeonLevel = in.ReadS8();
+    m.chaseCadence = in.ReadS8();
+    m.aiPhase = in.ReadS8();
+
+    uint64_t hi = in.ReadU32();
+    uint64_t lo = in.ReadU32();
+    m.unconfirmedTimestamp = static_cast<int64_t>((hi << 32) | lo);
+
+    for (int i = 0; i < 10; i++) m.scratch[static_cast<size_t>(i)] = in.ReadS8();
+
+    return m;
+}
+
+void MonsterRuntime::WriteTo(BinaryWriter& out, const MonsterState& m) {
+    out.WriteS16(m.spawnId);
+    out.WriteS8(m.typeIndex);
+    out.WriteS8(m.currentHp);
+    out.WriteS8(m.tileX);
+    out.WriteS8(m.tileY);
+    out.WriteBool(m.unconfirmedFlag);
+    out.WriteS8(m.dungeonLevel);
+    out.WriteS8(m.chaseCadence);
+    out.WriteS8(m.aiPhase);
+
+    uint64_t ts = static_cast<uint64_t>(m.unconfirmedTimestamp);
+    out.WriteU32(static_cast<uint32_t>((ts >> 32) & 0xFFFFFFFFu));
+    out.WriteU32(static_cast<uint32_t>(ts & 0xFFFFFFFFu));
+
+    for (int i = 0; i < 10; i++) out.WriteS8(m.scratch[static_cast<size_t>(i)]);
+}
+
 bool MonsterRuntime::Move(MonsterState& m, int dir, std::vector<GeneratedLevel>& levels) {
     int step = 1;
     int newX = m.tileX;

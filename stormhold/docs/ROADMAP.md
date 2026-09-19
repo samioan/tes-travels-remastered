@@ -116,10 +116,16 @@ effects -- Shop.wardenPresent's on-any-step clear and the level-37-entry
 forced-respawn/heal of the type-41 "roaming" monster -- including a
 confirmed inconsistency where the movement-triggered Warden clear is a
 direct flag write, never actually calling the buggy tile-mutating
-wardenLeaves() at all) are done, all
+wardenLeaves() at all), and M20 (the player save format -- a new
+BinaryWriter, Player's own full=true save-format serialization, and
+Monster's second readFrom/writeTo stream serialization, including a
+confirmed divergence from dawnstar's own finding: Stormhold's readFrom/
+writeTo encode the exact same 28 fields in the exact same order as its
+packed toBytes/fromBytes format, not a genuinely different layout) are
+done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small
-identical pieces (tick cadence, backbuffer, window, binary reader) are
+identical pieces (tick cadence, backbuffer, window, binary reader/writer) are
 copied rather than shared for now -- factoring out a real cross-project
 engine library is deferred until Stormhold's own port has enough
 milestones to show what's actually worth sharing (see `PORT_ROADMAP.md`'s

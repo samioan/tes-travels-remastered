@@ -30,6 +30,12 @@ struct PlayerState {
     // pinned down yet in ../../../src/Player.java itself.
     std::array<int16_t, 10> coreStats{};
     int8_t levelUpAttributeFlags = 0;
+    // --- M20: touched by player/player_save.h. Player.java's own header
+    // comment: "no confirmed meaningful read/write site beyond
+    // (de)serialization" -- part of the real save-format byte layout
+    // (always written/read, always 0 out of applyClassTemplate()) with no
+    // other confirmed producer/consumer anywhere in ../../../src/.
+    int32_t unconfirmedIntField = 0;
     // 8 attributes as base+bonus pairs (attributes[2*i]=base,
     // attributes[2*i+1]=bonus, the latter always 0 fresh out of character
     // creation).
@@ -62,6 +68,11 @@ struct PlayerState {
     int16_t vampirismTimer = 0;
     int16_t manaBurnTimer = 0;
     int16_t terrifiedTimer = 0;
+    // --- M20: touched by player/player_save.h. Player.java's own header
+    // comment: reset alongside the ailment/timer group in resetState(),
+    // "no other confirmed use" beyond that and (de)serialization -- same
+    // class of gap as unconfirmedIntField above.
+    bool unconfirmedFlag2 = false;
 
     // Hub-town spawn position -- setHubSpawnPosition(false)'s "new
     // character" branch: (9, 10), facing 1. (isRespawn=true's DIFFERENT

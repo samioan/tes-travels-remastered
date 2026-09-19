@@ -2,6 +2,8 @@
 #include <array>
 #include <cstdint>
 
+#include "assets/binary_reader.h"
+#include "assets/binary_writer.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
 #include "monster/monster_state.h"
@@ -62,22 +64,30 @@ public:
     static void TakeDamage(MonsterState& m, int amount);
 
     // Monster.toBytes()/fromBytes(Shared|Into): the packed 28-byte record
-    // ESGame.monsters[]'s spawnId-keyed hashtable stores (see store() --
-    // no live per-level registry exists in this port yet, so nothing
-    // calls an equivalent of Store() yet; ToBytes/FromBytes are provided
-    // standalone for whichever milestone adds one) -- and OnDeath()'s
-    // dropped-item record below needs the same packed-byte-array shape,
-    // so it's worth having now regardless.
-    //
-    // Monster.readFrom(DataInputStream)/writeTo(DataOutputStream) -- a
-    // SECOND, different (unpacked) serialization, presumably the player
-    // save-game format -- is NOT ported here: this port has no
-    // BinaryWriter (only assets/binary_reader.h, read-only, for loading
-    // the shipped .dat tables) and no save-format milestone yet either
-    // (see ../../docs/PORT_ROADMAP.md's M13 "what's next" note). Left for
-    // that future milestone rather than invented early.
+    // ESGame.monsters[]'s spawnId-keyed hashtable stores (see store(),
+    // wired for real since M16/M17's dungeon/dungeon_runtime.h) -- and
+    // OnDeath()'s dropped-item record below needs the same packed-byte-
+    // array shape, so it's worth having standalone regardless.
     static std::array<uint8_t, 28> ToBytes(const MonsterState& m);
     static MonsterState FromBytes(const std::array<uint8_t, 28>& in);
+
+    // M20: Monster.readFrom(DataInputStream)/writeTo(DataOutputStream) --
+    // deferred since M14 pending a BinaryWriter (assets/binary_writer.h,
+    // added this milestone). **Confirmed, by reading both methods
+    // side by side, to encode the EXACT SAME 28 fields in the EXACT SAME
+    // order as toBytes()/fromBytes*() above** -- unlike dawnstar's own
+    // Monster, where its own port's M15 entry found genuinely different
+    // field sets between the two serializations, Stormhold's `readFrom`/
+    // `writeTo` are just `toBytes()`/`fromBytesShared()`'s same 28 bytes
+    // written through `DataInputStream`/`DataOutputStream` primitive
+    // calls instead of manual bit-shifting into a `byte[]` -- a
+    // consequence of THIS game's engine, not assumed to carry over from
+    // dawnstar's. `ReadFrom`/`WriteTo` are still written as their own
+    // direct field-by-field stream calls (not implemented in terms of
+    // ToBytes/FromBytes) for line-for-line fidelity with Monster.java's
+    // own two separate methods.
+    static MonsterState ReadFrom(BinaryReader& in);
+    static void WriteTo(BinaryWriter& out, const MonsterState& m);
 
     // Monster.move(direction): one step in compass direction 1=N/2=E/3=S/
     // 4=W. Blocked by out-of-bounds, a stairway tile (IsStairwayTile), or

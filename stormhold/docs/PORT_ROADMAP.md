@@ -1159,15 +1159,106 @@ read-through.
       full clean rebuild stayed at zero warnings; all 18 smoke tests
       pass.
 
+- [x] **M20 -- the player save format** (this session). New
+      `assets/binary_writer.h` (a `BinaryReader`-mirroring big-endian
+      writer, wrapping `std::ostream&` to match `BinaryReader`'s own
+      `std::istream&` convention -- the first writer this port has had
+      at all). `player/player_save.h`/`.cpp`'s `PlayerSave::ToBytes`/
+      `FromBytes` port `Player.toBytes(true)`/`fromBytes(data, true)` --
+      Player.java's own header comment calls this "the complete
+      in-progress save" actually used by save/load, as opposed to
+      `toBytes(false)`/`fromBytes(data, false)`'s lightweight
+      "character summary" format (most likely a high-score/leaderboard
+      record). `monster/monster_runtime.h`'s `ReadFrom`/`WriteTo`
+      (`Monster.readFrom`/`writeTo`, deferred since M14 pending exactly
+      this `BinaryWriter`) land alongside it, closing that gap too.
+
+      **Deliberately NOT ported: the `full=false` lightweight format**
+      -- same deferral dawnstar's own M12 `PlayerSave` already made for
+      its own equivalent, for a related reason: it needs
+      `applyClassTemplate()`+`resetState(classIndex, false)`'s "new
+      character" reconstruction run BEFORE the serialized fields layer
+      on top of it (overwriting only SOME of what that reset just set --
+      inventory/equipment/position are left at whatever the fresh reset
+      produced, never re-read by this format at all). Unlike dawnstar's
+      own case (complicated by a hidden "traitor index" RNG roll baked
+      into creation), Stormhold's own creation pipeline has NO
+      randomness at all (M9's own finding) and already exists as a
+      directly-reusable building block (`player/player_creation.h`'s
+      `CreateCharacter`) -- so this is a scope choice, not a blocker,
+      left for whichever later milestone actually needs a leaderboard-
+      style summary record rather than the real save/load path this
+      milestone unblocks.
+
+      **A real, confirmed divergence from dawnstar's own equivalent
+      finding, caught by reading `Monster.readFrom`/`writeTo` and
+      `toBytes`/`fromBytesShared` side by side rather than assuming
+      dawnstar's own "two genuinely different serializations" result
+      carries over:** it doesn't. Stormhold's `readFrom`/`writeTo`
+      encode the EXACT SAME 28 fields in the EXACT SAME order as
+      `toBytes()`/`fromBytes*()` -- just written through
+      `DataInputStream`/`DataOutputStream` primitive calls instead of
+      manual bit-shifting into a `byte[]`. `ReadFrom`/`WriteTo` are
+      still implemented as their own direct field-by-field stream calls
+      (not delegating to `ToBytes`/`FromBytes` internally) for
+      line-for-line fidelity with `Monster.java`'s own two separate
+      methods, but `m20_save_format_smoke.cpp` demonstrates the
+      byte-for-byte identity directly rather than just asserting it in
+      a comment. The 64-bit `unconfirmedTimestamp` is composed from two
+      `WriteU32`/`ReadU32` halves rather than adding a dedicated
+      `WriteS64`/`ReadS64` to `BinaryWriter`/`BinaryReader` -- matching
+      dawnstar's own port's identical choice for the same field, and
+      keeping `BinaryWriter`'s surface area to exactly what this port
+      actually needs.
+
+      `PlayerState` gained the save format's last two previously-unported
+      fields (`unconfirmedIntField`, `unconfirmedFlag2`) -- both already
+      flagged in `Player.java`'s own header comment as having "no
+      confirmed meaningful read/write site beyond (de)serialization,"
+      carried through here unchanged rather than guessed at. Confirmed,
+      by reading `toBytes(true)`/`fromBytes(data, true)` in full, that
+      every OTHER `PlayerState` field this port already carries
+      (`pendingLevel`/`pendingTileX`/`pendingTileY`/`pendingFacing`,
+      `prevTileX`/`prevTileY`, `crossingLevelBoundary`,
+      `enteredNewLevelZone`/`leftLevelZone`, `justMarkedCamp`,
+      `pendingLockedItemFlag`) genuinely is NOT part of the real save
+      format -- all per-tick/per-turn transient scratch state recomputed
+      fresh on the next move, matching the original exactly, not an
+      oversight in this milestone.
+
+      Still deliberately left unwired, same as M19's own "what's next"
+      already flagged: whatever caller actually drives
+      `tryRankUpSkills()`/`Monster.tick()`/`Monster.onDeath()` in the
+      original isn't recovered in `../src/` (confirmed by grepping every
+      one of those three call names again this session) -- no save-
+      format work changes that; not invented here either.
+
+      Verified by a new `save_format_smoke.exe`: `BinaryWriter`/
+      `BinaryReader` round-trip every primitive including sign-extension
+      edge cases (a negative byte/short/large-negative int, a large
+      unsigned 32-bit value); `MonsterRuntime::WriteTo`'s output is
+      asserted BYTE-FOR-BYTE identical to `ToBytes()`'s own packed array
+      for a monster exercising every sign-boundary case (negative
+      spawnId/HP, a large 64-bit timestamp), then `ReadFrom` round-trips
+      all of it back; and `PlayerSave::ToBytes`/`FromBytes` round-trip a
+      real created character (M9) with every full-save field mutated to
+      a varied, non-default (including several negative) value, checked
+      field-by-field, while separately confirming every deliberately-
+      excluded transient field comes back at `PlayerState`'s own default
+      rather than accidentally round-tripping. All checks passed on the
+      first attempt; full clean rebuild stayed at zero warnings; all 19
+      smoke tests pass.
+
 ## What's next
 
-M20 onward: the player save format (`Monster.readFrom`/`writeTo`
-included, needing a `BinaryWriter` this port doesn't have yet), plus
-whatever caller actually drives `tryRankUpSkills()`/`Monster.tick()`/
-`Monster.onDeath()` in the original -- none of their real callers are
-recovered yet, see `GameCanvas.java`'s remaining stubbed methods; and
-likely starting on the rendering/UI side (`GameCanvas`'s ~15
-still-stubbed pixel methods) now that a real, wired-together game-logic
-core exists to render -- following dawnstar's own later milestones
-roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19 already found.
+M21 onward: likely starting on the rendering/UI side (`GameCanvas`'s ~15
+still-stubbed pixel-rendering methods, `RawImage`'s M7 decoder finally
+getting a real `Backbuffer::Blit()`/alpha-test compositor to feed) now
+that a real, wired-together game-logic core exists to render -- following
+dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20 already found. The
+still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
+onDeath()` callers (flagged again at M20, unchanged since M14/M15) may
+turn out to live in exactly the stubbed `GameCanvas` methods a rendering
+milestone would need to read anyway.

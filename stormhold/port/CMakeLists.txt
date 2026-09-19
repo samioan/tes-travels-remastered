@@ -59,6 +59,7 @@ add_library(stormhold_player STATIC
   src/player/player_inventory.cpp
   src/player/player_leveling.cpp
   src/player/player_movement.cpp
+  src/player/player_save.cpp
 )
 target_include_directories(stormhold_player PUBLIC src)
 target_link_libraries(stormhold_player PUBLIC stormhold_assets stormhold_world stormhold_dungeon)
@@ -158,3 +159,7 @@ target_link_libraries(registered_spawns_smoke PRIVATE stormhold_dungeon)
 # M19 milestone smoke test -- see src/tests/m19_warden_and_boss_respawn_smoke.cpp.
 add_executable(warden_and_boss_respawn_smoke src/tests/m19_warden_and_boss_respawn_smoke.cpp)
 target_link_libraries(warden_and_boss_respawn_smoke PRIVATE stormhold_player)
+
+# M20 milestone smoke test -- see src/tests/m20_save_format_smoke.cpp.
+add_executable(save_format_smoke src/tests/m20_save_format_smoke.cpp)
+target_link_libraries(save_format_smoke PRIVATE stormhold_player stormhold_monster)
