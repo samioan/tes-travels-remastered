@@ -2109,22 +2109,97 @@ read-through.
 
 ## What's next
 
-An actual live game loop in `main.cpp`, calling `GameRenderer`/
-`VisibleObjectRenderer`/`VisibleObjects::Refresh`/`MessagePopup::Tick`/
-`SampleSquareView`/`populateMinimapGrid`-and-`populateVisibleGrid`'s own
-C++ equivalents every tick instead of presenting a blank frame -- this
-is now the dominant remaining gap, not a missing paint method or
-primitive (see M33's own closing note). That in turn needs the
-still-untranscribed tick-loop helpers (`tickStatusCountdowns`/
+- [x] **M34 -- wire the real pipeline into the actual windowed
+      `stormhold_port.exe`** (this session). Until now `main.cpp` was
+      still M1's placeholder: a solid-color `Backbuffer::Fill` and an
+      empty tick, with every real milestone (M2-M33) only ever
+      exercised through console smoke tests. Same scope/shape as
+      dawnstar's own M20, same milestone-number role (its own "wire the
+      pipeline in" milestone) even though the two projects' own numbers
+      have diverged by now.
+
+      Loads the real extracted assets, builds the real 37-level world
+      (M6's `DungeonGenerator::BuildHubLevel`/`PopulateLevel` +
+      M18's `RegisterGeneratedSpawns`), creates a real class-0 character
+      (M9's `PlayerCreation` -- there's no character-creation UI yet,
+      so the class is a fixed stand-in; its own `setHubSpawnPosition`
+      fusion already places the player at the hub's real (9,10)
+      facing 1, no separate spawn logic needed here). On every
+      `GameClock` tick (M1's real 250ms cadence), reads arrow-key state
+      (`GetAsyncKeyState`, polled once per tick so a held key advances
+      once per tick rather than as fast as the message pump spins)
+      into `PlayerMovement::Move` (turn/step only, no strafe -- M17/M19/
+      M25's own side effects, including `RefreshCorridorView`, come
+      along for free), refreshes `VisibleObjects` unconditionally every
+      tick (M27 -- nothing else yet mutates monster/chest/dropped-item
+      state between ticks, so this is harmless even though the real
+      game only refreshes it after an actual move), and renders through
+      every already-verified pixel pipeline this port has --
+      `GameRenderer::RenderCorridorView` (M25), `VisibleObjectRenderer::
+      RenderObjects`/`RenderMonsters` (M28), `GameRenderer::
+      RenderStatusBars` (M26), `GameRenderer::RenderHud` (M31, iconSet
+      via M29's `ResolveHudIconSet` against a fresh, all-false
+      `HudState`), and `GameRenderer::RenderMinimapZoomedOut`/
+      `RenderMinimapNormal` (M33, fed by M32's `SampleSquareView`,
+      toggled with a new 'M' key binding) -- then presents through the
+      existing GDI `Window::Present`. `CMakeLists.txt`'s `stormhold_port`
+      target now links `stormhold_render`/`stormhold_player`/
+      `stormhold_dungeon` (previously linked against neither).
+
+      No new gameplay logic was ported here -- this is pure wiring of
+      already-verified pieces. Deliberately NOT wired: `paintFlashOverlays()`/
+      `paintUnknown_b()` (both still gated on live tick-loop state),
+      the message popup (`MessagePopup::Show` has no reachable real
+      call site yet -- every one lives inside a still-untranscribed
+      tick-loop helper), and the tick-loop helpers themselves
+      (`tickStatusCountdowns`/`tickPerSecond`/`rollCampInterrupted`/
+      `tickMovementAndAI`/`setSomeFlag`) -- so there is no monster AI,
+      no status-effect ticking, and no combat input yet; only
+      turning/stepping and the minimap zoom toggle.
+
+      Verified by actually running `stormhold_port.exe` and capturing
+      its real window content directly (`PrintWindow`, not a plain
+      screen-region copy -- this session's sandboxed desktop doesn't
+      reliably composite the window onto the capturable screen surface,
+      so a raw `CopyFromScreen` grab came back black/wrong even though
+      the process was alive and responding; `PrintWindow` asks the
+      window to render into a supplied DC directly and got the real
+      content). The captured frame shows the real hub-town corridor
+      view (real floor/wall textures), the real HP/Magicka/Fatigue bars,
+      the real hotbar icon set 0 (`icon_cast`/`icon_change`/
+      `icon_option`/`icon_camp`, key glyphs `3`/`5`/`7`/`0`, matching
+      `ResolveHudIconSet`'s own all-false-flags branch exactly), and the
+      zoomed-out minimap showing a real wall/floor pattern around the
+      spawn point with the player's own green center marker. Simulating
+      a real physical UP-arrow key press (`SendInput`, not `PostMessage`
+      -- `GetAsyncKeyState` reads actual hardware input state, which
+      only `SendInput` affects regardless of window focus) for 1.2s and
+      re-capturing shows a completely different corridor frame (walking
+      forward into a real corridor, brick wall textures on both sides)
+      and a correspondingly different minimap pattern -- confirming
+      real keyboard input actually reaches `PlayerMovement::Move` and a
+      newly rendered frame results, not a static placeholder. All 31
+      smoke tests still pass; full clean rebuild stayed at zero `/W4`
+      warnings.
+
+## What's next
+
+The still-untranscribed tick-loop helpers (`tickStatusCountdowns`/
 `tickPerSecond`/`rollCampInterrupted`/`tickMovementAndAI`/
 `setSomeFlag`, one of which -- `a(boolean)` -- is now confirmed as
-`q()`/`p()`'s own real caller) actually transcribed and wired, plus
+`q()`/`p()`'s own real caller) -- these gate monster AI, status-effect
+ticking, and the Warden/message-popup call sites `main.cpp` doesn't
+reach yet. Once even one of them is transcribed and wired, `main.cpp`
+gains its first real tick-driven (not just input-driven) behavior.
 `paintFlashOverlays()`/`paintUnknown_b()` (the two remaining
 unported-pixel paint methods, both gated on that same live state). The
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/
 `Monster.onDeath()` callers (flagged again this session, unchanged
 since M14/M15) may well turn out to live in exactly those same
-tick-loop helpers. Following dawnstar's own later milestones roughly
-but expecting further Stormhold-specific divergences the way
+tick-loop helpers. Beyond that: real combat input (attack/cast), a
+character-creation UI (`main.cpp` still hardcodes class 0), and the
+message-popup call sites once their own tick-loop helper exists.
+Following dawnstar's own later milestones roughly but expecting
+further Stormhold-specific divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

@@ -115,6 +115,11 @@ add_executable(stormhold_port WIN32
 )
 target_include_directories(stormhold_port PRIVATE src)
 target_compile_definitions(stormhold_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+# M34: the live pipeline itself -- stormhold_render pulls in
+# stormhold_dungeon/stormhold_assets/stormhold_player transitively
+# (PUBLIC), listed explicitly anyway for clarity at this, the actual
+# executable's own link line.
+target_link_libraries(stormhold_port PRIVATE stormhold_render stormhold_player stormhold_dungeon)
 if(MSVC)
   target_compile_options(stormhold_port PRIVATE /W4)
 endif()
