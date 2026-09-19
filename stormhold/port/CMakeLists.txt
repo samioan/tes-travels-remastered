@@ -88,14 +88,18 @@ target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster
 
 # M21: GameCanvas.paintWalls()'s corridor wall-segment SELECTION logic
 # (data only, no pixels yet -- see docs/PORT_ROADMAP.md). M25: GameRenderer,
-# actually drawing those decisions into a real Backbuffer -- see
-# src/render/.
+# actually drawing those decisions into a real Backbuffer. M26:
+# StatusBarPlan + GameRenderer::RenderStatusBars (paintStatusBars()) --
+# needs stormhold_player for PlayerCombatStats::EffectiveStat(), the only
+# reason this library now links it (no cycle: stormhold_player doesn't
+# depend on stormhold_render) -- see src/render/.
 add_library(stormhold_render STATIC
   src/render/corridor_render_plan.cpp
   src/render/game_renderer.cpp
+  src/render/status_bar_plan.cpp
 )
 target_include_directories(stormhold_render PUBLIC src)
-target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets)
+target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets stormhold_player)
 
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
@@ -206,3 +210,7 @@ target_link_libraries(decoded_image_smoke PRIVATE stormhold_assets)
 # M25 milestone smoke test -- see src/tests/m25_game_renderer_smoke.cpp.
 add_executable(game_renderer_smoke src/tests/m25_game_renderer_smoke.cpp)
 target_link_libraries(game_renderer_smoke PRIVATE stormhold_render stormhold_player)
+
+# M26 milestone smoke test -- see src/tests/m26_status_bar_smoke.cpp.
+add_executable(status_bar_smoke src/tests/m26_status_bar_smoke.cpp)
+target_link_libraries(status_bar_smoke PRIVATE stormhold_render stormhold_player)

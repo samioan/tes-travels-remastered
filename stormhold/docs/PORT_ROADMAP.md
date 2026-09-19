@@ -1623,24 +1623,74 @@ read-through.
       "primitive first, pipeline later" discipline M21/M23/M24 already
       established, just now applied to one whole vertical slice (corridor
       floor+walls, selection logic through real pixels) instead of a
-      single primitive.
+      single primitive. (`paintStatusBars()` turned out to need none of
+      that live state after all -- see M26, immediately below.)
+
+- [x] **M26 -- `StatusBarPlan` + `GameRenderer::RenderStatusBars`,
+      `paintStatusBars()`** (this session). The cheapest remaining paint
+      method, exactly as this entry's own previous "what's next" note
+      predicted: entirely self-contained in `PlayerState` +
+      `CharacterData` (`PlayerCombatStats::EffectiveStat`'s own
+      requirement, from M13) -- no new asset loading, no world state, no
+      `main.cpp` game loop needed to exercise it meaningfully.
+
+      New `render/status_bar_plan.h`/`.cpp` (`StatusBarPlan::Plan`),
+      split from pixel drawing the same way `CorridorRenderPlan` (M21)
+      already is: three widths (`stat * 38 / max`) for the HP
+      (`coreStats[2]`/`[3]`), Magicka (`[4]`/`[5]`), and Fatigue
+      (`[6]`/`[7]`) bars. `GameRenderer::RenderStatusBars` draws them as
+      three 40x7 yellow (`0xFFFF00`) track rects with a 38x5 colored fill
+      inset by (1,1) -- red HP, green Magicka, blue Fatigue.
+
+      **A real, confirmed asymmetry preserved, not simplified away:**
+      only `fatigueWidth` is clamped to 40 in the original -- `hpWidth`/
+      `magickaWidth` have no clamp at all. `EffectiveStat`'s own internal
+      clamp to the matching max stat means none of the three should
+      naturally exceed 38 in practice, so this reads like a defensive
+      check the original evidently considered necessary for Fatigue
+      specifically (current transiently exceeding max?) but not the
+      other two -- not something this port introduced or "fixed" for
+      consistency.
+
+      `stormhold_render` now links `stormhold_player` for
+      `PlayerCombatStats::EffectiveStat` (no cycle: `stormhold_player`
+      doesn't depend on `stormhold_render`).
+
+      Verified with a new `status_bar_smoke.exe`: hand-picked
+      `PlayerState` values confirm the exact width formula (including
+      integer-division truncation); a real M9-created fresh character
+      renders all three bars completely full (current == max at
+      creation, confirmed by M9 itself); the fatigueWidth-only clamp
+      asymmetry is exercised directly (`coreStats[6]=200`,
+      `coreStats[7]=10` -> 760 clamped to 40, while the identical
+      HP/Magicka setup stays unclamped at 760); and a pixel-exact
+      `RenderStatusBars` check on a synthetic `Backbuffer` confirms every
+      track/fill boundary column, a zero-width fill leaving its whole
+      track visible, and every row outside the three bars staying
+      untouched. All 24 smoke tests pass; full clean rebuild stayed at
+      zero `/W4` warnings.
 
 ## What's next
 
-M26 onward: the remaining paint methods' own render passes -- each needs
+M27 onward: the remaining paint methods' own render passes -- each needs
 its own slice of live state this port doesn't have yet: `paintObjects()`/
 `paintMonsters()` need `Player.visibleObjects` (the 13-slot "what's
 renderable this frame" cache) actually populated from a live
 `WorldRegistry`, plus `monsterImages`/`chestImages`/`bagImages`/
-`crystalImages` (`RawImage`, M23's compositor) loaded; `paintStatusBars()`/
-`paintHud()` need the HP/Magicka/Fatigue stat reads already available on
-`PlayerState` today, so may be the cheapest next slice; `paintMinimap*()`
-need the still-untranscribed `q()`/`p()` minimap-populate methods M22
-found but didn't transcribe (not paint methods themselves, but needed
-before the minimap can show anything live). Beyond that: an actual live
-game loop in `main.cpp` calling `GameRenderer`/whatever M26+ adds every
-tick instead of presenting a blank frame; the still-untranscribed
-tick-loop helpers (`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
+`crystalImages` (`RawImage`, M23's compositor) loaded; `paintHud()` needs
+`hotbarIcons` (`DecodedImage`, M24's compositor, real filenames not yet
+grepped from `ESGame.java`) plus `resolveHudIconSet()`'s own
+`unconfirmed_aa`/`_m`/`_R`/`_W` flags and `isNpcDialogueDue()` (a `Shop`/
+`targetMonster` dependency) -- none of which have a port-side home yet,
+likely a small new "HUD/UI state" struct alongside `PlayerState`, not a
+`PlayerState` field itself (these are `GameCanvas`'s own static fields in
+the original, not `Player`'s); `paintMinimap*()` need the
+still-untranscribed `q()`/`p()` minimap-populate methods M22 found but
+didn't transcribe (not paint methods themselves, but needed before the
+minimap can show anything live). Beyond that: an actual live game loop in
+`main.cpp` calling `GameRenderer`/whatever M27+ adds every tick instead
+of presenting a blank frame; the still-untranscribed tick-loop helpers
+(`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
 `rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`); and the
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
 onDeath()` callers (flagged again this session, unchanged since

@@ -26,4 +26,15 @@ void GameRenderer::RenderCorridorView(Backbuffer& bb, const CorridorAssets& asse
     }
 }
 
+void GameRenderer::RenderStatusBars(Backbuffer& bb, const StatusBarPlan& plan) {
+    uint16_t track = PackRGB565(255, 255, 0);
+    bb.FillRect(5, 130, 40, 7, track);
+    bb.FillRect(5, 138, 40, 7, track);
+    bb.FillRect(5, 146, 40, 7, track);
+
+    bb.FillRect(6, 131, plan.hpWidth, 5, PackRGB565(255, 0, 0));
+    bb.FillRect(6, 139, plan.magickaWidth, 5, PackRGB565(0, 255, 0));
+    bb.FillRect(6, 147, plan.fatigueWidth, 5, PackRGB565(0, 0, 255));
+}
+
 }  // namespace stormhold
