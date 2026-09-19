@@ -98,13 +98,20 @@ M16 (a live per-level Monster/chest/dropped-item registry --
 WorldRegistry/DungeonRuntime, spawnId-keyed for monsters same as M14's
 own confirmed keying, position-keyed for chests -- plus a necessary
 GeneratedLevel data-model addition, its own room-rectangle list, needed
-by spawnAmbushMonsters' real room-bounded placement), and M17 (wiring
+by spawnAmbushMonsters' real room-bounded placement), M17 (wiring
 that registry into player_movement's dropped-item auto-loot,
 player_inventory's DropInventoryItem, and combat_resolution's
 target.store()/spawnAmbushMonsters call sites -- including a real,
 confirmed bit-test asymmetry between the original's "one item on this
 tile" and "several items on this tile" dropped-item-pickup branches,
-preserved rather than unified) are done, all
+preserved rather than unified), and M18 (registering M6's own
+generation-time monster/chest spawn lists into the registry itself,
+closing the last gap of the 3-way registry split -- including a
+confirmed-unavoidable simplification where a random 2-bit "tier bits"
+value the original packs into a chest record byte has no surviving data
+to reconstruct from, and a confirmed subtlety that the record's
+low/high item-id byte split uses a different, unrelated condition than
+the loot roll's own packing rule) are done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader) are

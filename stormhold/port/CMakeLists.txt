@@ -150,3 +150,7 @@ target_link_libraries(dungeon_runtime_smoke PRIVATE stormhold_dungeon)
 # M17 milestone smoke test -- see src/tests/m17_world_wiring_smoke.cpp.
 add_executable(world_wiring_smoke src/tests/m17_world_wiring_smoke.cpp)
 target_link_libraries(world_wiring_smoke PRIVATE stormhold_player)
+
+# M18 milestone smoke test -- see src/tests/m18_registered_spawns_smoke.cpp.
+add_executable(registered_spawns_smoke src/tests/m18_registered_spawns_smoke.cpp)
+target_link_libraries(registered_spawns_smoke PRIVATE stormhold_dungeon)

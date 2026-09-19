@@ -168,4 +168,35 @@ void DungeonRuntime::SpawnAmbushMonsters(GeneratedLevel& level, WorldRegistry& w
     }
 }
 
+void DungeonRuntime::RegisterGeneratedSpawns(const GeneratedLevel& level, WorldRegistry& world,
+                                              const MonsterDatabase& monsterDb) {
+    for (const GeneratedMonsterSpawn& spawn : level.monsters) {
+        MonsterState m = MonsterRuntime::Spawn(static_cast<int16_t>(spawn.spawnId), spawn.monsterType, level.number,
+                                                monsterDb);
+        m.tileX = static_cast<int8_t>(spawn.x);
+        m.tileY = static_cast<int8_t>(spawn.y);
+        StoreMonster(world, m);
+    }
+
+    for (const GeneratedChestSpawn& chest : level.chests) {
+        // Dungeon.placeChests()'s own record-building, transcribed exactly
+        // -- see this method's own declaration comment for the confirmed
+        // simplification on byte 3's top 2 bits.
+        std::array<int8_t, 8> record{};
+        record[0] = static_cast<int8_t>(chest.x);
+        record[1] = static_cast<int8_t>(chest.y);
+        record[2] = 0;  // confirmed always-zero on-disk byte -- see GeneratedChestSpawn's own doc comment
+        record[3] = static_cast<int8_t>(level.tier);
+        int low = chest.itemId & 0xFF;
+        int high = 0;
+        if (low == 86) high = (chest.itemId >> 8) & 0xFF;
+        record[4] = static_cast<int8_t>(low);
+        record[7] = static_cast<int8_t>(high);
+        record[5] = static_cast<int8_t>((chest.spawnId >> 8) & 0xFF);
+        record[6] = static_cast<int8_t>(chest.spawnId & 0xFF);
+
+        world.chests[static_cast<size_t>(level.number - 1)][PackTileKey(chest.x, chest.y)] = record;
+    }
+}
+
 }  // namespace stormhold

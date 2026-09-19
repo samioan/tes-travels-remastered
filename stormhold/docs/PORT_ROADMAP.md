@@ -1004,17 +1004,104 @@ read-through.
       `SpawnAmbushMonsters`'s own RNG-order/room-bounding-box correctness
       aren't re-verified here, already covered by M13/M16.
 
+- [x] **M18 -- registering the live registry from world generation itself**
+      (this session). Dawnstar's own M24 equivalent -- the last piece of
+      the 3-way registry split M16 (dawnstar's M22)/M17 (dawnstar's M23)
+      worked through. Since M6, `GeneratedLevel::monsters`/`::chests`
+      have held the room-monster/chest spawns `DungeonGenerator::
+      PopulateLevel`/`PlaceChests` compute as plain output data -- a
+      deliberate placeholder, since no live registry existed yet to put
+      them in. In the original, `Dungeon.populate()`'s
+      `spawnRoomMonsters()`/`placeChests()` register directly into
+      `ESGame.monsters[]`/`chests[]` (`Monster.spawn(...).store()`,
+      `Dungeon.storeChest(record)`) as part of generation itself -- so
+      until this milestone, a `WorldRegistry` would have stayed
+      permanently empty for any level this port ever generates, only
+      ever gaining whatever M17's own dynamic wiring added later at
+      runtime. New `DungeonRuntime::RegisterGeneratedSpawns(level, world,
+      monsterDb)` (`dungeon/dungeon_runtime.h`/`.cpp`) closes that gap:
+      converts each `GeneratedMonsterSpawn` into a full 28-byte
+      `Monster.toBytes()` record via the already-existing
+      `MonsterRuntime::Spawn`, and each `GeneratedChestSpawn` into the
+      real 8-byte chest record layout, keyed exactly like every other
+      registry entry (spawnId for monsters, position for chests -- M14/
+      M16's own confirmed keying). Deliberately does NOT touch
+      `level.tiles` -- `DungeonGenerator` already sets the monster (2)/
+      chest (16) presence bits itself while building `level.tiles`, so
+      this only adds the missing registry side, matching the real
+      `Monster.store()`/`Dungeon.storeChest()`'s own actual behavior
+      (neither sets a genuinely NEW bit here either). Unlike dawnstar's
+      own M24, no `GeneratedMonsterSpawn` data-model change was needed --
+      Stormhold's own M6 already gave it a `spawnId` field from the
+      start (a per-level-local counter, `roomIndex + 1`, same reasoning
+      `GeneratedChestSpawn::spawnId` already used), so this milestone is
+      purely new registration logic, not a data-model catch-up.
+      `RegisterGeneratedSpawns` couldn't live inside `world/
+      dungeon_generator.h` itself: `stormhold_world` is a dependency OF
+      `stormhold_dungeon`, so the reverse would cycle -- same constraint
+      M16's own class comment already documents for this whole module's
+      placement.
+
+      **A real, confirmed and unavoidable simplification, caught while
+      transcribing `Dungeon.placeChests()`'s literal record-building
+      code (not needed since M6 only ever stored a semantic `itemId`
+      summary, never the literal packed bytes):** the real record's byte
+      3 packs a random `[0,2]` "tier bits" value into its top 2 bits
+      alongside `tier` in its low 6 -- M6's own `PlaceChests` already
+      draws that random value for RNG-stream-order fidelity but discards
+      the RESULT (no confirmed reader anywhere in `../../../src/`), so
+      `GeneratedChestSpawn` has nowhere to carry it forward. This
+      milestone's reconstructed record therefore always has those top 2
+      bits as 0, unlike what the real record would contain in memory --
+      `tier` itself (the low 6 bits) still matches exactly, and nothing
+      in this port ever reads the top 2 bits back either way, so this
+      has no observable effect on anything the port models.
+
+      **A second, independently-confirmed subtlety, found by reading
+      `Dungeon.placeChests()`'s byte[4]/byte[7] split character-by-
+      character rather than assuming it mirrors `Item.rollLoot()`'s own
+      packing rule:** `rollLoot()` decides internally whether to return
+      an extended (2-byte-packed) item id based on the rolled rarity
+      COLUMN being 1 (`assets/item_database.h`'s own `RollLoot` doc
+      comment); `placeChests()`, entirely separately, re-splits whatever
+      int it got back into the record's low/high storage bytes based on
+      a completely different, purely literal check -- `if (low == 86)`
+      -- unrelated to why that value was produced. Both checks are
+      transcribed exactly as their own separate things, not folded into
+      one; `m18_registered_spawns_smoke.cpp` demonstrates the literal
+      `low==86` gate directly (22 of the 180 real generated chests hit
+      it) rather than assuming it lines up with the rarity-column rule.
+
+      Verified by a new `registered_spawns_smoke.exe` (no JVM ground
+      truth, same reason as M6): the hub town (no room-monster/chest
+      generation at all) registers nothing; every one of the 36 standard
+      levels' registered monster/chest counts match their generated
+      counts exactly (540 monsters, 180 chests total); every generated
+      spawn's registry entry round-trips back to the exact same type/hp/
+      position/spawnId/dungeonLevel (monsters) or position/tier/itemId/
+      spawnId bytes (chests, including the confirmed always-zero byte 2
+      and the extended-id branch, actually exercised by 22 of the 180
+      real chests) with the presence tile bit already set from
+      generation; exactly one guaranteed-gift chest per level (36
+      total); and, as an integration check going beyond M16/M17's own
+      tests (which only ever exercised dynamically-spawned/synthetic
+      monsters), `DungeonRuntime::RemoveMonster` correctly removes a
+      REAL monster this milestone registered from actual world
+      generation. All checks passed on the first attempt; full clean
+      rebuild stayed at zero warnings; all 17 smoke tests pass.
+
 ## What's next
 
-M18 onward: registering M6's generation-time `GeneratedMonsterSpawn`/
-`GeneratedChestSpawn` spawn lists into a `WorldRegistry` (dawnstar's own
-M24 equivalent -- the last piece of the 3-way registry split M16/M17
-worked through), then likely a `WardenState`-into-movement wiring pass
-(`Shop.wardenPresent`'s on-any-step clear, deliberately left out of M17)
-and the level-37-entry forced-respawn special case; and eventually the
-player save format (Monster's own `readFrom`/`writeTo` included, plus
-whatever caller actually drives `tryRankUpSkills()`/`Monster.tick()` in
-the original -- still not recovered, see `GameCanvas.java`'s remaining
-stubbed methods) -- following dawnstar's own later milestones roughly
-but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17 already found.
+M19 onward: likely a `WardenState`-into-movement wiring pass (`Shop.
+wardenPresent`'s on-any-step clear, deliberately left out of M17) and
+the level-37-entry forced-respawn special case player_movement.h's
+CommitMove still flags as skipped; then the player save format
+(Monster's own `readFrom`/`writeTo` included, plus whatever caller
+actually drives `tryRankUpSkills()`/`Monster.tick()`/`onDeath()` in the
+original -- none of their real callers are recovered yet, see
+`GameCanvas.java`'s remaining stubbed methods); and eventually starting
+on the rendering/UI side (`GameCanvas`'s ~15 still-stubbed pixel methods)
+now that a real, wired-together game-logic core exists to render --
+following dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18 already found.

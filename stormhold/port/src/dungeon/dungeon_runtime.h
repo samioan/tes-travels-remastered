@@ -175,6 +175,43 @@ public:
     // the retry-loop case specifically.
     static void SpawnAmbushMonsters(GeneratedLevel& level, WorldRegistry& world, int count, JavaRandom& rng,
                                      const MonsterDatabase& monsterDb, int16_t& spawnIdCounter);
+
+    // M18: `Dungeon.populate()`'s own `spawnRoomMonsters()`/`placeChests()`
+    // register directly into `ESGame.monsters[]`/`chests[]` AS PART OF
+    // generation itself -- so in the real game, `WorldRegistry` is never
+    // actually empty for a level that's been generated; M6's
+    // `GeneratedLevel::monsters`/`::chests` have held that same data as
+    // plain OUTPUT summaries since M6, with nothing to put them into until
+    // M16. This converts each `GeneratedMonsterSpawn`/`GeneratedChestSpawn`
+    // into the real packed record layout and inserts it, matching dawnstar's
+    // own M24 (the last piece of the 3-way registry split M16/M17 worked
+    // through). Couldn't live inside `world/dungeon_generator.h` itself:
+    // `stormhold_world` is a dependency OF `stormhold_dungeon`, so the
+    // reverse would cycle -- same constraint M16's own class comment
+    // already documents for this whole module's placement.
+    //
+    // Deliberately does NOT touch `level.tiles` at all -- `DungeonGenerator`
+    // already sets the monster (2) / chest (16) presence bits itself while
+    // building `level.tiles` (`PopulateLevel`'s own room-monster/chest
+    // loops), so this only adds the missing REGISTRY side, matching
+    // `Monster.store()`/`Dungeon.storeChest()`'s own real split (neither of
+    // those methods sets a NEW bit blindly here either -- `storeChest()`
+    // does re-OR bit 16, but that's already set to the same value from
+    // generation, so skipping it changes nothing observable).
+    //
+    // **A real, confirmed and unavoidable simplification, not a
+    // transcription gap:** `Dungeon.placeChests()` draws a random [0,2]
+    // "tier bits" value packed into the real record's byte 3 alongside
+    // `tier` (top 2 bits) -- M6's own `PlaceChests` already documents
+    // preserving that RNG draw (for stream-order fidelity) while
+    // discarding its RESULT, since `GeneratedChestSpawn` has nowhere to
+    // carry it and no confirmed reader exists anywhere in `../../../src/`
+    // for those bits. This means the record this method reconstructs
+    // always has those top 2 bits as 0, unlike what the real record would
+    // actually contain in memory -- byte 3's low 6 bits (`tier` itself)
+    // still match exactly.
+    static void RegisterGeneratedSpawns(const GeneratedLevel& level, WorldRegistry& world,
+                                         const MonsterDatabase& monsterDb);
 };
 
 }  // namespace stormhold
