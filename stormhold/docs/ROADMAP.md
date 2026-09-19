@@ -35,9 +35,13 @@ in the live registry, a from-scratch indexed-color image format
 (`RawImage`), and a rendering/UI architecture (`ScreenCanvas`/`UIScreen`/
 `GameCanvas`) that does NOT map onto dawnstar's Screen/LoadingScreen/
 GameCanvas split by content, among others. Left for later phases (not
-blocking phase 2/3): `GameCanvas.java`'s still-stubbed pixel-rendering
-methods (~14 of the original ~15 remain -- phase-3 M21 transcribed
-`paintWalls()` for real, see `PORT_ROADMAP.md`), `ESGame.
+blocking phase 2/3): `GameCanvas.java`'s tick-loop helpers
+(`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
+`rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`) and two
+brand-new `q()`/`p()` minimap-populate methods phase-3 M22 turned up --
+its pixel-rendering `paint*` methods are all transcribed for real now
+(phase-3 M21/M22, including two real mapping bugs found and fixed along
+the way, see `PORT_ROADMAP.md`), `ESGame.
 loadHelpTopicBodies()`'s remaining help topics, and a set
 of individually-flagged lower-confidence names throughout (see each file's
 header comment and CLASS_MAP.md).
@@ -134,7 +138,18 @@ paintCorridorWalls() equivalent with two real simplifications -- no
 bit-64 gate-tile branch, a single shared floor/wall texture pair, not
 per-level ice/plain textures -- then ported its selection logic to C++
 as data only, plus found that at least one OTHER stub's existing
-placeholder mapping was never verified and is likely wrong) are
+placeholder mapping was never verified and is likely wrong), and M22
+(the rest of GameCanvas's stubbed paint methods -- pure phase-1 Java
+transcription, no C++ yet since the pixel compositor these would feed
+doesn't exist -- confirming and fixing, rather than just flagging, THREE
+real mapping bugs: paintFloor()/paintObjects() had their real bodies
+swapped [the true paintObjects() renders chests/dropped items;
+paintFloor() never existed as a separate concept, paintWalls() already
+paints the floor itself], likewise paintMessagePopup() and the old
+paintUnknown_l() [the flash-overlay renderer had stolen the message-
+popup's name], and paintHotbar1()/paintHotbar2() turned out to be the
+two minimap zoom levels, gated by the wrong field [hotbarActionSet
+instead of hotbarContext] since the very first partial pass) are
 done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small

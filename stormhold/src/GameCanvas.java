@@ -18,16 +18,47 @@
 // `j(Graphics)`), is now for real -- see its own doc comment. That pass
 // also turned up evidence that at least one OTHER stub's placeholder
 // "(was e.java's X(Graphics))" mapping was never actually verified
-// against real content and looks WRONG: `paintFloor()`'s claimed
-// `b(Graphics)` reads from `player.ad`-shaped data (looks like an
-// object/visibleObjects renderer, i.e. paintObjects()'s real body), and
-// separately `paintMessagePopup()`'s claimed `e(Graphics)` reads/writes
-// the `unconfirmed_S`/`unconfirmed_ao`/`unconfirmed_am` flash flags (a
-// monster-hit/spell-hit/self-spell flash overlay, not a message popup).
-// Every remaining stub's mapping should be independently re-verified
-// against its actual decompiled body before being trusted, not assumed
-// correct just because a plausible-looking name/signature was already
-// filled in.
+// against real content and looked WRONG.
+//
+// **Phase-3 M22 update:** every remaining stubbed paint* method (and the
+// non-paint helpers they directly depend on) is now transcribed for
+// real. Confirmed, in the process, that TWO of the previous pass's
+// placeholder mappings were indeed swapped/wrong, and fixed them here
+// rather than just flagging them:
+//   - the old `paintFloor()` (`b(Graphics)`) never painted a floor at
+//     all -- `paintWalls()` already does that itself (see its own doc
+//     comment) -- its real body renders visible chests/dropped items on
+//     corridor tiles. Renamed to `paintObjects()`.
+//   - the old `paintObjects()` (`a(Graphics)`) didn't render objects --
+//     its real body draws the three HP/Magicka/Fatigue HUD bars. Renamed
+//     to `paintStatusBars()`.
+//   - the old `paintMessagePopup()` (`e(Graphics)`) never touched a
+//     message popup -- its real body is the monster-hit/spell-hit/
+//     self-spell flash overlay (`unconfirmed_S`/`_ao`/`_am`). Renamed to
+//     `paintFlashOverlays()`.
+//   - the old `paintUnknown_l()` (`l(Graphics)`) is the REAL message
+//     popup (the `messageLines`/`unconfirmed_ad`-gated rounded box).
+//     Renamed to `paintMessagePopup()`, replacing the wrongly-named one
+//     above.
+//   - `paintHotbar1()`/`paintHotbar2()` (`k(Graphics)`/`h(Graphics)`)
+//     turned out to be the two minimap zoom levels (drawing
+//     `minimapTileGrid`/`visibleTileGrid`), not a hotbar at all --
+//     renamed to `paintMinimapZoomedOut()`/`paintMinimapNormal()`. Their
+//     dispatch in `paintGameView()` also had a real bug from the
+//     earlier partial pass: it gated on `hotbarActionSet` (decompiled
+//     `aq`, the numeric-hotkey selector) instead of `hotbarContext`
+//     (decompiled `f`, the field actually cycled by the `*` key and
+//     actually tested in the decompiled dispatcher) -- fixed here.
+//   - `paintHud()` (`d(Graphics)`) and `paintUnknown_b()` (`b(Graphics,
+//     int)`) turned out to be correctly named/mapped already; only their
+//     bodies were missing.
+// A byproduct worth tracking: `paintMonsters()`'s real body gates each
+// visible-object-slot render on the record's own `byte[6] != 0` (a live
+// Monster record's `unconfirmedFlag`, per the 28-byte layout M14/M20
+// confirmed) -- i.e. that flag may really mean something like "alive/
+// renderable", not the minor miscellaneous bit its name currently
+// suggests. Not renamed here (would ripple through M14/M17/M18/M20's
+// own code), just flagged as new evidence for a future pass.
 //
 // Confirmed identity: `extends com.nokia.mid.ui.FullCanvas implements
 // Runnable`, with a `5x6x4 int[][][]` table (`wallSegmentTable`, was `n`)
@@ -63,10 +94,14 @@ import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
 
 public class GameCanvas extends FullCanvas implements Runnable {
-   private static final Font unusedFont_aj = Font.getFont(64, 0, 8);
+   // M22: renamed from unusedFont_aj/unusedFont_K -- confirmed NOT
+   // unused once paintHud()/paintMessagePopup()/paintMinimapZoomedOut()/
+   // paintMinimapNormal() were transcribed for real; all four use one
+   // of these two.
+   private static final Font smallFont = Font.getFont(64, 0, 8);
    private static final Font deadScreenFont = Font.getFont(64, 2, 16);
    private static final Font campScreenFont = Font.getFont(64, 2, 16);
-   private static final Font unusedFont_K = Font.getFont(64, 1, 16);
+   private static final Font minimapFont = Font.getFont(64, 1, 16);
 
    // TODO: confirmed shape (5x6x4) matches dawnstar's CORRIDOR_WALL_TABLE
    // exactly, but the actual row/column semantics of THIS table's values
@@ -279,20 +314,22 @@ public class GameCanvas extends FullCanvas implements Runnable {
       g.drawString("CAMPING", this.getWidth() / 2, this.getHeight() / 2, 33);
    }
 
-   // Main game-view paint: black background, corridor walls, floor,
-   // (conditionally) something gated by unconfirmed_W using player.
-   // player.questShopAtPendingTile(), monsters (try/caught separately -- the
-   // original wraps just this call so a bad monster paint can't blank the
-   // whole frame), objects, HUD, a message popup, and the active hotbar
-   // (context 1 or 2) when no dialogue-equivalent Screen is blocking key 3.
-   //
-   // TODO: every paint* method called from here is a stub below --
-   // signatures preserved, bodies not yet transcribed.
+   // Main game-view paint: black background, corridor walls (which also
+   // paint the floor themselves, see paintWalls()'s own comment),
+   // objects (chests/dropped items), (conditionally) the quest-shop
+   // status icon gated by unconfirmed_W using player.
+   // questShopAtPendingTile(), monsters (try/caught separately -- the
+   // original wraps just this call so a bad monster paint can't blank
+   // the whole frame), the HP/Magicka/Fatigue status bars, the HUD panel,
+   // the message popup, the hit/spell flash overlay, the popup-text
+   // overlay, and one of the two minimap zoom levels (selected by
+   // hotbarContext, cycled by the `*` key) when no dialogue-equivalent
+   // Screen is blocking key 3.
    private void paintGameView(Graphics g) {
       g.setColor(0);
       g.fillRect(0, 0, this.getWidth(), this.getHeight());
       this.paintWalls(g);
-      this.paintFloor(g);
+      this.paintObjects(g);
       if (unconfirmed_W) {
          int stat = this.player.questShopAtPendingTile();
          this.paintUnknown_b(g, stat);
@@ -304,20 +341,25 @@ public class GameCanvas extends FullCanvas implements Runnable {
          System.out.println("Error in paintMonsters: " + t);
       }
 
-      this.paintObjects(g);
+      this.paintStatusBars(g);
       this.paintHud(g);
-      this.paintUnknown_l(g);
       this.paintMessagePopup(g);
+      this.paintFlashOverlays(g);
       if (popupMessageActive) {
          this.paintPopupText(g);
       }
 
-      if (hotbarActionSet == 1 && !this.player.hasAilment(3)) {
-         this.paintHotbar1(g);
+      // Bug carried over from the earlier partial pass, fixed in M22:
+      // decompiled/e.java's dispatcher gates these two on `f`
+      // (hotbarContext, cycled by the `*` key), not `aq`
+      // (hotbarActionSet, the numeric-hotkey selector) -- confirmed by
+      // direct comparison of e.java's m(Graphics) body.
+      if (hotbarContext == 1 && !this.player.hasAilment(3)) {
+         this.paintMinimapZoomedOut(g);
       }
 
-      if (hotbarActionSet == 2 && !this.player.hasAilment(3)) {
-         this.paintHotbar2(g);
+      if (hotbarContext == 2 && !this.player.hasAilment(3)) {
+         this.paintMinimapNormal(g);
       }
    }
 
@@ -454,40 +496,738 @@ public class GameCanvas extends FullCanvas implements Runnable {
       }
    }
 
-   private void paintFloor(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's b(Graphics))");
-   }
-
-   private void paintMonsters(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's g(Graphics))");
-   }
-
+   // M22: fully transcribed from decompiled/e.java's b(Graphics) --
+   // see this file's header comment for why this replaces the earlier
+   // pass's wrong "paintFloor()" name/mapping. Draws visible chests
+   // (8-byte records) and dropped items (7-byte records, same length
+   // M17/M18 already confirmed) from Player.visibleObjects at the same
+   // three slot zones paintMonsters() below also uses (near=slot 1,
+   // mid=slots 4-6, far=slots 8-12).
    private void paintObjects(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's a(Graphics))");
+      for (int slot = 8; slot <= 12; slot++) {
+         Object entry = Player.visibleObjects.elementAt(slot);
+         if (entry instanceof byte[]) {
+            byte[] record = (byte[])entry;
+            if (record.length == 8 || record.length == 7) {
+               this.renderObjectAt(g, record, slot);
+            }
+         }
+      }
+
+      for (int slot = 4; slot <= 6; slot++) {
+         Object entry = Player.visibleObjects.elementAt(slot);
+         if (entry instanceof byte[]) {
+            byte[] record = (byte[])entry;
+            if (record.length == 8 || record.length == 7) {
+               this.renderObjectAt(g, record, slot);
+            }
+         }
+      }
+
+      Object entry = Player.visibleObjects.elementAt(1);
+      if (entry instanceof byte[]) {
+         byte[] record = (byte[])entry;
+         if (record.length == 8 || record.length == 7) {
+            this.renderObjectAt(g, record, 1);
+         }
+      }
    }
 
+   // slot==1 (near): renderObjectNear. slots 4-6 (mid): renderObjectMid.
+   // slots 8-12 (far): renderObjectFar. Byte-for-byte from e.java's
+   // a(Graphics,byte[],int).
+   private void renderObjectAt(Graphics g, byte[] record, int slot) {
+      if (slot == 1) {
+         this.renderObjectNear(g, record, false);
+      } else if (slot >= 4 && slot <= 6) {
+         this.renderObjectMid(g, record, false, slot);
+      } else if (slot >= 8 && slot <= 12) {
+         this.renderObjectFar(g, record, false, slot);
+      }
+   }
+
+   // TODO: real trigger condition, not just "false". Only ever true for
+   // 7-byte (dropped-item) records with byte[6] bit 2 (value 4) set --
+   // a DIFFERENT bit of the same byte M17 already confirmed bit 1
+   // (value 2) of for gift-points eligibility, so this is genuinely a
+   // second, separate flag in that byte, not a collision with M17's own
+   // finding. Named for the sprite array it selects (crystalImages);
+   // its real in-game meaning (a glowing/special dropped item?) is not
+   // confirmed. Byte-for-byte from e.java's static a(byte[]).
+   private static boolean hasCrystalGlow(byte[] record) {
+      return record.length == 7 && (record[6] & 4) != 0;
+   }
+
+   // Byte-for-byte from e.java's a(Graphics,byte[],boolean) -- the
+   // `crystalGlow` param is always passed false from renderObjectAt()
+   // above (hasCrystalGlow() is never actually called at any real call
+   // site in the decompiled source, only declared -- preserved exactly
+   // as found, not "fixed" to call it).
+   private void renderObjectNear(Graphics g, byte[] record, boolean crystalGlow) {
+      if (crystalGlow) {
+         this.drawRawImageFull(g, crystalImages[0], 45, 65);
+      } else {
+         int x = 60;
+         int y = 94;
+         if (record.length == 8) {
+            this.drawRawImageFull(g, chestImages[0], x, y);
+         } else if (record.length == 7) {
+            y += 14;
+            this.drawRawImageFull(g, bagImages[0], x, y);
+         }
+      }
+   }
+
+   // Byte-for-byte from e.java's b(Graphics,byte[],boolean,int).
+   private void renderObjectMid(Graphics g, byte[] record, boolean crystalGlow, int slot) {
+      int x = 0;
+      int y = 0;
+      boolean special = hasCrystalGlow(record);
+      switch (slot) {
+         case 4:
+            x = 14;
+            y = 80;
+            if (special) {
+               x = 14;
+               y = 55;
+            }
+            break;
+         case 5:
+            x = 68;
+            y = 80;
+            if (special) {
+               x = 73;
+               y = 55;
+            } else if (record.length == 7) {
+               x = 73;
+               y = 80;
+            }
+            break;
+         case 6:
+            x = 122;
+            y = 80;
+            if (special) {
+               x = 125;
+               y = 55;
+            } else if (record.length == 7) {
+               x = 132;
+               y = 80;
+            }
+      }
+
+      if (special) {
+         y += 13;
+         this.drawRawImageFull(g, crystalImages[1], x, y);
+      } else if (record.length == 8) {
+         y += 17;
+         this.drawRawImageFull(g, chestImages[1], x, y);
+      } else if (record.length == 7) {
+         y += 20;
+         this.drawRawImageFull(g, bagImages[1], x, y);
+      }
+   }
+
+   // Byte-for-byte from e.java's a(Graphics,byte[],boolean,int).
+   private void renderObjectFar(Graphics g, byte[] record, boolean crystalGlow, int slot) {
+      int x = 0;
+      int y = 0;
+      boolean special = hasCrystalGlow(record);
+      switch (slot) {
+         case 8:
+            x = 10;
+            y = 59;
+            if (special) {
+               x = 10;
+               y = 52;
+            }
+            break;
+         case 9:
+            x = 44;
+            y = 59;
+            if (special) {
+               x = 44;
+               y = 52;
+            }
+            break;
+         case 10:
+            x = 79;
+            y = 59;
+            if (special) {
+               x = 79;
+               y = 52;
+            }
+            break;
+         case 11:
+            x = 112;
+            y = 59;
+            if (special) {
+               x = 112;
+               y = 52;
+            }
+            break;
+         case 12:
+            x = 146;
+            y = 59;
+            if (special) {
+               x = 146;
+               y = 52;
+            }
+      }
+
+      if (special) {
+         y += 20;
+         this.drawRawImageFull(g, crystalImages[2], x, y);
+      } else if (record.length == 8) {
+         y += 28;
+         this.drawRawImageFull(g, chestImages[2], x, y);
+      } else if (record.length == 7) {
+         y += 28;
+         this.drawRawImageFull(g, bagImages[2], x, y);
+      }
+   }
+
+   // Simple, unclipped single-frame RawImage blit -- byte-for-byte from
+   // e.java's final method, a(Graphics,g,int,int) (was the very last
+   // method in the file, no clip/frame-slicing, unlike
+   // drawRawImageFrame() below).
+   private void drawRawImageFull(Graphics g, RawImage img, int x, int y) {
+      DirectGraphics dg = DirectUtils.getDirectGraphics(g);
+      dg.drawPixels(img.pixels, true, 0, img.widthAgain, x, y, img.width, img.height, 0, 4444);
+   }
+
+   // M22: fully transcribed from decompiled/e.java's g(Graphics) -- the
+   // mapping/name were already right, only the body was missing. Loops
+   // the same three slot zones paintObjects() above uses; a Monster's
+   // live 28-byte record (M14/M20's confirmed layout: record[2] ==
+   // typeIndex) triggers a monster sprite render when record[6] != 0
+   // (see this file's header comment on what that may really mean); a
+   // String "W" entry in the same Vector slot triggers a Warden-icon
+   // render instead -- by reusing renderMonsterFarZoneSprite()/
+   // renderMonsterMidZoneSprite() below directly with the LITERAL row
+   // constants 32/31, i.e. the exact same rows monsterFarZoneRow(41)/
+   // monsterMidZoneRow(41) resolve to for the level-37 type-41
+   // "roaming" monster (M19) -- the Warden visually reuses that
+   // monster's far/mid sprite rows rather than having its own, per
+   // e.java's own literal-constant call sites (not a row-lookup call).
+   private void paintMonsters(Graphics g) {
+      unconfirmed_A = false;
+
+      for (int slot = 8; slot <= 12; slot++) {
+         Object entry = Player.visibleObjects.elementAt(slot);
+         if (entry instanceof byte[]) {
+            byte[] record = (byte[])entry;
+            if (record.length == 28 && record[6] != 0) {
+               unconfirmed_A = true;
+               this.renderMonsterSpriteForSlot(g, record[2], slot);
+            }
+         } else if (entry instanceof String) {
+            if (((String)entry).equals("W")) {
+               this.renderMonsterFarZoneSprite(g, 32, slot);
+            }
+         }
+      }
+
+      for (int slot = 4; slot <= 6; slot++) {
+         Object entry = Player.visibleObjects.elementAt(slot);
+         if (entry instanceof byte[]) {
+            byte[] record = (byte[])entry;
+            if (record.length == 28 && record[6] != 0) {
+               unconfirmed_A = true;
+               this.renderMonsterSpriteForSlot(g, record[2], slot);
+            }
+         } else if (entry instanceof String) {
+            if (((String)entry).equals("W")) {
+               this.renderMonsterMidZoneSprite(g, 31, slot);
+            }
+         }
+      }
+
+      Object entry = Player.visibleObjects.elementAt(1);
+      if (entry instanceof byte[]) {
+         byte[] record = (byte[])entry;
+         if (record.length == 28 && record[6] != 0) {
+            unconfirmed_A = true;
+            this.renderMonsterSpriteForSlot(g, record[2], 1);
+         }
+      }
+      // else if (entry instanceof String): e.java's own branch here is
+      // empty (an `else if` with no body) -- preserved exactly.
+   }
+
+   // Byte-for-byte from e.java's c(Graphics,int,int): dispatches to one
+   // of three zone-specific renderers by slot, then resets the clip
+   // region each of them narrows via drawRawImageFrame() below.
+   private void renderMonsterSpriteForSlot(Graphics g, int typeIndex, int slot) {
+      if (slot == 1) {
+         this.renderMonsterNearSprite(g, typeIndex);
+      } else if (slot >= 4 && slot <= 6) {
+         this.renderMonsterMidZoneSprite(g, monsterMidZoneRow(typeIndex), slot);
+      } else if (slot >= 8 && slot <= 12) {
+         this.renderMonsterFarZoneSprite(g, monsterFarZoneRow(typeIndex), slot);
+      }
+
+      g.setClip(0, 0, this.getWidth(), this.getHeight());
+   }
+
+   // typeIndex range -> monsterImages row for the mid zone (slots 4-6).
+   // Byte-for-byte from e.java's c(int).
+   private static int monsterMidZoneRow(int typeIndex) {
+      if (typeIndex >= 1 && typeIndex <= 5) {
+         return 5;
+      } else if (typeIndex >= 6 && typeIndex <= 10) {
+         return 12;
+      } else if (typeIndex >= 11 && typeIndex <= 25) {
+         return 19;
+      } else if (typeIndex >= 26 && typeIndex <= 40) {
+         return 26;
+      } else {
+         return typeIndex == 41 ? 31 : -1;
+      }
+   }
+
+   // typeIndex range -> monsterImages row for the far zone (slots
+   // 8-12). Byte-for-byte from e.java's a(int).
+   private static int monsterFarZoneRow(int typeIndex) {
+      if (typeIndex >= 1 && typeIndex <= 5) {
+         return 6;
+      } else if (typeIndex >= 6 && typeIndex <= 10) {
+         return 13;
+      } else if (typeIndex >= 11 && typeIndex <= 25) {
+         return 20;
+      } else if (typeIndex >= 26 && typeIndex <= 40) {
+         return 27;
+      } else {
+         return typeIndex == 41 ? 32 : -1;
+      }
+   }
+
+   // typeIndex range -> unconfirmedTable_ae row for the near zone (slot
+   // 1). Byte-for-byte from e.java's b(int).
+   private static int monsterNearZoneRow(int typeIndex) {
+      if (typeIndex >= 1 && typeIndex <= 5) {
+         return 0;
+      } else if (typeIndex >= 6 && typeIndex <= 10) {
+         return 1;
+      } else if (typeIndex >= 11 && typeIndex <= 25) {
+         return 2;
+      } else {
+         return typeIndex >= 26 && typeIndex <= 40 ? 3 : -1;
+      }
+   }
+
+   // Byte-for-byte from e.java's c(Graphics,int): the near-zone (slot 1)
+   // entry point, always with no column override.
+   private void renderMonsterNearSprite(Graphics g, int typeIndex) {
+      this.renderMonsterOrIconSprite(g, typeIndex, -1);
+   }
+
+   // The near-zone monster sprite renderer, reused for paintUnknown_b()'s
+   // small NPC-icon indices too (see that method's own comment) --
+   // byte-for-byte from e.java's e(Graphics,int,int). typeIndex==41 (the
+   // level-37 "roaming" monster M19 already confirmed) reuses the Warden
+   // compass icon renderer instead of the normal sprite table.
+   // `columnOverride` >= 0 substitutes for unconfirmedTable_a's own
+   // secondary-sprite frame value (its column 1); -1 (every monster call
+   // site -- via renderMonsterNearSprite() above) means "use the
+   // table's own value"; only paintUnknown_b()'s NPC-icon call sites
+   // ever pass a real override.
+   private void renderMonsterOrIconSprite(Graphics g, int typeIndex, int columnOverride) {
+      if (typeIndex == 41) {
+         this.renderWardenCompassIcon(g, 2);
+      } else {
+         int row = monsterNearZoneRow(typeIndex);
+         if (row >= 0) {
+            byte baseX = unconfirmedTable_ae[row][2];
+            byte baseY = unconfirmedTable_ae[row][3];
+            byte primaryImageIndex = unconfirmedTable_ae[row][4];
+            byte primaryFrameCount = unconfirmedTable_ae[row][5];
+            int overlayBaseX = baseX + unconfirmedTable_ae[row][6];
+            int overlayBaseY = baseY + unconfirmedTable_ae[row][7];
+            byte secondaryImageIndex = unconfirmedTable_ae[row][8];
+            byte secondaryFrameCount = unconfirmedTable_ae[row][9];
+            boolean hasSecondary = secondaryImageIndex >= 0;
+
+            byte primaryFrame = unconfirmedTable_a[typeIndex - 1][0];
+            int secondaryFrame = unconfirmedTable_a[typeIndex - 1][1];
+            if (columnOverride >= 0) {
+               secondaryFrame = columnOverride;
+            }
+
+            boolean overlay1 = unconfirmedTable_J[typeIndex - 1][0];
+            boolean overlay2 = unconfirmedTable_J[typeIndex - 1][1];
+            boolean overlay3 = unconfirmedTable_J[typeIndex - 1][2];
+            boolean overlay4 = unconfirmedTable_J[typeIndex - 1][3];
+            this.drawRawImageFrame(g, monsterImages[primaryImageIndex], primaryFrame, primaryFrameCount, baseX, baseY);
+            if (hasSecondary) {
+               this.drawRawImageFrame(g, monsterImages[secondaryImageIndex], secondaryFrame, secondaryFrameCount, overlayBaseX, overlayBaseY);
+            }
+
+            if (overlay1) {
+               int x = baseX + unconfirmedTable_ae[row][10];
+               int y = baseY + unconfirmedTable_ae[row][11];
+               byte img = unconfirmedTable_ae[row][12];
+               this.drawRawImageFrame(g, monsterImages[img], 0, 1, x, y);
+            }
+
+            if (overlay2) {
+               int x = baseX + unconfirmedTable_ae[row][13];
+               int y = baseY + unconfirmedTable_ae[row][14];
+               byte img = unconfirmedTable_ae[row][15];
+               this.drawRawImageFrame(g, monsterImages[img], 0, 1, x, y);
+            }
+
+            if (overlay3) {
+               int x = baseX + unconfirmedTable_ae[row][16];
+               int y = baseY + unconfirmedTable_ae[row][17];
+               byte img = unconfirmedTable_ae[row][18];
+               this.drawRawImageFrame(g, monsterImages[img], 0, 1, x, y);
+            }
+
+            if (overlay4) {
+               int x = baseX + unconfirmedTable_ae[row][19];
+               int y = baseY + unconfirmedTable_ae[row][20];
+               byte img = unconfirmedTable_ae[row][21];
+               this.drawRawImageFrame(g, monsterImages[img], 0, 1, x, y);
+            }
+         }
+      }
+   }
+
+   // Byte-for-byte from e.java's d(Graphics,int,int) -- wraps
+   // drawMonsterZoneFrame() below with frame 0 of 1 (a single static
+   // frame, no animation, unlike the near-zone renderer above).
+   private void renderMonsterMidZoneSprite(Graphics g, int spriteRow, int slot) {
+      this.drawMonsterZoneFrame(g, spriteRow, slot, 0, 1);
+   }
+
+   // Byte-for-byte from e.java's a(Graphics,int,int,int,int): the mid
+   // zone's fixed per-slot screen position table.
+   private void drawMonsterZoneFrame(Graphics g, int spriteRow, int slot, int frame, int frameCount) {
+      int x = 0;
+      int y = 0;
+      switch (slot) {
+         case 4:
+            x = 10;
+            y = 38;
+            break;
+         case 5:
+            x = 62;
+            y = 38;
+            break;
+         case 6:
+            x = 112;
+            y = 38;
+      }
+
+      this.drawRawImageFrame(g, monsterImages[spriteRow], frame, frameCount, x, y);
+   }
+
+   // Byte-for-byte from e.java's b(Graphics,int,int): the far zone draws
+   // straight through DirectGraphics, not via drawRawImageFrame() (no
+   // per-frame width slicing -- the far-zone sprites are single-frame).
+   private void renderMonsterFarZoneSprite(Graphics g, int spriteRow, int slot) {
+      int x = 0;
+      int y = 0;
+      switch (slot) {
+         case 8:
+            x = 10;
+            y = 44;
+            break;
+         case 9:
+            x = 44;
+            y = 44;
+            break;
+         case 10:
+            x = 79;
+            y = 44;
+            break;
+         case 11:
+            x = 112;
+            y = 44;
+            break;
+         case 12:
+            x = 146;
+            y = 44;
+      }
+
+      DirectGraphics dg = DirectUtils.getDirectGraphics(g);
+      RawImage img = monsterImages[spriteRow];
+      dg.drawPixels(img.pixels, true, 0, img.widthAgain, x, y, img.width, img.height, 0, 4444);
+   }
+
+   // M22: fully transcribed from decompiled/e.java's a(Graphics) -- see
+   // this file's header comment for why this replaces the earlier
+   // pass's wrong "paintObjects()" name/mapping. Three colored bars
+   // (HP/Magicka/Fatigue, matching coreStats indices 2-3/4-5/6-7) scaled
+   // to a 38px-wide track via Player.effectiveStat()/coreStats.
+   private void paintStatusBars(Graphics g) {
+      g.setColor(16776960);
+      g.fillRect(5, 130, 40, 7);
+      g.fillRect(5, 138, 40, 7);
+      g.fillRect(5, 146, 40, 7);
+      g.setColor(16711680);
+      int width = this.player.effectiveStat(2) * 38 / this.player.coreStats[3];
+      g.fillRect(6, 131, width, 5);
+      g.setColor(65280);
+      width = this.player.effectiveStat(4) * 38 / this.player.coreStats[5];
+      g.fillRect(6, 139, width, 5);
+      g.setColor(255);
+      width = this.player.effectiveStat(6) * 38 / this.player.coreStats[7];
+      if (width > 40) {
+         width = 40;
+      }
+
+      g.fillRect(6, 147, width, 5);
+   }
+
+   // M22: fully transcribed from decompiled/e.java's d(Graphics) -- the
+   // mapping/name were already right, only the body was missing. Draws
+   // the bottom HUD panel (a rounded-rect backdrop) then one of three
+   // hotkey-icon/glyph rows selected by resolveHudIconSet() below.
    private void paintHud(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's d(Graphics))");
+      g.setFont(smallFont);
+      g.setClip(0, 0, this.getWidth(), this.getHeight());
+      g.setColor(0);
+      g.fillRect(0, 156, this.getWidth(), 52);
+      g.setColor(13080935);
+      g.fillRoundRect(2, 158, this.getWidth() - 4, 48, 5, 5);
+      g.setColor(0);
+      int iconSet = this.resolveHudIconSet();
+      hotbarActionSet = iconSet;
+      if (iconSet == 0) {
+         g.drawImage(hotbarIcons[1], 14, 174, 20);
+         g.drawImage(hotbarIcons[2], 62, 174, 20);
+         g.drawImage(hotbarIcons[3], 104, 174, 20);
+         g.drawImage(hotbarIcons[5], 144, 174, 20);
+         g.drawChar(hotbarKeyGlyphs[1], 5, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[2], 53, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[3], 96, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[5], 135, 180, 20);
+      } else if (iconSet == 1) {
+         g.drawImage(hotbarIcons[0], 14, 174, 20);
+         g.drawImage(hotbarIcons[1], 62, 174, 20);
+         g.drawImage(hotbarIcons[2], 104, 174, 20);
+         g.drawImage(hotbarIcons[3], 144, 174, 20);
+         g.drawChar(hotbarKeyGlyphs[0], 5, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[1], 53, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[2], 96, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[3], 135, 180, 20);
+      } else if (iconSet == 2) {
+         g.drawImage(hotbarIcons[1], 14, 174, 20);
+         g.drawImage(hotbarIcons[2], 62, 174, 20);
+         g.drawImage(hotbarIcons[3], 104, 174, 20);
+         g.drawImage(hotbarIcons[4], 144, 174, 20);
+         g.drawChar(hotbarKeyGlyphs[1], 5, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[2], 53, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[3], 96, 180, 20);
+         g.drawChar(hotbarKeyGlyphs[4], 135, 180, 20);
+      }
    }
 
-   private void paintUnknown_l(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's l(Graphics))");
+   // Byte-for-byte from e.java's j(): resolves which of paintHud()'s
+   // three icon rows to show (also stashed into hotbarActionSet, which
+   // keyPressed() then reads for numeric-hotkey dispatch -- so this
+   // recomputes that selector every frame from other flags, it isn't
+   // itself set by a key).
+   private int resolveHudIconSet() {
+      if (unconfirmed_aa) {
+         return 1;
+      } else if (unconfirmed_m || unconfirmed_R) {
+         return 2;
+      } else {
+         return unconfirmed_W && !this.isNpcDialogueDue() ? 2 : 0;
+      }
    }
 
+   // M22: fully transcribed from decompiled/e.java's l(Graphics) -- see
+   // this file's header comment for why this REPLACES the earlier
+   // pass's wrong "paintMessagePopup()" (which was actually
+   // paintFlashOverlays() below). This is the real message-popup box:
+   // a 2-line rounded rect showing messageLines[0]/[1] while
+   // unconfirmed_ad is set (by showMessage(), still a stub -- see its
+   // own TODO below).
    private void paintMessagePopup(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's e(Graphics))");
+      if (unconfirmed_ad) {
+         g.setColor(13080935);
+         g.fillRoundRect(96, 118, 75, 35, 5, 5);
+         g.setFont(smallFont);
+         g.setColor(0);
+         g.drawString(messageLines[0], 100, 122, 20);
+         if (messageLines.length > 1) {
+            g.drawString(messageLines[1], 100, 134, 20);
+         }
+      }
    }
 
+   // M22: fully transcribed from decompiled/e.java's e(Graphics) -- see
+   // this file's header comment for why this replaces the earlier
+   // pass's wrong "paintMessagePopup()" name/mapping. Three independent
+   // one-shot flash overlays (monster-hit/spell-hit/self-spell-hit),
+   // each self-clearing its own flag once drawn, at a small random
+   // jittered position via Util.randomInt() (byte-for-byte the same
+   // random-offset idiom paintWalls()'s own dungeon generation cousins
+   // use elsewhere in this project).
+   private void paintFlashOverlays(Graphics g) {
+      if (unconfirmed_S) {
+         int x = 40 + Util.randomInt(30);
+         int y = 50 + Util.randomInt(20);
+         g.drawImage(effectImages[0], x, y, 20);
+         unconfirmed_S = false;
+      }
+
+      if (unconfirmed_ao) {
+         int x = 40 + Util.randomInt(30);
+         int y = 50 + Util.randomInt(22);
+         g.drawImage(effectImages[1], x, y, 20);
+         unconfirmed_ao = false;
+      }
+
+      if (unconfirmed_am) {
+         int x = 50 + Util.randomInt(2);
+         int y = 80 + Util.randomInt(2);
+         g.drawImage(effectImages[2], x, y, 20);
+         unconfirmed_am = false;
+      }
+   }
+
+   // M22: fully transcribed from decompiled/e.java's b(Graphics,int) --
+   // the mapping/name were already right, only the body was missing.
+   // `stat` is Player.questShopAtPendingTile()'s return value (see
+   // paintGameView()'s own call site). Cases 0-5 reuse
+   // renderMonsterOrIconSprite() (see that method's own comment) with
+   // small literal indices instead of real monster typeIndexes -- an
+   // NPC/shop-portrait sprite sheet apparently laid out in the same
+   // row-index space as the monster table, not independently confirmed
+   // beyond that both fall in valid table ranges. Case 6 shows the
+   // Warden compass icon instead, scaled by how many times the Warden
+   // has visited (Shop.wardenVisitCount, capped at 3).
    private void paintUnknown_b(Graphics g, int stat) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's b(Graphics,int))");
+      switch (stat) {
+         case 0:
+            this.renderMonsterOrIconSprite(g, 1, 1);
+            break;
+         case 1:
+            this.renderMonsterOrIconSprite(g, 6, 1);
+            break;
+         case 2:
+            this.renderMonsterOrIconSprite(g, 7, 1);
+            break;
+         case 3:
+            this.renderMonsterOrIconSprite(g, 2, 1);
+            break;
+         case 4:
+            this.renderMonsterOrIconSprite(g, 3, 2);
+            break;
+         case 5:
+            this.renderMonsterOrIconSprite(g, 8, 0);
+            break;
+         case 6:
+            int tier = Math.min(Shop.wardenVisitCount, 3) - 1;
+            this.renderWardenCompassIcon(g, tier);
+      }
+
+      g.setClip(0, 0, this.getWidth(), this.getHeight());
    }
 
-   private void paintHotbar1(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's k(Graphics))");
+   // Byte-for-byte from e.java's a(Graphics,int): the Warden's own
+   // compass-relative icon, drawn as a normal frame plus a horizontally
+   // mirrored copy (the same DirectGraphics flag-8192 mirror trick
+   // drawWallSegment() already uses) plus a small secondary badge.
+   // monsterImages[28]/[29] are reused here (see this file's header
+   // comment on the Warden/monster sprite-sheet overlap).
+   private void renderWardenCompassIcon(Graphics g, int tier) {
+      byte x = 15;
+      byte y = 32;
+      this.drawRawImageFrame(g, monsterImages[28], unconfirmedTable_o[tier][0], 1, x, y);
+      int frameWidth = monsterImages[28].width();
+      this.drawRawImageFrame(g, monsterImages[28], unconfirmedTable_o[tier][0], 1, x + frameWidth, y, 8192);
+      this.drawRawImageFrame(g, monsterImages[29], unconfirmedTable_o[tier][1], 3, x + 45, y + -22);
    }
 
-   private void paintHotbar2(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's h(Graphics))");
+   // Single-frame-of-many RawImage blit, clipped to that frame's own
+   // column -- byte-for-byte from e.java's a(Graphics,g,int,int,int,
+   // int), which itself forwards to the 7-arg overload below with
+   // transform 0 (no mirroring).
+   private void drawRawImageFrame(Graphics g, RawImage img, int frame, int frameCount, int x, int y) {
+      this.drawRawImageFrame(g, img, frame, frameCount, x, y, 0);
+   }
+
+   // Byte-for-byte from e.java's a(Graphics,g,int,int,int,int,int).
+   private void drawRawImageFrame(Graphics g, RawImage img, int frame, int frameCount, int x, int y, int transform) {
+      int frameWidth = img.width() / frameCount;
+      int frameHeight = img.height();
+      g.setClip(x, y, frameWidth, frameHeight);
+      DirectGraphics dg = DirectUtils.getDirectGraphics(g);
+      dg.drawPixels(img.pixels, true, 0, img.widthAgain, x - frame * frameWidth, y, img.width, img.height, transform, 4444);
+   }
+
+   // M22: fully transcribed from decompiled/e.java's k(Graphics) -- see
+   // this file's header comment for why this replaces the earlier
+   // pass's wrong "paintHotbar1()" name/mapping (this is the zoomed-out,
+   // 7x7 minimapTileGrid view, not a hotbar). Draws the compass glyph
+   // for the player's own facing (Player.facing, NOT this class's own
+   // same-named dead-state field), a black backdrop square, then the
+   // grid itself via drawMinimapGrid() below.
+   private void paintMinimapZoomedOut(Graphics g) {
+      g.setFont(smallFont);
+      g.setColor(16777215);
+      g.drawChar(compassGlyphs[this.player.facing], 16, 10, 20);
+      g.setColor(0);
+      g.fillRect(10, 20, 23, 23);
+      this.drawMinimapGrid(g, 10, 20, 7, 3, 1, minimapTileGrid);
+   }
+
+   // M22: fully transcribed from decompiled/e.java's h(Graphics) -- see
+   // this file's header comment for why this replaces the earlier
+   // pass's wrong "paintHotbar2()" name/mapping (the normal-zoom, 17x17
+   // visibleTileGrid view). Same shape as paintMinimapZoomedOut() above,
+   // larger cell size/backdrop, a different Font.
+   private void paintMinimapNormal(Graphics g) {
+      g.setFont(minimapFont);
+      g.setColor(16777215);
+      g.drawChar(compassGlyphs[this.player.facing], 58, 10, 20);
+      byte size = 89;
+      g.fillRect(15, 25, size, size);
+      this.drawMinimapGrid(g, 15, 25, 17, 5, 2, visibleTileGrid);
+   }
+
+   // Draws a `gridSize`x`gridSize` occlusion grid as `cellPx`-square
+   // colored cells (1=black/wall, 0=white/floor, else bit 2=red,
+   // bit 4=blue, bit 8=cyan-ish -- unconfirmed per-bit meaning beyond
+   // "not plain wall/floor"), plus a green marker at dead center
+   // (the player's own tile). Byte-for-byte from e.java's
+   // a(Graphics,int,int,int,int,int,byte[][]).
+   private void drawMinimapGrid(Graphics g, int originX, int originY, int gridSize, int cellPx, int pixelOffset, byte[][] grid) {
+      int center = gridSize / 2;
+
+      for (int row = 0; row < gridSize; row++) {
+         int py = originY + pixelOffset + row * cellPx;
+
+         for (int col = 0; col < gridSize; col++) {
+            int px = originX + pixelOffset + col * cellPx;
+            if (grid[col][row] == 1) {
+               g.setColor(0);
+               g.fillRect(px, py, cellPx, cellPx);
+            } else if (grid[col][row] == 0) {
+               g.setColor(16777215);
+               g.fillRect(px, py, cellPx, cellPx);
+            } else if ((grid[col][row] & 2) != 0) {
+               g.setColor(16711680);
+               g.fillRect(px, py, cellPx, cellPx);
+            } else if ((grid[col][row] & 4) != 0) {
+               g.setColor(255);
+               g.fillRect(px, py, cellPx, cellPx);
+            } else if ((grid[col][row] & 8) != 0) {
+               g.setColor(13369599);
+               g.fillRect(px, py, cellPx, cellPx);
+            }
+
+            if (row == center && col == center) {
+               g.setColor(65280);
+               g.fillRect(px, py, cellPx, cellPx);
+            }
+         }
+      }
    }
 
    // Shows a message popup (2-line String[]) if priority `pri` beats
@@ -811,8 +1551,28 @@ public class GameCanvas extends FullCanvas implements Runnable {
       throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's o())");
    }
 
+   // M22: fully transcribed from decompiled/e.java's d() -- needed for
+   // paintHud()'s resolveHudIconSet() above, so pulled into this pass
+   // even though it isn't itself a paint method. True either when
+   // Shop.isAdjacentToVarus() says so (decompiled Shop/k.java's own
+   // `a(j)` overload -- a genuine overload collision with `a(int)` /
+   // shouldWardenVisit(), NOT the same thing despite this method's call
+   // site in run() being paired with Warden-visit state), or when
+   // GameCanvas's own targetMonster field (the level-37 type-41
+   // "roaming" monster M19 already confirmed) is set and adjacent to
+   // the player while both are on level 37.
    private boolean isNpcDialogueDue() {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's d())");
+      if (Shop.isAdjacentToVarus(this.player)) {
+         return true;
+      } else if (targetMonster == null) {
+         return false;
+      } else if (this.player.currentLevel == 37 && targetMonster.typeIndex == 41) {
+         int dx = Math.abs(this.player.tileX - targetMonster.tileX);
+         int dy = Math.abs(this.player.tileY - targetMonster.tileY);
+         return dx + dy == 1;
+      } else {
+         return false;
+      }
    }
 
    private void tickStatusCountdowns_b(long now) {

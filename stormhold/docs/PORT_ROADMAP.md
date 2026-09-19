@@ -1347,18 +1347,109 @@ read-through.
       its valid range. All checks passed on the first attempt; all 20
       smoke tests pass.
 
+- [x] **M22 -- the rest of `GameCanvas`'s stubbed paint methods** (this
+      session). Pure phase-1 Java transcription, no C++ this time (the
+      pixel compositor M21 deferred still doesn't exist, so there's
+      nothing yet to port these TO) -- every remaining `paint*` stub
+      (`paintFloor`/`paintObjects`/`paintHud`/`paintUnknown_l`/
+      `paintMessagePopup`/`paintUnknown_b`/`paintHotbar1`/`paintHotbar2`)
+      plus the non-paint helpers they directly depend on
+      (`isNpcDialogueDue()`, needed by the new `paintHud()`) is now real,
+      read directly from `decompiled/e.java` end to end.
+
+      **Confirmed and fixed THREE real mapping bugs the M21 pass had
+      flagged or missed, rather than just documenting them this time:**
+      the old `paintFloor()` (`b(Graphics)`) never painted a floor --
+      `paintWalls()` already does that itself -- its real body renders
+      visible chests (8-byte)/dropped items (7-byte, M17/M18's own
+      confirmed record lengths) on corridor tiles, renamed
+      `paintObjects()`. The old `paintObjects()` (`a(Graphics)`) didn't
+      render objects -- its real body draws the HP/Magicka/Fatigue
+      status-bar triad via the newly-needed `Player.effectiveStat()`/
+      `coreStats`, renamed `paintStatusBars()`. The old
+      `paintMessagePopup()` (`e(Graphics)`) was actually the monster-hit/
+      spell-hit/self-spell-hit flash overlay, renamed
+      `paintFlashOverlays()`; the REAL message popup was sitting under
+      the previous pass's `paintUnknown_l()` (`l(Graphics)`, the
+      `messageLines`/`unconfirmed_ad`-gated rounded box), which now
+      takes over the `paintMessagePopup()` name. `paintHotbar1()`/
+      `paintHotbar2()` (`k(Graphics)`/`h(Graphics)`) turned out to be the
+      two minimap zoom levels (`minimapTileGrid`/`visibleTileGrid`), not
+      a hotbar at all -- renamed `paintMinimapZoomedOut()`/
+      `paintMinimapNormal()`. Their dispatch in `paintGameView()` also
+      had a genuine bug carried over from the very first partial pass:
+      it gated on `hotbarActionSet` (decompiled `aq`, the numeric-hotkey
+      selector) instead of `hotbarContext` (decompiled `f`, the field
+      actually cycled by the `*` key and the one `e.java`'s own
+      dispatcher actually tests) -- fixed directly, not just flagged.
+      `paintHud()` (`d(Graphics)`) and `paintUnknown_b()` (`b(Graphics,
+      int)`) turned out to already be correctly named; only their
+      bodies were missing.
+
+      New helper methods needed to make the real bodies callable, kept
+      one-to-one with `e.java`'s own private methods rather than
+      collapsed together (same discipline M21's `drawWallSegment`/
+      `resolveWallFrame` split already established):
+      `renderObjectAt`/`renderObjectNear`/`renderObjectMid`/
+      `renderObjectFar`/`hasCrystalGlow`/`drawRawImageFull` (the objects
+      family); `renderMonsterSpriteForSlot`/`monsterNearZoneRow`/
+      `monsterMidZoneRow`/`monsterFarZoneRow`/`renderMonsterNearSprite`/
+      `renderMonsterOrIconSprite`/`renderMonsterMidZoneSprite`/
+      `drawMonsterZoneFrame`/`renderMonsterFarZoneSprite`/
+      `renderWardenCompassIcon`/`drawRawImageFrame` (the monster/Warden-
+      icon family, also reused directly by `paintUnknown_b()`'s NPC/
+      shop-portrait icons and by `paintMonsters()`'s own Warden-String
+      branch, which reuses `renderMonsterFarZoneSprite`/
+      `renderMonsterMidZoneSprite` with the LITERAL row constants 32/31
+      -- the exact same rows the level-37 type-41 "roaming" monster (M19)
+      resolves to, confirmed by `e.java`'s own literal call sites, not a
+      row-lookup call); and `drawMinimapGrid` (the minimap family).
+
+      **A byproduct worth tracking, not acted on here:** `paintMonsters()`
+      gates each visible-object-slot render on the record's own
+      `byte[6] != 0` -- a live Monster record's `unconfirmedFlag`, per
+      the 28-byte layout M14/M20 already confirmed -- suggesting that
+      flag may really mean something like "alive/renderable" rather than
+      the minor miscellaneous bit its current name implies. Not renamed
+      (would ripple through M14/M17/M18/M20's own code); flagged in
+      `GameCanvas.java`'s header comment for a future pass.
+
+      **Left deliberately unresolved, same discipline as the wall/
+      monster/object sprite-metadata tables already flagged unconfirmed:**
+      `hasCrystalGlow()`'s real in-game meaning (a glowing/special
+      dropped item?); the exact semantics of `unconfirmedTable_ae`/`_a`/
+      `_J`'s individual columns (only their control-flow role is
+      confirmed, not their content); and two brand-new, previously
+      unknown methods this pass's reading turned up but did NOT
+      transcribe (out of scope -- nothing calls into them from any paint
+      method) -- `void q()`/`void p()`, which populate
+      `minimapTileGrid`/`visibleTileGrid` from `Dungeon`, called from
+      somewhere in the still-untranscribed tick logic, not from painting
+      itself.
+
+      Verified by `javac` re-confirming the whole `../src/` tree still
+      compiles clean (zero errors, only the same expected `new
+      Integer(int)` deprecation warnings already documented) after the
+      full `GameCanvas.java` rewrite. No C++ changes this milestone (the
+      compositor these would feed doesn't exist yet, per M21's own
+      framing), so the existing 20 smoke tests are unaffected and were
+      not re-run.
+
 ## What's next
 
-M22 onward: either continuing the rendering side -- a real
-`Backbuffer::Blit()`/alpha-test compositor for M7's `RawImage` sprites to
-feed pixels through, and/or the phase-1 work to identify more of
-`GameCanvas`'s remaining ~14 still-stubbed paint methods (`paintFloor`/
-`paintObjects`/`paintMonsters`/`paintHud`/etc. -- M21's own finding that
-at least two of their existing placeholder mappings are wrong means this
-needs real verification, not trusting the existing signatures) -- or the
+M23 onward: the real `Backbuffer::Blit()`/alpha-test compositor for M7's
+`RawImage` sprites -- now that ALL of `GameCanvas`'s paint methods have
+real, verified Java bodies to port from, this is the natural next step,
+following dawnstar's own later-milestone shape. Also still open: the
+brand-new `q()`/`p()` minimap-populate methods M22 found but didn't
+transcribe (not paint methods, but needed before the minimap can
+actually show anything live); the still-untranscribed tick-loop helpers
+(`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
+`rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`); and the
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
-onDeath()` callers (flagged again this session, unchanged since M14/M15),
-which may well turn out to live in exactly those same still-stubbed
-`GameCanvas` methods. Following dawnstar's own later milestones roughly
-but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21 already found.
+onDeath()` callers (flagged again this session, unchanged since
+M14/M15), which may well turn out to live in exactly those same
+tick-loop helpers. Following dawnstar's own later milestones roughly but
+expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
+found.

@@ -444,12 +444,14 @@ header comment for exactly what's covered vs. stubbed.
   machine, death/respawn sequence, the Warden-visit check, per-tick/
   per-second status ticks, frame pacing); `keyPressed`/`keyReleased`
   (numeric-key hotbar/strafe hotkeys, `*` minimap toggle, arrow-key
-  movement); and game-thread start/stop. **Not yet transcribed** (left as
-  signature-preserving stubs): roughly 15 private paint helper methods
-  that do the actual pixel-level wall/floor/monster/object/HUD rendering
-  (~1400 of the file's 1823 lines) -- this needs the same full hand-trace
-  treatment dawnstar's own `e`/`GameCanvas.java` pass got, not yet done
-  here.
+  movement); and game-thread start/stop. Originally left as ~15
+  signature-preserving stubs (the actual pixel-level wall/floor/monster/
+  object/HUD rendering, ~1400 of the file's 1823 lines) -- phase-3
+  M21/M22 (below) have since transcribed all of them for real. Still
+  not transcribed: the tick-loop helpers (`showMessage`/
+  `tickStatusCountdowns`/`tickPerSecond`/`rollCampInterrupted`/
+  `tickMovementAndAI`/`setSomeFlag`) and two brand-new `q()`/`p()`
+  minimap-populate methods M22 turned up.
   - **Update (phase-3 M21 session):** one of those ~15 stubs,
     `paintWalls()` (was `j(Graphics)`), is now fully transcribed --
     confirmed to be dawnstar's own `paintCorridorWalls()` equivalent, but
@@ -468,6 +470,27 @@ header comment for exactly what's covered vs. stubbed.
     on the `TODO_*` placeholder list two paragraphs below is now stale
     for that specific claim, though the placeholders themselves haven't
     been re-resolved against the real `Player` names yet.
+  - **Update (phase-3 M22 session):** every remaining stubbed `paint*`
+    method (and `isNpcDialogueDue()`, needed by the new `paintHud()`) is
+    now fully transcribed too -- all ~15 of the original private paint
+    helpers are real. Confirmed and FIXED (not just flagged) the two
+    mapping bugs M21 found: `paintFloor()`'s real body renders chests/
+    dropped items and is renamed `paintObjects()`; the true
+    `paintObjects()`-shaped body (HP/Magicka/Fatigue status bars) is
+    renamed `paintStatusBars()`; the flash-overlay body previously named
+    `paintMessagePopup()` is renamed `paintFlashOverlays()`, and the
+    real message-popup body (previously `paintUnknown_l()`) now holds
+    the `paintMessagePopup()` name. Also found and fixed a THIRD bug,
+    not previously flagged: `paintHotbar1()`/`paintHotbar2()` are
+    actually the two minimap zoom levels, renamed
+    `paintMinimapZoomedOut()`/`paintMinimapNormal()`, and their dispatch
+    in `paintGameView()` was gated on the wrong field
+    (`hotbarActionSet` instead of `hotbarContext`) since the very first
+    partial pass. See `GameCanvas.java`'s own header comment and
+    `PORT_ROADMAP.md`'s M22 entry for the full writeup, including the
+    new helper methods this required and two brand-new, still-
+    untranscribed methods (`q()`/`p()`, minimap-populate) this pass
+    turned up but left out of scope.
   - **Field-name/class-name collision, same trap dawnstar's CLASS_MAP.md
     documents for its own `e`/`j`**: this class declares its own fields
     `nearbyMonsterScratch`/`targetMonster` (both type `Monster`, originally
