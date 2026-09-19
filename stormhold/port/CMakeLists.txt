@@ -242,3 +242,7 @@ target_link_libraries(hud_state_smoke PRIVATE stormhold_player stormhold_world)
 # M30 milestone smoke test -- see src/tests/m30_message_popup_smoke.cpp.
 add_executable(message_popup_smoke src/tests/m30_message_popup_smoke.cpp)
 target_link_libraries(message_popup_smoke PRIVATE stormhold_render)
+
+# M31 milestone smoke test -- see src/tests/m31_hud_renderer_smoke.cpp.
+add_executable(hud_renderer_smoke src/tests/m31_hud_renderer_smoke.cpp)
+target_link_libraries(hud_renderer_smoke PRIVATE stormhold_render)

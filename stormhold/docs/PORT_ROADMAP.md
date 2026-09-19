@@ -1948,22 +1948,66 @@ read-through.
       `run()`'s still-untranscribed tick-loop helpers), same gap
       M25/M27/M29 already flagged.
 
+- [x] **M31 -- `GameRenderer::RenderHud`, `paintHud()`'s own actual
+      pixel drawing** (this session). Both primitives it needed
+      (`Backbuffer::FillRoundRect`, `BitmapFont`) now existed as of
+      M30 -- this milestone adds the two things still missing (digit
+      glyphs, the icon asset bundle) and wires the actual draw.
+
+      `BitmapFont` gains `0`-`9` (10 more hand-authored glyphs, 40
+      total) for `hotbarKeyGlyphs` (`'1'`/`'3'`/`'5'`/`'7'`/`'9'`/`'0'`)
+      -- identical shapes to dawnstar's own digit glyphs (its own M31),
+      same "reuse rather than invent a second arbitrary shape"
+      reasoning M30 already used for the letters.
+
+      New `render/hotbar_assets.h` (`HotbarAssets::Load`) -- the 6
+      `hotbarIcons` plain-PNG files (`icon_attack`/`icon_cast`/
+      `icon_change`/`icon_option`/`icon_action`/`icon_camp.png`), real
+      filenames/order confirmed via `ESGame.java`'s own asset-loading
+      call site. Deliberately its own small bundle, not folded into
+      `CorridorAssets` -- same "named for exactly what it holds" split
+      `CorridorAssets` itself already draws.
+
+      `GameRenderer::RenderHud` transcribes `paintHud()`
+      (`../../../src/GameCanvas.java` lines 1024-1062) directly: the
+      black background fill, the rounded panel (same 0xC79967 color
+      `MessagePopup`'s own background uses), then -- gated on
+      `iconSet` (a plain parameter, M29's `ResolveHudIconSet` computed
+      by the caller, same "caller supplies/owns state" pattern this
+      port uses throughout) -- 4 icons plus 4 digit glyphs at fixed
+      positions, whichever 4 indices the real `iconSet` (0/1/2) branch
+      selects. An out-of-range `iconSet` draws just the two background
+      fills, matching the original's own if/else-if chain with no
+      final else. `hotbarActionSet` (read back by `keyPressed()`'s
+      numeric-hotkey dispatch in the original) is NOT modeled -- input
+      handling remains out of scope, same gap M29 already flagged.
+
+      Verified with a new `hud_renderer_smoke.exe`: the new digit
+      glyph shapes; each of the 3 `iconSet` branches' exact (icon,
+      glyph) index selection, cross-checked against `paintHud()`'s own
+      literal index lists directly, not read back from
+      `game_renderer.cpp`; the background fills still drawing for an
+      out-of-range `iconSet`; and a real-asset integration check (every
+      opaque pixel of real `icon_attack.png` once blitted, independently
+      recomputed and compared against `DecodedImage`'s own accessors).
+      All 29 smoke tests pass; full clean rebuild stayed at zero `/W4`
+      warnings.
+
+      **Still not wired into any live tick loop** -- same gap every
+      rendering milestone so far has flagged; `main.cpp` still just
+      presents a blank frame.
+
 ## What's next
 
-`paintHud()`'s own actual pixel drawing -- needs digit glyphs added to
-`BitmapFont` (`hotbarKeyGlyphs` = `'1'`/`'3'`/`'5'`/`'7'`/`'9'`/`'0'`,
-not yet defined) plus `hotbarIcons` (`DecodedImage`, M24's compositor,
-real filenames confirmed: `icon_attack`/`icon_cast`/`icon_change`/
-`icon_option`/`icon_action`/`icon_camp.png`) loaded into an asset
-bundle -- both primitives it needs (`FillRoundRect`/`BitmapFont`) now
-exist as of this milestone. `paintMinimap*()` separately need the
-still-untranscribed `q()`/`p()` minimap-populate methods M22 found but
-didn't transcribe (their own compass-glyph text draws are already
-covered by `BitmapFont`'s existing N/E/S/W letters). Beyond all of
-that: an actual live game loop in `main.cpp` calling `GameRenderer`/
-`VisibleObjectRenderer`/`VisibleObjects::Refresh`/`MessagePopup::Tick`/
-whatever M31+ adds every tick instead of presenting a blank frame; the
-still-untranscribed tick-loop helpers (`tickStatusCountdowns`/
+`paintMinimap*()` needs the still-untranscribed `q()`/`p()`
+minimap-populate methods M22 found but didn't transcribe (their own
+compass-glyph text draws are already covered by `BitmapFont`'s existing
+N/E/S/W letters, so once those two methods are transcribed the pixel
+side should be a short follow-on, not a whole new primitive hunt).
+Beyond that: an actual live game loop in `main.cpp` calling
+`GameRenderer`/`VisibleObjectRenderer`/`VisibleObjects::Refresh`/
+`MessagePopup::Tick` every tick instead of presenting a blank frame;
+the still-untranscribed tick-loop helpers (`tickStatusCountdowns`/
 `tickPerSecond`/`rollCampInterrupted`/`tickMovementAndAI`/
 `setSomeFlag`); and the still-unrecovered `tryRankUpSkills()`/
 `Monster.tick()`/`Monster.onDeath()` callers (flagged again this

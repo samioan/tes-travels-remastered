@@ -21,27 +21,25 @@ namespace stormhold {
 // ports visually consistent rather than inventing a second, arbitrarily
 // different one for no real reason.
 //
-// SIMPLIFIED character set: only space, ' - ! and A-Z (30 glyphs) are
-// defined -- confirmed sufficient for every real string this milestone's
-// only real consumer (render/message_popup.h's MessagePopup::Paint,
-// drawing GameCanvas's own MSG_*/npcNameLines String constants) actually
-// displays: every character in every MSG_* constant and npcNameLines
-// entry (../../../src/GameCanvas.java) is one of space/'/A-Z (no '-' or
-// digit is actually used yet, but '-' is kept for parity with dawnstar's
-// identical font rather than trimming it over one unused glyph).
-// Lowercase is folded to uppercase before drawing rather than separately
-// hand-authoring a second full glyph set purely for cosmetic case-
-// fidelity on an already-invented font -- a real, visible (`"REST"`
-// instead of `"Rest"`), but harmless, simplification. The per-character
-// advance (`kAdvance` = 5px) is itself invented (no real smallFont
-// metric survives).
-//
-// Digits (hotbarKeyGlyphs -- '1'/'3'/'5'/'7'/'9'/'0', paintHud()'s own
-// hotbar key prompts) are NOT yet defined here -- paintHud()'s actual
-// pixel drawing (its hotbarIcons image row plus these digit glyphs) is
-// deferred to a future milestone, same as this file's own header
-// comment already flags for FillRoundRect's second real call site. See
-// docs/PORT_ROADMAP.md's "what's next" for the exact scope split.
+// SIMPLIFIED character set: space, ' - ! , A-Z, and 0-9 (40 glyphs) --
+// confirmed sufficient for every real string this port's two real
+// consumers actually display: render/message_popup.h's MessagePopup::
+// Paint (GameCanvas's own MSG_*/npcNameLines String constants -- every
+// character in every entry is one of space/'/A-Z, no '-' or digit is
+// actually used there, but '-' is kept for parity with dawnstar's
+// identical font rather than trimming it over one unused glyph) and
+// render/game_renderer.h's GameRenderer::RenderHud (paintHud()'s own
+// hotbarKeyGlyphs = '1'/'3'/'5'/'7'/'9'/'0', M31, added on top of M30's
+// original 30-glyph letters-only set -- same split dawnstar's own
+// identical font took, M30 letters then M31 digits). Lowercase is
+// folded to uppercase before drawing rather than separately hand-
+// authoring a second full glyph set purely for cosmetic case-fidelity
+// on an already-invented font -- a real, visible (`"REST"` instead of
+// `"Rest"`), but harmless, simplification. The per-character advance
+// (`kAdvance` = 5px) is itself invented (no real smallFont metric
+// survives). Digit shapes are identical to dawnstar's own (its M31) --
+// same "reuse rather than invent a second arbitrary shape" reasoning as
+// this file's own letters.
 namespace BitmapFont {
 
 constexpr int kGlyphWidth = 4;

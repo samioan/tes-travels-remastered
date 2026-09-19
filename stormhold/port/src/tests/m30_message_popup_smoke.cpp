@@ -75,15 +75,18 @@ int main() {
         }
         Check(identical, "lowercase 'a' should draw identically to uppercase 'A' (case-folded font)");
 
-        // An unsupported character (a digit -- not yet defined, see
-        // bitmap_font.h's own doc comment) draws nothing but still
+        // An unsupported character ('?' -- not in bitmap_font.h's own
+        // supported set, see its class comment) draws nothing but still
         // advances -- check the SECOND character lands exactly
-        // kAdvance further, regardless.
+        // kAdvance further, regardless. (Digits were still unsupported
+        // when this check was first written, M30; M31 defined them, so
+        // this now uses a character that stays outside the set either
+        // way.)
         Backbuffer bbUnsupported;
         bbUnsupported.Fill(0);
-        BitmapFont::DrawString(bbUnsupported, 0, 0, "1A", kWhite);
+        BitmapFont::DrawString(bbUnsupported, 0, 0, "?A", kWhite);
         Check(PixelAt(bbUnsupported, 0, 0) == 0 && PixelAt(bbUnsupported, 1, 0) == 0,
-              "an unsupported character (digit) should draw nothing");
+              "an unsupported character ('?') should draw nothing");
         Check(PixelAt(bbUnsupported, BitmapFont::kAdvance + 1, 0) == kWhite,
               "the character after an unsupported one should still land kAdvance further along");
     }

@@ -5,6 +5,7 @@
 #include "player/player_state.h"
 #include "render/corridor_assets.h"
 #include "render/corridor_render_plan.h"
+#include "render/hotbar_assets.h"
 #include "render/status_bar_plan.h"
 
 namespace stormhold {
@@ -21,15 +22,20 @@ namespace stormhold {
 // self-contained in PlayerState + CharacterData, no new asset loading at
 // all (see StatusBarPlan's own header comment).
 //
+// M31: paintHud() (lines 1024-1062) -- the bottom hotbar panel, gated on
+// M29's ResolveHudIconSet and drawn with M30/M31's own new BitmapFont
+// digit glyphs plus a new HotbarAssets icon bundle (render/
+// hotbar_assets.h).
+//
 // Every OTHER paint* method M22 transcribed (paintObjects/paintMonsters/
-// paintHud/paintMinimap*/paintMessagePopup/paintFlashOverlays/
-// paintUnknown_b) is deliberately still out of scope here -- each needs
-// far more live state this port doesn't have yet (Player.visibleObjects,
-// a populated WorldRegistry-backed monster/chest/dropped-item cache
-// actually feeding a frame, hotbar/dialogue state and hotbarIcons image
-// assets, GameCanvas's own still-unmodeled UI flags). Same "primitive
-// first, pipeline later" discipline M21/M23/M24 already established,
-// just now applied to a second whole vertical slice instead of a single
+// paintMinimap*/paintMessagePopup [rendered separately, render/
+// message_popup.h, M30]/paintFlashOverlays/paintUnknown_b) is
+// deliberately still out of scope here -- each needs far more live
+// state this port doesn't have yet (Player.visibleObjects actually fed
+// by a live tick loop, GameCanvas's own still-unmodeled UI flags, the
+// still-untranscribed minimap-populate methods). Same "primitive first,
+// pipeline later" discipline M21/M23/M24 already established, just now
+// applied to a second whole vertical slice instead of a single
 // primitive.
 class GameRenderer {
 public:
@@ -58,6 +64,26 @@ public:
     // (0x0000FF) Fatigue -- drawn `plan.hpWidth`/`magickaWidth`/
     // `fatigueWidth` pixels wide.
     static void RenderStatusBars(Backbuffer& bb, const StatusBarPlan& plan);
+
+    // GameCanvas.paintHud(), transcribed directly: a black `fillRect(0,
+    // 156, 176, 52)` background, then a `fillRoundRect(2, 158, 172, 48,
+    // 5, 5)` panel (color 13080935 = 0xC79967, the same popup-background
+    // color render/message_popup.cpp's own `kPopupBg` uses), then --
+    // gated on `iconSet` (M29's `ResolveHudIconSet`, a plain parameter
+    // here rather than recomputed inline, same "caller supplies/owns
+    // state" pattern this port already uses throughout) -- 4 icons at
+    // fixed x positions (14/62/104/144, y=174) plus 4 black digit glyphs
+    // just above them (x=5/53/96/135, y=180), whichever 4 of
+    // `hotbarIcons[0..5]`/`hotbarKeyGlyphs[0..5]` that iconSet selects
+    // (../../../src/GameCanvas.java lines 1024-1062 -- the 3 branches'
+    // exact index sets, not independently re-derived). An out-of-range
+    // iconSet (unreachable -- ResolveHudIconSet only ever returns 0/1/2)
+    // draws just the two background fills, matching the original's own
+    // if/else-if chain with no final else. `hotbarActionSet` (also
+    // written here in the original, read back by keyPressed()'s numeric-
+    // hotkey dispatch) is NOT modeled -- input handling remains out of
+    // scope, same gap M29's own header comment already flagged.
+    static void RenderHud(Backbuffer& bb, const HotbarAssets& assets, int iconSet);
 };
 
 }  // namespace stormhold
