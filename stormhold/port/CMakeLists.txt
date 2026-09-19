@@ -74,6 +74,14 @@ add_library(stormhold_combat STATIC
 target_include_directories(stormhold_combat PUBLIC src)
 target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster stormhold_dungeon)
 
+# M21: GameCanvas.paintWalls()'s corridor wall-segment SELECTION logic
+# (data only, no pixels yet -- see docs/PORT_ROADMAP.md) -- see src/render/.
+add_library(stormhold_render STATIC
+  src/render/corridor_render_plan.cpp
+)
+target_include_directories(stormhold_render PUBLIC src)
+target_link_libraries(stormhold_render PUBLIC stormhold_dungeon)
+
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
 # dawnstar ports' platform layer.
@@ -163,3 +171,7 @@ target_link_libraries(warden_and_boss_respawn_smoke PRIVATE stormhold_player)
 # M20 milestone smoke test -- see src/tests/m20_save_format_smoke.cpp.
 add_executable(save_format_smoke src/tests/m20_save_format_smoke.cpp)
 target_link_libraries(save_format_smoke PRIVATE stormhold_player stormhold_monster)
+
+# M21 milestone smoke test -- see src/tests/m21_corridor_render_plan_smoke.cpp.
+add_executable(corridor_render_plan_smoke src/tests/m21_corridor_render_plan_smoke.cpp)
+target_link_libraries(corridor_render_plan_smoke PRIVATE stormhold_render)

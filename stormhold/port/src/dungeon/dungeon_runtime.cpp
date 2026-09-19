@@ -199,4 +199,87 @@ void DungeonRuntime::RegisterGeneratedSpawns(const GeneratedLevel& level, WorldR
     }
 }
 
+uint8_t DungeonRuntime::TileAt(const GeneratedLevel& level, int x, int y, const LevelLookup& levels) {
+    int nx = x;
+    int ny = y;
+    int neighborId = level.number;
+    const GeneratedLevel* neighbor = nullptr;
+
+    if (x < 0) {
+        neighborId = level.neighborWest;
+        if (neighborId <= 0) return 1;
+        neighbor = &levels(neighborId);
+        nx = neighbor->width - 1;
+        if (neighborId == 1 || level.number == 1) ny = ny + (neighbor->height - level.height) / 2;
+    } else if (x >= level.width) {
+        neighborId = level.neighborEast;
+        if (neighborId <= 0) return 1;
+        neighbor = &levels(neighborId);
+        nx = 0;
+        if (neighborId == 1 || level.number == 1) ny = ny + (neighbor->height - level.height) / 2;
+    } else if (y < 0) {
+        neighborId = level.neighborNorth;
+        if (neighborId <= 0) return 1;
+        neighbor = &levels(neighborId);
+        ny = neighbor->height - 1;
+        if (neighborId == 1 || level.number == 1) nx = nx + (neighbor->width - level.width) / 2;
+    } else if (y >= level.height) {
+        neighborId = level.neighborSouth;
+        if (neighborId <= 0) return 1;
+        neighbor = &levels(neighborId);
+        ny = 0;
+        if (neighborId == 1 || level.number == 1) nx = nx + (neighbor->width - level.width) / 2;
+    }
+
+    if (neighborId != level.number) {
+        if (nx < 0 || nx >= neighbor->width) return 1;
+        if (ny < 0 || ny >= neighbor->height) return 1;
+        return neighbor->populated ? neighbor->tiles[static_cast<size_t>(nx)][static_cast<size_t>(ny)] : 1;
+    }
+    return level.tiles[static_cast<size_t>(x)][static_cast<size_t>(y)];
+}
+
+CorridorViewGrid DungeonRuntime::SampleCorridorView(const GeneratedLevel& level, int x, int y, int facing,
+                                                     const LevelLookup& levels) {
+    CorridorViewGrid grid{};
+
+    if (facing != 1 && facing != 3) {
+        if (facing == 2 || facing == 4) {
+            int step = (facing == 2) ? 1 : -1;
+            grid[0][0] = TileAt(level, x, y - step, levels);
+            // Deliberate asymmetry vs. the facing==1/3 branch below (which
+            // fills the equivalent slot with a real TileAt call) --
+            // confirmed directly from Dungeon.sampleCorridorView(), not a
+            // transcription slip.
+            grid[1][0] = 0;
+            grid[2][0] = TileAt(level, x, y + step, levels);
+
+            int fx = x + step;
+            for (int i = 0; i < 5; i++) grid[static_cast<size_t>(i)][1] = TileAt(level, fx, y + (i - 2) * step, levels);
+            fx = x + 2 * step;
+            for (int i = 0; i < 7; i++) grid[static_cast<size_t>(i)][2] = TileAt(level, fx, y + (i - 3) * step, levels);
+            fx = x + 3 * step;
+            for (int i = 0; i < 9; i++) grid[static_cast<size_t>(i)][3] = TileAt(level, fx, y + (i - 4) * step, levels);
+            fx = x + 4 * step;
+            for (int i = 0; i < 9; i++) grid[static_cast<size_t>(i)][4] = TileAt(level, fx, y + (i - 4) * step, levels);
+        }
+    } else {
+        int step = (facing == 1) ? 1 : -1;
+        grid[0][0] = TileAt(level, x - step, y, levels);
+        grid[1][0] = TileAt(level, x, y, levels);
+        grid[2][0] = TileAt(level, x + step, y, levels);
+
+        int fy = y - step;
+        for (int i = 0; i < 5; i++) grid[static_cast<size_t>(i)][1] = TileAt(level, x + (i - 2) * step, fy, levels);
+        fy = y - 2 * step;
+        for (int i = 0; i < 7; i++) grid[static_cast<size_t>(i)][2] = TileAt(level, x + (i - 3) * step, fy, levels);
+        fy = y - 3 * step;
+        for (int i = 0; i < 9; i++) grid[static_cast<size_t>(i)][3] = TileAt(level, x + (i - 4) * step, fy, levels);
+        fy = y - 4 * step;
+        for (int i = 0; i < 9; i++) grid[static_cast<size_t>(i)][4] = TileAt(level, x + (i - 4) * step, fy, levels);
+    }
+
+    return grid;
+}
+
 }  // namespace stormhold

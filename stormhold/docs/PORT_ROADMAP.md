@@ -1249,16 +1249,116 @@ read-through.
       first attempt; full clean rebuild stayed at zero warnings; all 19
       smoke tests pass.
 
+- [x] **M21 -- corridor wall-segment selection logic** (this session).
+      Starts the rendering side dawnstar's own port precedent puts here
+      (its M9), but a real, consequential discovery changed this
+      milestone's actual shape: unlike dawnstar, whose `GameCanvas.java`
+      phase-1 pass was already a COMPLETE transcription before Phase 3
+      rendering work ever started, `../src/GameCanvas.java`'s own header
+      comment confirms it was only ever a "PARTIAL PASS" -- its ~15
+      private pixel-rendering methods were left as signature-only stubs
+      (`throw new UnsupportedOperationException(...)`), never actually
+      read from `decompiled/e.java`. There was nothing to port yet. This
+      milestone did the missing phase-1 work for exactly ONE of those
+      stubs -- `paintWalls()` (was `e.java`'s `j(Graphics)`) -- confirmed
+      by structure (`wallSegmentTable`, `Player.corridorView` via the
+      newly-confirmed `Dungeon.viewGridAt`, `Player.hasAilment(3)`/`(4)`)
+      to be dawnstar's own `paintCorridorWalls()` equivalent, then ported
+      its SELECTION logic to C++ as data only, matching dawnstar's own M9
+      scope exactly ("deliberately stops short of drawing actual
+      pixels"). New `dungeon/dungeon_runtime.h` methods `TileAt`
+      (`Dungeon.tileAt(x,y)`'s cross-level-boundary tile lookup, reusing
+      the same recentering math `player/player_movement.h`'s
+      `ComputeMoveTarget` already established, via its own independently-
+      declared `LevelLookup` caller-supplied callback -- `stormhold_dungeon`
+      can't depend on `stormhold_player` to share that type directly) and
+      `SampleCorridorView`/`ViewGridAt` (`Dungeon.sampleCorridorView`/
+      `viewGridAt`, the corridor renderer's own 9x5 visibility-sample
+      grid and its relative-offset reader); new `render/
+      corridor_render_plan.h`/`.cpp` (`stormhold_render`, a new library)
+      port `paintWalls()`'s wall-segment selection loop itself as
+      `CorridorRenderPlan::Plan()`, plus its two direct helpers
+      `drawWallSegment()`/`resolveWallFrame()` (now real Java in
+      `GameCanvas.java` too, `resolveWallFrame` byte-for-byte identical
+      to dawnstar's own).
+
+      **Two real, confirmed architectural simplifications vs. dawnstar's
+      own `paintCorridorWalls()`, found by reading `paintWalls()`/
+      `drawWallSegment()` in full rather than assumed to mirror
+      dawnstar's shape:** only ONE wall bit is ever tested (bit 1, plain
+      wall) -- there is no dawnstar-style bit-64 "gate/edge" branch
+      anywhere in this method at all; and there is no per-dungeon-number
+      texture switch either -- `floorTexture`/`wallTexture` are each a
+      SINGLE shared `Image` (matching this class's own field
+      declarations exactly), not dawnstar's 5 separate ice/plain/gate
+      Image fields. `drawWallSegment()`'s own mirroring trick for
+      "frame > 7" uses Nokia `DirectGraphics`' `TRANS_MIRROR` flag on the
+      SAME spritesheet rather than a second stored mirrored image, and
+      has no `wallDrawnNear`/`wallDrawnMid` dedup state at all (dawnstar's
+      version has both). Whether `floorTexture`/`wallTexture` load from a
+      `.cus` file (M7's `RawImage` format) or a plain MIDP-native `Image`
+      resource is left an open question for whichever milestone actually
+      wires image loading -- none of M7's own 37 confirmed `.cus` files
+      read as a wall/floor texture by name.
+
+      **A second real finding, incidental to identifying `paintWalls()`
+      correctly:** at least one OTHER still-stubbed method's existing
+      "(was e.java's X(Graphics))" placeholder comment turns out to be
+      WRONG -- it was apparently assigned by call-order/signature
+      guesswork during the original partial pass, never verified against
+      real content. `paintFloor()`'s claimed `b(Graphics)` body actually
+      reads `player.ad`-shaped data (looks like `paintObjects()`'s real
+      counterpart instead), and `paintMessagePopup()`'s claimed
+      `e(Graphics)` body reads/writes the monster-hit/spell-hit/self-
+      spell flash flags (`unconfirmed_S`/`_ao`/`_am`), not a message
+      popup at all. Flagged directly in `GameCanvas.java`'s own header
+      comment and `CLASS_MAP.md` -- NOT corrected here. Re-identifying
+      every remaining stub's real decompiled counterpart is a separate,
+      larger follow-up phase-1 pass, not part of this milestone's scope.
+
+      **Deliberately does NOT wire `SampleCorridorView`/`corridorView`
+      into `PlayerState`/`CommitMove` at all** -- `PlayerState` has no
+      `corridorView` field yet, so `CorridorRenderPlan::Plan()` takes an
+      already-sampled `CorridorViewGrid` as a caller-supplied input
+      instead, same "caller supplies/owns world state" pattern this port
+      uses everywhere. Wiring a live, always-current
+      `PlayerState::corridorView` (and `refreshVisibleObjectSlots()`'s
+      own eventual port, which reads the identical grid) is left for
+      whichever later milestone actually needs one -- likely the real
+      pixel renderer itself.
+
+      Verified by `javac` re-confirming the whole `../src/` tree still
+      compiles clean (zero errors, only the same expected `new
+      Integer(int)` deprecation warnings already documented) after the
+      `GameCanvas.java` edit, and by a new `corridor_render_plan_smoke.exe`:
+      `ViewGridAt`'s depth<4-vs->=4 indexing hand-checked; `TileAt` checked
+      directly within a level, with no neighbor in each of the 4
+      directions (returns wall), and crossing a REAL hub<->standard
+      boundary with the exact same recentering `player_movement_smoke`'s
+      own M10 test already confirmed for player movement; a confirmed,
+      preserved asymmetry in `SampleCorridorView` (one grid slot is a
+      literal constant 0 for east/west facing but a real tile read for
+      north/south facing) demonstrated directly; a synthetic wall placed
+      one tile ahead correctly producing matching wall segments from both
+      the forward AND mirrored scans; `Plan()`'s ailment-3/4 floor-flag
+      priority (3 beats 4) exercised for all 4 combinations; and an
+      integration pass sampling all 4 facings against a REAL M6-generated
+      level 2 with zero exceptions and every produced frame/x value in
+      its valid range. All checks passed on the first attempt; all 20
+      smoke tests pass.
+
 ## What's next
 
-M21 onward: likely starting on the rendering/UI side (`GameCanvas`'s ~15
-still-stubbed pixel-rendering methods, `RawImage`'s M7 decoder finally
-getting a real `Backbuffer::Blit()`/alpha-test compositor to feed) now
-that a real, wired-together game-logic core exists to render -- following
-dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20 already found. The
+M22 onward: either continuing the rendering side -- a real
+`Backbuffer::Blit()`/alpha-test compositor for M7's `RawImage` sprites to
+feed pixels through, and/or the phase-1 work to identify more of
+`GameCanvas`'s remaining ~14 still-stubbed paint methods (`paintFloor`/
+`paintObjects`/`paintMonsters`/`paintHud`/etc. -- M21's own finding that
+at least two of their existing placeholder mappings are wrong means this
+needs real verification, not trusting the existing signatures) -- or the
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
-onDeath()` callers (flagged again at M20, unchanged since M14/M15) may
-turn out to live in exactly the stubbed `GameCanvas` methods a rendering
-milestone would need to read anyway.
+onDeath()` callers (flagged again this session, unchanged since M14/M15),
+which may well turn out to live in exactly those same still-stubbed
+`GameCanvas` methods. Following dawnstar's own later milestones roughly
+but expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21 already found.

@@ -35,8 +35,10 @@ in the live registry, a from-scratch indexed-color image format
 (`RawImage`), and a rendering/UI architecture (`ScreenCanvas`/`UIScreen`/
 `GameCanvas`) that does NOT map onto dawnstar's Screen/LoadingScreen/
 GameCanvas split by content, among others. Left for later phases (not
-blocking phase 2/3): `GameCanvas.java`'s ~15 still-stubbed pixel-rendering
-methods, `ESGame.loadHelpTopicBodies()`'s remaining help topics, and a set
+blocking phase 2/3): `GameCanvas.java`'s still-stubbed pixel-rendering
+methods (~14 of the original ~15 remain -- phase-3 M21 transcribed
+`paintWalls()` for real, see `PORT_ROADMAP.md`), `ESGame.
+loadHelpTopicBodies()`'s remaining help topics, and a set
 of individually-flagged lower-confidence names throughout (see each file's
 header comment and CLASS_MAP.md).
 
@@ -121,7 +123,18 @@ BinaryWriter, Player's own full=true save-format serialization, and
 Monster's second readFrom/writeTo stream serialization, including a
 confirmed divergence from dawnstar's own finding: Stormhold's readFrom/
 writeTo encode the exact same 28 fields in the exact same order as its
-packed toBytes/fromBytes format, not a genuinely different layout) are
+packed toBytes/fromBytes format, not a genuinely different layout), and
+M21 (corridor wall-segment selection logic, the start of the rendering
+side -- but first a real discovery: GameCanvas.java's own ~15 pixel-
+rendering methods were never actually transcribed from decompiled/e.java
+at all, only left as signature-only stubs, unlike dawnstar's own
+already-complete GameCanvas.java. M21 did the missing phase-1 work for
+exactly one of those stubs, paintWalls(), confirmed it as dawnstar's own
+paintCorridorWalls() equivalent with two real simplifications -- no
+bit-64 gate-tile branch, a single shared floor/wall texture pair, not
+per-level ice/plain textures -- then ported its selection logic to C++
+as data only, plus found that at least one OTHER stub's existing
+placeholder mapping was never verified and is likely wrong) are
 done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small

@@ -14,6 +14,21 @@
 // not yet ported. A follow-up pass needs to do for those methods what
 // dawnstar's own `e`/GameCanvas.java pass did for its whole file.
 //
+// **Phase-3 M21 update:** one of those ~15 stubs, `paintWalls()` (was
+// `j(Graphics)`), is now for real -- see its own doc comment. That pass
+// also turned up evidence that at least one OTHER stub's placeholder
+// "(was e.java's X(Graphics))" mapping was never actually verified
+// against real content and looks WRONG: `paintFloor()`'s claimed
+// `b(Graphics)` reads from `player.ad`-shaped data (looks like an
+// object/visibleObjects renderer, i.e. paintObjects()'s real body), and
+// separately `paintMessagePopup()`'s claimed `e(Graphics)` reads/writes
+// the `unconfirmed_S`/`unconfirmed_ao`/`unconfirmed_am` flash flags (a
+// monster-hit/spell-hit/self-spell flash overlay, not a message popup).
+// Every remaining stub's mapping should be independently re-verified
+// against its actual decompiled body before being trusted, not assumed
+// correct just because a plausible-looking name/signature was already
+// filled in.
+//
 // Confirmed identity: `extends com.nokia.mid.ui.FullCanvas implements
 // Runnable`, with a `5x6x4 int[][][]` table (`wallSegmentTable`, was `n`)
 // in the exact shape of dawnstar's own confirmed `GameCanvas.
@@ -314,8 +329,129 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // ---- Unread rendering internals below: signatures only, not yet
    // transcribed from decompiled/e.java. See this file's header comment. ----
 
+   // M21 (phase 3 port session): fully transcribed from decompiled/e.java's
+   // j(Graphics) -- confirmed by structure/field access (wallSegmentTable,
+   // player.corridorView via Dungeon.viewGridAt, Player.hasAilment(3)/(4))
+   // to be dawnstar's own paintCorridorWalls() equivalent: draws the
+   // corridor floor, then per forward-visibility step (0-9, forward scan
+   // then a mirrored backward scan), the nearest wall segment found by
+   // testing wallSegmentTable's candidate {cmd,column,dx,dy} offsets in
+   // order and breaking on the first occluding tile.
+   //
+   // Two confirmed, genuine simplifications vs. dawnstar's own
+   // paintCorridorWalls() -- not gaps in this transcription, verified by
+   // reading this method and its two helpers (drawWallSegment/
+   // resolveWallFrame, below) in full: (1) only ONE wall bit is ever
+   // tested (bit 1, plain wall) -- there is no dawnstar-style bit-64
+   // "gate/edge" branch anywhere in this method at all; (2) there is no
+   // per-dungeon-number texture switch either -- floorTexture/wallTexture
+   // are each a SINGLE shared Image (matching this class's own field
+   // declarations, `static Image floorTexture; static Image wallTexture;`
+   // -- no separate ice/plain/gate Image fields the way dawnstar has 5).
+   // Whether floorTexture/wallTexture are loaded from a `.cus` file (M7's
+   // RawImage format) or a plain MIDP-native Image resource is NOT
+   // determined by this pass -- none of M7's own 37 confirmed `.cus`
+   // files read as a wall/floor texture by name, so this is flagged as an
+   // open question for whichever milestone actually wires image loading,
+   // not resolved here.
+   //
+   // **NOTE, NOT fixed here:** `paintFloor()` (still a stub immediately
+   // below) is called separately by paintGameView() right after this
+   // method -- but this method ALREADY draws the floor itself (the
+   // ailment-3/4-gated block below). That makes paintFloor()'s existing
+   // "(was e.java's b(Graphics))" placeholder mapping look wrong:
+   // decompiled `b(Graphics)`'s real body reads from `player.ad`-shaped
+   // data at specific index ranges (8-12, 4-6, 1), which looks far more
+   // like an object/visibleObjects renderer (paintObjects()'s real
+   // counterpart) than a floor painter. This pass only confirms
+   // paintWalls() itself -- re-identifying every other still-stubbed
+   // paint method's real decompiled counterpart (there are ~14 more) is a
+   // separate, larger follow-up pass, same as this class's own header
+   // comment already calls for.
    private void paintWalls(Graphics g) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's j(Graphics))");
+      Dungeon dungeon = this.player.currentDungeon();
+      byte[][] view = this.player.corridorView;
+
+      if (!this.player.hasAilment(3)) {
+         if (this.player.hasAilment(4)) {
+            g.setColor(10485760);
+            g.fillRect(0, 0, this.getWidth(), floorTexture.getHeight());
+         } else {
+            for (int col = 0; col < 5; col++) {
+               g.drawImage(floorTexture, col * 36, 0, 20);
+            }
+         }
+      }
+
+      for (int step = 0; step < 5; step++) {
+         int x = step * 18;
+
+         for (int row = 0; row < 6; row++) {
+            int cmd = wallSegmentTable[step][row][0];
+            int column = wallSegmentTable[step][row][1];
+            int dx = wallSegmentTable[step][row][2];
+            int dy = wallSegmentTable[step][row][3];
+            if (Util.testBit((byte)1, dungeon.viewGridAt(dx, dy, view))) {
+               int frame = this.resolveWallFrame(cmd, column, -1);
+               this.drawWallSegment(g, frame, x);
+               break;
+            }
+         }
+      }
+
+      for (int step = 5; step < 10; step++) {
+         int x = step * 18;
+
+         for (int row = 0; row < 6; row++) {
+            int cmd = wallSegmentTable[9 - step][row][0];
+            int column = wallSegmentTable[9 - step][row][1];
+            int dx = -wallSegmentTable[9 - step][row][2];
+            int dy = wallSegmentTable[9 - step][row][3];
+            if (Util.testBit((byte)1, dungeon.viewGridAt(dx, dy, view))) {
+               int frame = this.resolveWallFrame(cmd, column, 1);
+               this.drawWallSegment(g, frame, x);
+               break;
+            }
+         }
+      }
+   }
+
+   // Draws one 18px-wide wall column from the single shared wallTexture
+   // spritesheet: frames 0-7 draw directly at a `frame`-th 18px offset
+   // into it; frames 8-15 draw the SAME spritesheet horizontally mirrored
+   // (Nokia DirectGraphics' flag 8192 = FLIP_HORIZONTAL, i.e.
+   // TRANS_MIRROR) at offset `frame-8` -- there is no second, separately-
+   // stored mirrored-frame image. Unlike dawnstar's own drawWallSegment(),
+   // there is no wallType parameter (no ice/plain or gate/wall texture
+   // switch -- see paintWalls()'s own comment) and no wallDrawnNear/
+   // wallDrawnMid dedup state either -- confirmed by reading this
+   // method's full body directly, not a simplification made in this port.
+   private void drawWallSegment(Graphics g, int frame, int x) {
+      g.setClip(x, 0, 18, this.getHeight());
+      if (frame > 7) {
+         int mirroredFrame = frame - 8;
+         DirectGraphics dg = DirectUtils.getDirectGraphics(g);
+         dg.drawImage(wallTexture, x - mirroredFrame * 18, 0, 20, 8192);
+      } else {
+         g.drawImage(wallTexture, x - frame * 18, 0, 20);
+      }
+
+      g.setClip(0, 0, this.getWidth(), this.getHeight());
+   }
+
+   // cmd==12: pass `column` straight through as the frame index. Any
+   // other cmd (11, in wallSegmentTable): frame is 8+column (forward
+   // scan, side==-1) or 7-column (mirrored/backward scan, side==1) -- the
+   // exact geometric meaning of the two command codes isn't pinned down
+   // further (same open question dawnstar's own CORRIDOR_WALL_TABLE
+   // comment already flags for its identical {cmd,column} shape),
+   // preserved exactly as found.
+   private int resolveWallFrame(int cmd, int column, int side) {
+      if (cmd == 12) {
+         return column;
+      } else {
+         return side == -1 ? 8 + column : 7 - column;
+      }
    }
 
    private void paintFloor(Graphics g) {

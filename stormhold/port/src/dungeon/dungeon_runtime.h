@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <unordered_map>
 #include <vector>
@@ -11,6 +12,11 @@
 #include "world/dungeon_generator.h"
 
 namespace stormhold {
+
+// Dungeon.sampleCorridorView()'s output shape (`byte[9][5]` in the
+// original) -- see DungeonRuntime::SampleCorridorView/ViewGridAt below.
+// [i][depth], i in 0..8, depth in 0..4.
+using CorridorViewGrid = std::array<std::array<uint8_t, 5>, 9>;
 
 // Packs a tile position into a single map key -- a plain-int stand-in
 // for Util.posKey(x,y)'s "x,y" string (`Dungeon.storeChest`/
@@ -212,6 +218,51 @@ public:
     // still match exactly.
     static void RegisterGeneratedSpawns(const GeneratedLevel& level, WorldRegistry& world,
                                          const MonsterDatabase& monsterDb);
+
+    // Looks up a GeneratedLevel by its 1-based level number -- the exact
+    // same caller-supplies-world-state shape as `player/player_movement.h`
+    // 's own `LevelLookup` (declared independently here rather than reused
+    // directly, since `stormhold_dungeon` doesn't depend on
+    // `stormhold_player`), CONST since tile sampling never mutates a
+    // neighbor level.
+    using LevelLookup = std::function<const GeneratedLevel&(int levelNumber)>;
+
+    // M21: Dungeon.tileAt(x,y) -- an absolute tile lookup that, unlike a
+    // plain `level.tiles[x][y]` index, transparently reaches across a
+    // level boundary (into whichever of `level`'s own 4 confirmed
+    // neighbors is relevant, recentered exactly like `player/
+    // player_movement.h`'s own `ComputeMoveTarget` cross-level boundary
+    // stitching does for player movement) when `x`/`y` falls outside
+    // `level`'s own bounds. Returns 1 (wall) when there's no neighbor in
+    // that direction, or when the neighbor itself isn't `populated` --
+    // matching the original's own fallback exactly (see GeneratedLevel::
+    // populated's own header comment on why every level this port's
+    // LevelLookup can return is already `populated`, so that branch is
+    // presently unreachable here in practice but preserved for fidelity).
+    static uint8_t TileAt(const GeneratedLevel& level, int x, int y, const LevelLookup& levels);
+
+    // M21: Dungeon.sampleCorridorView(x,y,facing,outGrid) -- the corridor
+    // 3D-renderer's visibility sample: a 9x5 grid of absolute tile bytes
+    // (via TileAt, so it can see across a level boundary near an edge)
+    // at the forward/lateral offsets the facing direction implies.
+    // Consumed by `render/corridor_render_plan.h`'s `CorridorRenderPlan::
+    // Plan` via ViewGridAt below -- this method only builds the grid, it
+    // doesn't interpret it.
+    static CorridorViewGrid SampleCorridorView(const GeneratedLevel& level, int x, int y, int facing,
+                                                const LevelLookup& levels);
+
+    // Dungeon.viewGridAt(index, depth, grid): reads a SampleCorridorView
+    // grid at a (dx, dy)-shaped relative offset -- confirmed to be the
+    // exact same formula as dawnstar's own `Player.tileAt(dx,dy)`, just
+    // moved onto `Dungeon` and taking the grid as an explicit parameter
+    // instead of a `this.corridorView` field read (Stormhold has no
+    // `PlayerState::corridorView` field yet -- see render/
+    // corridor_render_plan.h's own class comment on why that's a
+    // deliberate scope boundary for this milestone, not an oversight).
+    static uint8_t ViewGridAt(const CorridorViewGrid& grid, int index, int depth) {
+        if (depth < 4) return grid[static_cast<size_t>(index + depth + 1)][static_cast<size_t>(depth)];
+        return grid[static_cast<size_t>(index + depth)][static_cast<size_t>(depth)];
+    }
 };
 
 }  // namespace stormhold

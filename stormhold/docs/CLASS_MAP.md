@@ -450,6 +450,24 @@ header comment for exactly what's covered vs. stubbed.
   (~1400 of the file's 1823 lines) -- this needs the same full hand-trace
   treatment dawnstar's own `e`/`GameCanvas.java` pass got, not yet done
   here.
+  - **Update (phase-3 M21 session):** one of those ~15 stubs,
+    `paintWalls()` (was `j(Graphics)`), is now fully transcribed --
+    confirmed to be dawnstar's own `paintCorridorWalls()` equivalent, but
+    architecturally simpler (only tests wall bit 1, no bit-64 gate
+    branch; a single shared floor/wall `Image` pair, no per-level ice/
+    plain switch). This pass also found that at least one other stub's
+    placeholder "(was e.java's X(Graphics))" mapping is likely WRONG,
+    never having been verified against real content: `paintFloor()`'s
+    claimed `b(Graphics)` reads `player.ad`-shaped data (looks like
+    `paintObjects()`'s real body instead), and `paintMessagePopup()`'s
+    claimed `e(Graphics)` actually reads/writes the monster-hit/spell-
+    hit/self-spell flash flags (`unconfirmed_S`/`_ao`/`_am`). See
+    `GameCanvas.java`'s own header comment and `PORT_ROADMAP.md`'s M21
+    entry for the full writeup. `Player.java`/`j.java` IS now fully
+    renamed (confirmed since phase-3 M9) -- the "not yet renamed" caveat
+    on the `TODO_*` placeholder list two paragraphs below is now stale
+    for that specific claim, though the placeholders themselves haven't
+    been re-resolved against the real `Player` names yet.
   - **Field-name/class-name collision, same trap dawnstar's CLASS_MAP.md
     documents for its own `e`/`j`**: this class declares its own fields
     `nearbyMonsterScratch`/`targetMonster` (both type `Monster`, originally
