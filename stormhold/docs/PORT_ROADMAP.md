@@ -2306,21 +2306,93 @@ read-through.
       clean (8 expected warnings only). Re-verified the real windowed
       exe still launches and runs after the `main.cpp` changes.
 
+- [x] **M37 -- `CombatResolution::TickMonstersOnLevel`, real monster AI
+      -- finally closes the M14/M15 "Monster.tick()/chase() have no
+      wired caller" gap** (this session). `GameCanvas.tickMonsterAI()`
+      (was decompiled/e.java's `b(long)`) was a throw-stub, mislabeled
+      `tickStatusCountdowns_b`, in `../src/GameCanvas.java` until now --
+      renamed and filled in. Every low-level piece it needed
+      (`Monster.isAdjacent`/`chase`/`tick`/`store`, `DungeonRuntime::
+      StoreMonster`) already existed from earlier milestones; this
+      milestone was purely the orchestration loop that was still
+      missing.
+
+      For every monster registered on the player's own current level:
+      not adjacent -> `Chase()` one step (`IsAdjacent`'s own non-
+      adjacent call ALSO resets `aiPhase` to 0, a confirmed side
+      effect); adjacent -> an 800ms wind-up (`aiPhase` 0->1 starts the
+      timer, `aiPhase` 1 past 800ms resolves the FIRST real attack via
+      `MonsterTick` AND returns true -- the caller's cue to show the
+      "Creature attacks!" popup, confirmed reproduced ONLY on this
+      first wind-up-to-attack transition -- and any LATER 800ms-elapsed
+      tick resolves a repeat attack with no further popup). Every
+      branch stores the monster back -- unlike `tickPerSecond()`'s own
+      confirmed dead-write loop (M36) over this exact same registry,
+      this one really does persist.
+
+      **Also renamed 2 more of this file's own earlier wrong stub
+      guesses** while confirming what actually calls `tickMonsterAI`:
+      `setSomeFlag` -> `refreshVisibleObjectsAndMinimap` (it doesn't set
+      any flag at all -- it's `Player.refreshVisibleObjects()`, already
+      fully transcribed, plus a minimap-grid refresh gated on which zoom
+      level is actually showing), and `rollCampInterrupted` filled in
+      for real (`Util.randomInt(10) == 1`, trivial). `tickMovementAndAI`/
+      the real per-tick action dispatcher (`e(long)`) remain honest
+      "not yet transcribed" stubs -- both fan out into several more
+      interconnected methods (`a()`/`f()`/`g(long)`/`h(long)`/`n()`/
+      `d(long)`/`m()`), too large a web to responsibly finish in this
+      same pass.
+
+      A real C++-specific hazard this port had to guard against that
+      Java's own legacy `Hashtable`/`Enumeration` merely tolerates:
+      `MonsterTick`'s own ailment-2 ("swarm curse") branch can insert
+      NEW monsters into the SAME per-level registry this loop is
+      enumerating (`DungeonRuntime::SpawnAmbushMonsters`) -- a real,
+      confirmed original quirk, not introduced here, but a mid-loop
+      insert into a live `std::unordered_map` while iterating it is
+      genuine undefined behavior, strictly worse than Java's own
+      unspecified-but-non-crashing behavior for the same case.
+      `TickMonstersOnLevel` iterates a snapshot of spawnIds taken before
+      the loop starts instead -- any ambush-spawned monster simply
+      waits for the next tick's own fresh snapshot.
+
+      Wired into `main.cpp`'s tick loop ahead of `VisibleObjects::
+      Refresh` (matching `run()`'s own real relative order for this
+      piece specifically; the exact ordering against M35/M36's own
+      helpers is a documented simplification, not exact) -- and, since
+      this is also the first real reachable call site for `MessagePopup`
+      (M30), the "Creature attacks!" popup this method's own return
+      value triggers is now actually shown and painted for real.
+
+      Verified with a new `monster_ai_tick_smoke.exe`: the non-adjacent
+      chase-and-reset path, all 3 phases of the adjacent wind-up (idle,
+      winding-up, attack-with-message, repeat-attack-without-message),
+      and a real integration run (20 ticks against a real generated
+      level's real monster population) confirming no crash. **Caught a
+      real bug in the test itself, not the port** -- an early draft's
+      hand-built `MonsterState` left `typeIndex` at its default (0),
+      which crashed `MonsterTick`'s own stat lookups
+      (`typeStats[-1]`, wrapping to a huge `size_t`) hard enough to hang
+      the whole process behind a blocked Windows crash dialog rather
+      than cleanly failing -- fixed by giving every test monster a real
+      `typeIndex`. All 34 smoke tests pass; full clean rebuild stayed
+      at zero `/W4` warnings. `javac` recompiled clean (8 expected
+      warnings only). Re-verified the real windowed exe still launches
+      and runs.
+
 ## What's next
 
-The remaining still-untranscribed tick-loop helpers
-(`rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`, one of which
--- `a(boolean)` -- is confirmed as `q()`/`p()`'s own real caller) --
-these gate monster AI and the Warden/message-popup call sites
-`main.cpp` doesn't reach yet. `paintFlashOverlays()`/`paintUnknown_b()`
-(the two remaining unported-pixel paint methods, both gated on that
-same live state). The still-unrecovered `tryRankUpSkills()`/
-`Monster.tick()`/`Monster.onDeath()` callers (flagged again this
-session, unchanged since M14/M15) may well turn out to live in exactly
-those same tick-loop helpers. Beyond that: real combat input (attack/
-cast), a character-creation UI (`main.cpp` still hardcodes class 0),
-and the message-popup call sites once their own tick-loop helper
-exists. Following dawnstar's own later milestones roughly but
-expecting further Stormhold-specific divergences the way
+The remaining still-untranscribed tick-loop helper, `tickMovementAndAI`
+(the real per-tick action dispatcher, decompiled/e.java's `e(long)`) --
+gates a whole further web of interconnected methods (`a()`/`f()`/
+`g(long)`/`h(long)`/`n()`/`d(long)`/`m()`, all confirmed to exist and
+roughly what they each do this session, just not yet transcribed) --
+this is where real combat input, camp/rest, and `Monster.onDeath()`'s
+own still-unrecovered caller most likely live. `paintFlashOverlays()`/
+`paintUnknown_b()` (the two remaining unported-pixel paint methods,
+both gated on that same live state). Beyond that: a character-creation
+UI (`main.cpp` still hardcodes class 0). Following dawnstar's own later
+milestones roughly but expecting further Stormhold-specific
+divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

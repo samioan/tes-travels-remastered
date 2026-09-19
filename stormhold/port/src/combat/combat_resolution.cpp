@@ -171,4 +171,43 @@ void CombatResolution::MonsterTick(MonsterState& m, PlayerState& player, const C
     m.aiPhase = 1;
 }
 
+bool CombatResolution::TickMonstersOnLevel(WorldRegistry& world, GeneratedLevel& level, PlayerState& player,
+                                            const CharacterData& charData, const ItemDatabase& items,
+                                            const MonsterDatabase& monsterDb, std::vector<GeneratedLevel>& levels,
+                                            int64_t now, JavaRandom& globalRng, JavaRandom& ambushRng,
+                                            int16_t& spawnIdCounter) {
+    bool showAttackMessage = false;
+    size_t levelIndex = static_cast<size_t>(level.number - 1);
+
+    std::vector<int16_t> spawnIds;
+    spawnIds.reserve(world.monsters[levelIndex].size());
+    for (const auto& entry : world.monsters[levelIndex]) spawnIds.push_back(entry.first);
+
+    for (int16_t spawnId : spawnIds) {
+        auto it = world.monsters[levelIndex].find(spawnId);
+        if (it == world.monsters[levelIndex].end()) continue;
+        MonsterState m = MonsterRuntime::FromBytes(it->second);
+
+        if (MonsterRuntime::IsAdjacent(m, player.tileX, player.tileY)) {
+            if (m.aiPhase == 0) {
+                m.unconfirmedTimestamp = now;
+                m.aiPhase = 1;
+            } else if (m.aiPhase == 1 && now - m.unconfirmedTimestamp > 800) {
+                MonsterTick(m, player, charData, items, monsterDb, now, globalRng, level, world, ambushRng,
+                            spawnIdCounter);
+                showAttackMessage = true;
+            } else if (now - m.unconfirmedTimestamp > 800) {
+                MonsterTick(m, player, charData, items, monsterDb, now, globalRng, level, world, ambushRng,
+                            spawnIdCounter);
+            }
+        } else {
+            MonsterRuntime::Chase(m, player.tileX, player.tileY, levels, globalRng);
+        }
+
+        DungeonRuntime::StoreMonster(world, m);
+    }
+
+    return showAttackMessage;
+}
+
 }  // namespace stormhold

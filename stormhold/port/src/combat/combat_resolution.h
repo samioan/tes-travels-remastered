@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <vector>
 
 #include "assets/character_data.h"
 #include "assets/item_database.h"
@@ -90,6 +91,56 @@ public:
                              const ItemDatabase& items, const MonsterDatabase& monsterDb, int64_t now,
                              JavaRandom& globalRng, GeneratedLevel& level, WorldRegistry& world,
                              JavaRandom& ambushRng, int16_t& spawnIdCounter);
+
+    // GameCanvas.tickMonsterAI() (M37, phase-3 port; was decompiled/
+    // e.java's b(long)) -- REPLACES this port's own earlier wrong
+    // "tickStatusCountdowns_b" guess-name in ../../../src/GameCanvas.java.
+    // The long-flagged, previously-unrecovered caller for Monster.tick()/
+    // Monster.chase() (see ../../docs/ROADMAP.md, flagged since phase-3
+    // M14/M15) -- finally found. For every monster registered on `level`
+    // (must be the PLAYER's own current level -- caller's responsibility,
+    // same trust-the-caller convention `MonsterTick`'s own `level`
+    // parameter already uses): NOT adjacent to the player ->
+    // `MonsterRuntime::Chase` one step (itself gated on IsWithinRange/
+    // chaseCadence; `IsAdjacent`'s own non-adjacent call ALSO resets
+    // `aiPhase` to 0, a confirmed side effect, see its own doc comment);
+    // adjacent -> an 800ms wind-up: `aiPhase` 0->1 just starts the timer,
+    // `aiPhase` 1 past 800ms resolves the FIRST real attack (`MonsterTick`)
+    // and marks this call's own return true (the caller's cue to show the
+    // "Creature attacks!" popup, `MSG_CREATURE_ATTACKS` priority 2 --
+    // `../../../src/GameCanvas.java`'s own `ah`/`showMessage(ah,2)` call,
+    // confirmed reproduced ONLY on this first wind-up-to-attack
+    // transition), and any LATER 800ms-elapsed tick (`aiPhase` already
+    // left at 2 by `MonsterTick`'s own previous call) resolves a repeat
+    // attack with no further popup. Every branch stores the monster back
+    // via `DungeonRuntime::StoreMonster` -- unlike `tickPerSecond()`'s own
+    // confirmed dead-write loop (`player/player_combat_stats.h`'s own
+    // `TickPerSecond`), this one really does persist, since the original
+    // explicitly calls `store()` itself every time.
+    //
+    // Iterates a SNAPSHOT of `level`'s own registered spawnIds, not the
+    // live map directly: `MonsterTick`'s own ailment-2 ("swarm curse")
+    // branch can insert NEW monsters into this exact same registry mid-
+    // loop (`DungeonRuntime::SpawnAmbushMonsters`) -- the real Hashtable/
+    // Enumeration the original enumerates has the SAME hazard (a real,
+    // confirmed original quirk, not introduced here), but Java's legacy
+    // Enumeration merely has unspecified-but-non-crashing behavior for
+    // it, while a `std::unordered_map` iterator invalidated by a
+    // mid-loop insert is genuine undefined behavior -- strictly worse
+    // than the original, not a faithful port of it. A monster removed
+    // mid-loop (a future kill-on-attack path) is simply skipped if its
+    // snapshotted spawnId no longer resolves.
+    //
+    // Returns true if a "Creature attacks!" popup should be shown THIS
+    // call -- caller decides what to do with that (e.g. `render/
+    // message_popup.h`'s own `MessagePopup::Show`), same "caller
+    // supplies/owns state" pattern this port uses throughout; this
+    // module still doesn't depend on `stormhold_render` at all.
+    static bool TickMonstersOnLevel(WorldRegistry& world, GeneratedLevel& level, PlayerState& player,
+                                     const CharacterData& charData, const ItemDatabase& items,
+                                     const MonsterDatabase& monsterDb, std::vector<GeneratedLevel>& levels,
+                                     int64_t now, JavaRandom& globalRng, JavaRandom& ambushRng,
+                                     int16_t& spawnIdCounter);
 };
 
 }  // namespace stormhold

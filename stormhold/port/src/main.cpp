@@ -41,15 +41,31 @@
 // wall-clock delta -- this port's own ticks are already fixed-interval,
 // so the two are equivalent here.
 //
-// Deliberately NOT wired here: paintFlashOverlays()/paintUnknown_b() (both
-// still gated on live tick-loop state, see docs/PORT_ROADMAP.md's own
-// "what's next"), the message popup (MessagePopup::Show has no reachable
-// real call site yet either -- every one lives inside a still-
-// untranscribed tick-loop helper), and the still-untranscribed tick-loop
-// helpers themselves (rollCampInterrupted/tickMovementAndAI/setSomeFlag)
-// -- so there is still no monster AI and no combat input yet. Turning
-// (Move dir 3/4, no strafe) and stepping forward/backward are the only
-// player actions this milestone wires.
+// M37 layers in `CombatResolution::TickMonstersOnLevel`
+// (GameCanvas.tickMonsterAI(), was a throw-stub -- see its own header
+// comment for the full writeup): real monster AI, finally closing the
+// long-flagged "Monster.tick()/chase() have no wired caller" gap
+// (docs/ROADMAP.md, open since phase-3 M14/M15). Also the first real
+// call site for `MessagePopup` (M30) -- the "Creature attacks!" popup
+// this method's own return value triggers is now actually shown and
+// painted. Called ahead of `VisibleObjects::Refresh`, matching
+// `run()`'s own real relative order for this piece specifically; the
+// exact relative order against `TickStatusCountdowns`/`TickPerSecond`
+// below (which run AFTER `refreshVisibleObjectsAndMinimap()` and this
+// tick's own repaint in the real `run()`) is NOT reproduced exactly --
+// a deliberate simplification, since nothing yet reads state in a way
+// that would make the difference observable.
+//
+// Deliberately NOT wired here: paintFlashOverlays()/paintUnknown_b()
+// (both still gated on live tick-loop state, see docs/PORT_ROADMAP.md's
+// own "what's next"), and the still-untranscribed tick-loop helpers
+// (rollCampInterrupted is transcribed but has no reachable caller worth
+// wiring without the camp system around it; tickMovementAndAI/the real
+// per-tick action dispatcher) -- so there is still no combat INPUT
+// (only monsters attack; the player can't attack back yet), no camp
+// system, and no rank-up/level-up flow. Turning (Move dir 3/4, no
+// strafe) and stepping forward/backward are the only player actions
+// this milestone wires.
 #include <windows.h>
 
 #include <cstdint>
@@ -61,6 +77,7 @@
 #include "assets/dungeon_geometry.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "combat/combat_resolution.h"
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
@@ -73,9 +90,11 @@
 #include "render/game_renderer.h"
 #include "render/hotbar_assets.h"
 #include "render/hud_state.h"
+#include "render/message_popup.h"
 #include "render/status_bar_plan.h"
 #include "render/visible_object_assets.h"
 #include "render/visible_object_renderer.h"
+#include "util/java_random.h"
 #include "world/dungeon_generator.h"
 #include "world/warden.h"
 
@@ -156,6 +175,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // the last repaint set, not this tick's own not-yet-run one).
     bool monsterRenderedLastFrame = false;
     int64_t secondAccumulatorMs = 0;
+    int64_t gameTimeMs = 0;
+    // M37: JavaRandom seeds are arbitrary here -- this port has no
+    // persisted ESGame-wide RNG session state yet (same class of gap
+    // M6/M9 already flagged for dungeon generation/character creation).
+    stormhold::JavaRandom combatRng(1);
+    stormhold::JavaRandom ambushRng(2);
+    // Deliberately far above anything M6/M18's own generation-time
+    // spawnId counters would ever reach across 37 levels, avoiding a
+    // collision with a REAL registered monster's own spawnId -- same
+    // reasoning player/player_creation.h's own spawnId=1 stand-in
+    // documents for its own local counter.
+    int16_t ambushSpawnIdCounter = 10000;
+    stormhold::MessagePopupState messagePopup;
 
     window.RunMessageLoop([&]() {
         if (clock.ConsumeTick()) {
@@ -177,6 +209,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
             if (mDown && !mKeyWasDown) minimapZoomedOut = !minimapZoomedOut;
             mKeyWasDown = mDown;
+
+            gameTimeMs += stormhold::GameClock::kTickInterval.count();
+
+            // M37: GameCanvas.run()'s own this.tickMonsterAI(frameStart)
+            // call (see this file's own header comment on the relative-
+            // order simplification). Only the player's OWN current level
+            // ever ticks -- matching the real ESGame.G[]-indexed read
+            // exactly, not an invented simplification.
+            stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
+            bool showAttackMessage = stormhold::CombatResolution::TickMonstersOnLevel(
+                world, currentLevelMutable, player, charData, items, monsters, levels, gameTimeMs, combatRng,
+                ambushRng, ambushSpawnIdCounter);
+            if (showAttackMessage) {
+                stormhold::MessagePopup::Show(messagePopup, {"Creature", "attacks!"}, 2, gameTimeMs);
+            }
+            stormhold::MessagePopup::Tick(messagePopup, gameTimeMs);
 
             // M35: GameCanvas.run()'s own this.c(deltaMs) call, ahead of
             // this tick's own repaint (see monsterRenderedLastFrame's own
@@ -211,16 +259,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             int iconSet = stormhold::ResolveHudIconSet(stormhold::HudState{}, player, std::nullopt);
             stormhold::GameRenderer::RenderHud(backbuffer, hotbarAssets, iconSet);
 
-            const stormhold::GeneratedLevel& currentLevel = levels[static_cast<size_t>(player.currentLevel - 1)];
             if (minimapZoomedOut) {
                 stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
-                    currentLevel, world, player.tileX, player.tileY, player.facing, 7, levelLookup);
+                    currentLevelMutable, world, player.tileX, player.tileY, player.facing, 7, levelLookup);
                 stormhold::GameRenderer::RenderMinimapZoomedOut(backbuffer, grid, player.facing);
             } else {
                 stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
-                    currentLevel, world, player.tileX, player.tileY, player.facing, 17, levelLookup);
+                    currentLevelMutable, world, player.tileX, player.tileY, player.facing, 17, levelLookup);
                 stormhold::GameRenderer::RenderMinimapNormal(backbuffer, grid, player.facing);
             }
+            stormhold::MessagePopup::Paint(backbuffer, messagePopup);
         }
         window.Present(backbuffer);
     });

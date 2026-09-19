@@ -1668,7 +1668,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
                      didTick = true;
                   }
 
-                  this.tickStatusCountdowns_b(frameStart);
+                  this.tickMonsterAI(frameStart);
                   this.tickStatusCountdowns_e(frameStart);
                   this.tickMovementAndAI(frameStart, deltaMs);
                   if (this.player.tryRankUpSkills()) {
@@ -1681,7 +1681,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
                   this.unconfirmed_v = false;
                }
 
-               this.setSomeFlag(false);
+               this.refreshVisibleObjectsAndMinimap(false);
                if (autoRepaintEnabled) {
                   this.repaint();
                   this.serviceRepaints();
@@ -1727,8 +1727,10 @@ public class GameCanvas extends FullCanvas implements Runnable {
    // not yet transcribed (each corresponds to a short original method
    // whose exact source wasn't reached in this pass). ----
 
+   // Confirmed (phase-3 port M37): byte-for-byte from decompiled/e.java's
+   // o() -- a flat 1-in-10 chance.
    private boolean rollCampInterrupted() {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's o())");
+      return Util.randomInt(10) == 1;
    }
 
    // M22: fully transcribed from decompiled/e.java's d() -- needed for
@@ -1755,8 +1757,58 @@ public class GameCanvas extends FullCanvas implements Runnable {
       }
    }
 
-   private void tickStatusCountdowns_b(long now) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's b(long))");
+   // Confirmed (phase-3 port M37): byte-for-byte from decompiled/e.java's
+   // b(long) -- RENAMED from this file's own earlier wrong
+   // "tickStatusCountdowns_b" guess (it has nothing to do with status
+   // countdowns at all). This is the long-flagged, previously-
+   // unrecovered caller for Monster.tick()/Monster.chase()
+   // (../../docs/ROADMAP.md, flagged since phase-3 M14/M15) -- finally
+   // found. For every monster registered on the player's own current
+   // level: not adjacent -> chase() one step (isAdjacent()'s own
+   // non-adjacent call ALSO resets aiPhase to 0, a confirmed side
+   // effect -- see Monster.java's own isAdjacent() header comment);
+   // adjacent -> an 800ms wind-up (aiPhase 0->1 starts the timer,
+   // aiPhase 1 past 800ms resolves the FIRST real attack via tick() AND
+   // shows the "Creature attacks!" popup -- MSG_CREATURE_ATTACKS
+   // (`ah` in the original) at priority 2, ONLY on this first
+   // wind-up-to-attack transition -- and any LATER 800ms-elapsed tick
+   // resolves a repeat attack with no further popup). Every branch
+   // calls store() -- unlike tickPerSecond()'s own confirmed dead-write
+   // loop over this exact same registry (see that method's own header
+   // comment), this one really does persist, since the original
+   // explicitly calls store() itself every time.
+   private void tickMonsterAI(long now) {
+      Hashtable levelMonsters = ESGame.monsters[this.player.currentLevel - 1];
+      if (levelMonsters == null) {
+         return;
+      }
+
+      Enumeration e = levelMonsters.elements();
+
+      while (e.hasMoreElements()) {
+         byte[] data = (byte[])e.nextElement();
+         Monster m = Monster.fromBytesShared(data);
+
+         if (m.isAdjacent(this.player)) {
+            if (m.aiPhase == 0) {
+               m.unconfirmedTimestamp = now;
+               m.aiPhase = 1;
+            } else if (m.aiPhase == 1 && now - m.unconfirmedTimestamp > 800L) {
+               m.tick(this.player, now);
+               if (this.showMessage(MSG_CREATURE_ATTACKS, 2)) {
+                  messageShownAt = now;
+                  unconfirmed_ad = true;
+               }
+            } else if (now - m.unconfirmedTimestamp > 800L) {
+               m.tick(this.player, now);
+            }
+
+            m.store();
+         } else {
+            m.chase(this.player);
+            m.store();
+         }
+      }
    }
 
    private void tickStatusCountdowns_e(long now) {
@@ -1777,7 +1829,22 @@ public class GameCanvas extends FullCanvas implements Runnable {
       this.threadStarted = true;
    }
 
-   private void setSomeFlag(boolean value) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's a(boolean))");
+   // Confirmed (phase-3 port M37): byte-for-byte from decompiled/e.java's
+   // a(boolean) -- RENAMED from this file's own earlier wrong
+   // "setSomeFlag" guess (it doesn't set any flag at all -- it's a
+   // refresh trigger). Player.refreshVisibleObjects() (already fully
+   // transcribed) already IS what `this.ax.d(var1)` in the original
+   // calls; this wrapper just also refreshes the zoomed-out minimap grid
+   // unconditionally (populateMinimapGrid(), M32) and the normal-zoom
+   // one ONLY when it's the one actually on screen (hotbarContext == 2
+   // -- see paintAll()'s own header comment on `f`/hotbarContext's dual
+   // role as both the numeric-hotkey icon-row context AND, confusingly,
+   // the minimap zoom-mode selector).
+   private void refreshVisibleObjectsAndMinimap(boolean includeWarden) {
+      this.player.refreshVisibleObjects(includeWarden);
+      this.populateMinimapGrid();
+      if (hotbarContext == 2) {
+         this.populateVisibleGrid();
+      }
    }
 }

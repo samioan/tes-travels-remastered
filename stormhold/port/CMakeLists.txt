@@ -119,7 +119,7 @@ target_compile_definitions(stormhold_port PRIVATE UNICODE _UNICODE NOMINMAX WIN3
 # stormhold_dungeon/stormhold_assets/stormhold_player transitively
 # (PUBLIC), listed explicitly anyway for clarity at this, the actual
 # executable's own link line.
-target_link_libraries(stormhold_port PRIVATE stormhold_render stormhold_player stormhold_dungeon)
+target_link_libraries(stormhold_port PRIVATE stormhold_render stormhold_player stormhold_dungeon stormhold_combat)
 if(MSVC)
   target_compile_options(stormhold_port PRIVATE /W4)
 endif()
@@ -267,3 +267,7 @@ target_link_libraries(status_countdowns_smoke PRIVATE stormhold_player)
 # M36 milestone smoke test -- see src/tests/m36_tick_per_second_smoke.cpp.
 add_executable(tick_per_second_smoke src/tests/m36_tick_per_second_smoke.cpp)
 target_link_libraries(tick_per_second_smoke PRIVATE stormhold_player)
+
+# M37 milestone smoke test -- see src/tests/m37_monster_ai_tick_smoke.cpp.
+add_executable(monster_ai_tick_smoke src/tests/m37_monster_ai_tick_smoke.cpp)
+target_link_libraries(monster_ai_tick_smoke PRIVATE stormhold_combat stormhold_player)
