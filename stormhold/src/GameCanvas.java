@@ -128,9 +128,31 @@ public class GameCanvas extends FullCanvas implements Runnable {
       {11, 25, 31, 20, 14, 1, 0, 0, -1, -1, 2, 25, 15, 81, 8, 16, 9, 0, 17, 60, 57, 18},
       {26, 40, 31, 32, 21, 1, 0, 0, -1, -1, 43, 44, 22, 50, 25, 23, -36, 9, 24, -25, 44, 25}
    };
-   // TODO: 41 rows x 2 cols, mostly {0,0}/{0,3}/{0,2} -- purpose
-   // unconfirmed, likely per-position-code render flags of some kind
-   // (shape suggestive of dawnstar's OBJECT_EXTRA_FLAGS, not confirmed).
+   // **Phase-3 M28 correction:** an earlier pass's comment here claimed
+   // "41 rows x 2 cols" -- counted directly, this literal actually has
+   // only 31 rows. Purpose still unconfirmed beyond its shape (mostly
+   // {0,0}/{0,3}/{0,2} -- shape suggestive of dawnstar's
+   // OBJECT_EXTRA_FLAGS, not confirmed), but the row count is NOT a
+   // cosmetic detail: renderMonsterOrIconSprite() indexes this table at
+   // `[typeIndex - 1]` for every typeIndex whose monsterNearZoneRow()
+   // resolves >= 0, which includes the WHOLE 26-40 range -- not just
+   // 26-31 (the only part this 31-row table can actually cover).
+   // typeIndex 41 is intercepted earlier by its own `if` branch and
+   // never reaches this table, but typeIndex 32-40 are ordinary,
+   // confirmed-spawnable monster types (../port/src/world/
+   // dungeon_generator.cpp's own kMonsterTypeByTier references types up
+   // to 40 at real dungeon tiers) with no such interception. So this is
+   // a REAL, REACHABLE original-game bug, not dead code the way M10's
+   // leftLevelZone or M19's unreachable neighbor-throw are: any of those
+   // 9 monster types walking into the player's near-view slot (1,
+   // directly ahead) makes the real game evaluate
+   // `unconfirmedTable_a[31..39]` on a 31-entry array --
+   // ArrayIndexOutOfBoundsException on real MIDP hardware. Preserved as
+   // a real crash condition in the port too (render/
+   // visible_object_renderer.h throws rather than silently clamping or
+   // reading garbage), not "fixed" by extending the table with invented
+   // data -- there is no way to recover what real values, if any, the
+   // original ever had for indices 31-39.
    private static final byte[][] unconfirmedTable_a = new byte[][]{
       {0, 0}, {0, 0}, {0, 3}, {0, 3}, {0, 3}, {0, 2}, {0, 2}, {0, 3}, {0, 3}, {0, 3}, {0, 0},
       {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},

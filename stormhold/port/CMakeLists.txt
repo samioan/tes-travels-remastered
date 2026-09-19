@@ -26,6 +26,7 @@ add_library(stormhold_assets STATIC
   src/assets/dungeon_geometry.cpp
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
+  src/assets/monster_image_set.cpp
   src/assets/raw_image.cpp
   src/assets/shop_dialogue.cpp
   src/assets/spell_database.cpp
@@ -98,6 +99,7 @@ add_library(stormhold_render STATIC
   src/render/corridor_render_plan.cpp
   src/render/game_renderer.cpp
   src/render/status_bar_plan.cpp
+  src/render/visible_object_renderer.cpp
 )
 target_include_directories(stormhold_render PUBLIC src)
 target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets stormhold_player)
@@ -219,3 +221,8 @@ target_link_libraries(status_bar_smoke PRIVATE stormhold_render stormhold_player
 # M27 milestone smoke test -- see src/tests/m27_visible_objects_smoke.cpp.
 add_executable(visible_objects_smoke src/tests/m27_visible_objects_smoke.cpp)
 target_link_libraries(visible_objects_smoke PRIVATE stormhold_player)
+
+# M28 milestone smoke test -- see src/tests/m28_visible_object_renderer_smoke.cpp.
+add_executable(visible_object_renderer_smoke src/tests/m28_visible_object_renderer_smoke.cpp)
+target_include_directories(visible_object_renderer_smoke PRIVATE src)
+target_link_libraries(visible_object_renderer_smoke PRIVATE stormhold_render stormhold_player)

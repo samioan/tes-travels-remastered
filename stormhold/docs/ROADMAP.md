@@ -182,11 +182,20 @@ unblocked paintWalls(); confirms, rather than just flags, M22's own
 byproduct finding that a monster's unconfirmedFlag really means "has
 ever been seen", permanently, matching dawnstar's own identical finding;
 also fixed a real doc-comment-only kind-label swap in Player.java's own
-resolveVisibleObjectSlot() header comment found while reading it).
-Every OTHER paint method GameCanvas needs -- the sprite drawing off
-M27's own cache, HUD's hotkey row, minimap, message popups -- still
-needs live state this port doesn't wire up yet, and there's still no
-actual game loop calling any of this) are done, all
+resolveVisibleObjectSlot() header comment found while reading it), and
+M28 (VisibleObjectRenderer -- the actual sprite drawing off M27's
+visibleObjects, paintObjects()/paintMonsters() themselves, against
+Backbuffer::Blit() (M23/M24); found a real, reachable, previously-
+unknown original-game crash bug by counting a table's rows against its
+own header comment's claim: unconfirmedTable_a's comment said "41 rows"
+but it actually has 31, and typeIndex 32-40 -- confirmed real,
+spawnable monster types at deep dungeon tiers, not dead code -- index
+past the end of it if they ever reach the player's near-view slot;
+preserved as a thrown exception in the port, not silently read out of
+bounds). Every OTHER paint method GameCanvas needs -- HUD's hotkey row,
+minimap, message popups -- still needs live state this port doesn't
+wire up yet, and there's still no actual game loop calling any of this)
+are done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small
 identical pieces (tick cadence, backbuffer, window, binary reader/writer) are

@@ -1751,30 +1751,101 @@ read-through.
       end to end. All 25 smoke tests pass; full clean rebuild stayed at
       zero `/W4` warnings.
 
+- [x] **M28 -- `VisibleObjectRenderer`, the actual sprite drawing off
+      M27's `visibleObjects`** (this session). `paintObjects()`/
+      `paintMonsters()` themselves, the "selection logic done, now draw
+      it" pairing this milestone completes (M21->M25, now M27->M28).
+
+      New `assets/monster_image_set.h`/`.cpp` (`MonsterImageSet::Load`):
+      a genuinely new, previously-unported data file,
+      `monsterfilenamesin.dat` (a no-count-prefix `<UTF x 5 x 7>` grid,
+      `ESGame.loadMonsterImageFileNames()`), feeding
+      `runMonsterImageLoader()`'s own chunk/count/imageless-type logic to
+      load `GameCanvas.monsterImages`' 33 `.cus` files by their real,
+      per-type filenames (5 of the 33 slots -- types 4/11/18/23/30 --
+      deliberately stay unloaded, modeled as `std::nullopt`, matching
+      `isImagelessMonsterType()`). New `render/visible_object_assets.h`
+      (`VisibleObjectAssets::Load`) bundles that plus `bagImages`/
+      `crystalImages`/`chestImages` (confirmed filenames, all `RawImage`,
+      M23's compositor). New `render/visible_object_renderer.h`/`.cpp`
+      (`VisibleObjectRenderer::RenderObjects`/`RenderMonsters`) ports
+      `renderObjectAt`/`renderObjectNear`/`Mid`/`Far`/`hasCrystalGlow`
+      and `renderMonsterSpriteForSlot`/`monsterNearZoneRow`/`MidZoneRow`/
+      `FarZoneRow`/`renderMonsterNearSprite`/`renderMonsterOrIconSprite`/
+      `renderMonsterMidZoneSprite`/`drawMonsterZoneFrame`/
+      `renderMonsterFarZoneSprite`/`renderWardenCompassIcon` directly
+      against `Backbuffer::Blit()` (M23/M24) -- `drawRawImageFrame()`'s
+      own shift-then-clip/mirror idiom needs no reinterpretation, it's
+      exactly `Blit()`'s own established shape.
+
+      **A real, reachable, previously-undiscovered original-game crash
+      bug, found by literally counting a table's rows against its own
+      header comment's claim:** `unconfirmedTable_a`'s comment said "41
+      rows x 2 cols" -- counted directly, it actually has only 31.
+      `renderMonsterOrIconSprite()` indexes it at `[typeIndex-1]` for
+      the WHOLE `monsterNearZoneRow()`-resolves->=0 range, which includes
+      typeIndex 26-40, not just 26-31 (all this 31-row table can cover).
+      typeIndex 41 is intercepted by its own earlier `if` branch and
+      never reaches the table, but typeIndex 32-40 are ordinary,
+      CONFIRMED-spawnable monster types (`world/dungeon_generator.cpp`'s
+      own `kMonsterTypeByTier` references types up to 40 at real deep
+      dungeon tiers) with no such interception -- so any of those 9
+      types walking into the player's near-view slot (1, directly ahead)
+      makes the real game evaluate a 31-entry array at index 31-39:
+      `ArrayIndexOutOfBoundsException` on real hardware. Unlike M10's
+      `leftLevelZone` or M19's unreachable neighbor-throw, this one is
+      NOT dead code -- reachability was independently confirmed against
+      the real generation table, not assumed. Preserved as a genuine
+      crash condition in the port (`VisibleObjectRenderer` throws
+      `std::runtime_error` rather than reading out of bounds or silently
+      clamping -- undefined behavior would be a strictly WORSE port-side
+      outcome than the original's own clean exception, not a faithful
+      one), not "fixed" by inventing data for the missing 9 rows.
+      `../src/GameCanvas.java`'s own header comment on that field
+      corrected and expanded with the full writeup.
+
+      Also confirmed real, dead code (unlike the bug above): the near-
+      zone `crystalGlow` branch `renderObjectNear()` takes is never
+      actually reachable (every real caller passes `false`, and unlike
+      `renderObjectMid`/`Far`, `renderObjectNear` never calls
+      `hasCrystalGlow()` itself either) -- a dropped item with the
+      crystal-glow bit set renders as a normal bag sprite at the near
+      slot, never `crystalImages[0]`. Preserved exactly (already flagged
+      by M22's own doc comment, reconfirmed here while porting).
+
+      Verified with a new `visible_object_renderer_smoke.exe`: exact
+      zone/slot screen positions for chests/dropped items/crystal-glow
+      items via synthetic images; the confirmed-dead near-zone crystal
+      branch (renders green, not blue, even with the bit set); the
+      near-zone primary/secondary-overlay sprite draw INCLUDING real
+      frame-slicing (typeIndex 3's nonzero `secondaryFrame`); the
+      confirmed-reachable typeIndex-32-40 crash (throws) vs. typeIndex 41
+      (doesn't, intercepted earlier); Warden placeholder rendering in
+      the far/mid zones without setting the monster-drawn flag; and a
+      real integration check against `chestfarclosed.cus` loaded through
+      `VisibleObjectAssets::Load` (300 real opaque pixels, zero
+      mismatches). All 26 smoke tests pass; full clean rebuild stayed at
+      zero `/W4` warnings.
+
+      **Still no live game loop wiring any of this together** -- same
+      gap M25/M27 already flagged, `main.cpp` still just presents a
+      blank frame.
+
 ## What's next
 
-M28 onward: `paintObjects()`/`paintMonsters()` themselves -- the actual
-sprite rendering off M27's now-populated `PlayerState::visibleObjects`,
-the natural next "selection logic done, now draw it" pairing (M21->M25,
-now M27->M28). Needs `monsterImages`/`chestImages`/`bagImages`/
-`crystalImages` (`RawImage`, M23's compositor, real filenames still not
-grepped from `ESGame.java`) loaded into a `CorridorAssets`-shaped bundle,
-plus porting the actual per-slot sprite-selection logic (near/mid/far
-zone row resolution, `hasCrystalGlow()`, mirroring) M22 already
-transcribed into `GameCanvas.java`'s `renderObjectAt`/`renderMonsterSpriteForSlot`
-family. Beyond that: `paintHud()` needs `hotbarIcons` (`DecodedImage`,
-M24's compositor, real filenames not yet grepped) plus
+M29 onward: `paintHud()` needs `hotbarIcons` (`DecodedImage`, M24's
+compositor, real filenames not yet grepped from `ESGame.java`) plus
 `resolveHudIconSet()`'s own `unconfirmed_aa`/`_m`/`_R`/`_W` flags and
 `isNpcDialogueDue()` (a `Shop`/`targetMonster` dependency) -- none of
 which have a port-side home yet, likely a small new "HUD/UI state"
 struct alongside `PlayerState`, not a `PlayerState` field itself (these
 are `GameCanvas`'s own static fields in the original, not `Player`'s);
 `paintMinimap*()` need the still-untranscribed `q()`/`p()` minimap-
-populate methods M22 found but didn't transcribe. And still open across
-all of the above: an actual live game loop in `main.cpp` calling
-`GameRenderer`/`VisibleObjects::Refresh`/whatever M28+ adds every tick
-instead of presenting a blank frame; the still-untranscribed tick-loop
-helpers (`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
+populate methods M22 found but didn't transcribe. Beyond that: an actual
+live game loop in `main.cpp` calling `GameRenderer`/
+`VisibleObjectRenderer`/`VisibleObjects::Refresh`/whatever M29+ adds
+every tick instead of presenting a blank frame; the still-untranscribed
+tick-loop helpers (`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
 `rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`); and the
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
 onDeath()` callers (flagged again this session, unchanged since
