@@ -1997,23 +1997,88 @@ read-through.
       rendering milestone so far has flagged; `main.cpp` still just
       presents a blank frame.
 
+- [x] **M32 -- `DungeonRuntime::SampleSquareView`, the minimap's own
+      populate step** (this session). The "selection logic" half of
+      `paintMinimap*()`'s remaining gap -- pixels (`drawMinimapGrid()`,
+      already fully transcribed in `../src/GameCanvas.java` since M22)
+      deliberately deferred to a follow-on milestone, same "selection
+      first, pixels later" split M21/M27/M29 already used.
+
+      Turned out most of the reverse-engineering legwork for this was
+      **already done**: `Dungeon.tileAt()`/`sampleView()`/
+      `sampleSquareView7()`/`sampleSquareView17()` were all fully
+      transcribed in `../src/Dungeon.java` already (M21's own
+      `tileAt()`, plus `sampleView()` itself, found already complete
+      while reading `Dungeon.java` directly for this milestone -- not
+      new work). What was actually still missing, confirmed against
+      decompiled `e.java`'s own `q()`/`p()`: `GameCanvas` never called
+      any of it. Filled in `populateMinimapGrid()`/`populateVisibleGrid()`
+      (renamed from `q()`/`p()`) as thin wrappers -- same "confirmed
+      and transcribed" treatment M30 gave `showMessage()`. Both real
+      call sites live inside still-untranscribed tick-loop helpers, so
+      -- same as `showMessage()` before M30's own live wiring existed
+      -- these have no reachable caller yet either.
+
+      New `DungeonRuntime::SampleSquareView` (`dungeon/dungeon_runtime.h`/
+      `.cpp`) is the C++ side of `sampleView()`: wall/special-bit
+      sampling (via the already-ported `TileAt`, so it sees across
+      level boundaries near an edge) into a `size`x`size` grid (7 or 17,
+      one shared implementation), then an overlay pass -- live monster/
+      chest/dropped-item positions from `WorldRegistry` on every real
+      dungeon level, or (**preserved exactly as found, not "corrected"**)
+      hub-town NPC positions gated on `Shop.questRewardClaimable[i]` --
+      the SAME surprising gate `Shop.java` already documents for its
+      one-time quest-reward-collection branch, not a general visibility
+      flag (M27's own header comment already flagged this exact pattern
+      once, for `resolveVisibleObjectSlot()` -- same original quirk,
+      independently reachable a second time here).
+
+      This port has no live Shop/quest-economy model at all yet (see
+      `world/warden.h`'s own class comment -- deliberately scoped to
+      just the Warden visit mechanic). Rather than invent one or skip
+      the hub-town branch's overlay silently, the new `HubMinimapMarkers`
+      struct (`questRewardClaimable[7]`, `wardenPresent`) is a plain
+      caller-supplied parameter -- same "caller supplies/owns state"
+      pattern as `render/hud_state.h`'s `TargetMonsterInfo` (M29) --
+      defaulting to `nullptr`, which skips the marker overlay entirely
+      (wall-bit sampling still works) rather than guessing. `Shop.
+      SHOP_X`/`SHOP_Y` themselves ARE hardcoded (`kShopMarkerX`/
+      `kShopMarkerY`) -- plain static data, not live state, safe to
+      reuse directly (index 6 matches `WardenState::kShopX`/`kShopY`
+      exactly, cross-checked).
+
+      Verified with a new `minimap_sample_smoke.exe`: wall/special-bit
+      sampling cross-checked against `TileAt` directly (including the
+      "both bits set -- wall bit wins" precedence case); monster/chest/
+      dropped-item overlay bits for BOTH the facing==1/3 and facing==2/4
+      index-math branches, each independently re-derived from
+      decompiled/`i.java`'s own literal formulas; the dropped-item
+      visibility gate and monster `unconfirmedFlag` gate; and the
+      hub-town branch's marker overlay, Warden-slot skip-unless-present
+      gate, and `nullptr` no-crash fallback. All 30 smoke tests pass;
+      full clean rebuild stayed at zero `/W4` warnings. `javac`
+      recompiled clean (8 expected warnings only) after the
+      `GameCanvas.java` fill-in.
+
 ## What's next
 
-`paintMinimap*()` needs the still-untranscribed `q()`/`p()`
-minimap-populate methods M22 found but didn't transcribe (their own
-compass-glyph text draws are already covered by `BitmapFont`'s existing
-N/E/S/W letters, so once those two methods are transcribed the pixel
-side should be a short follow-on, not a whole new primitive hunt).
-Beyond that: an actual live game loop in `main.cpp` calling
+`paintMinimap*()`'s own actual pixel drawing -- `drawMinimapGrid()` plus
+the compass-glyph draw are both already fully transcribed/coverable
+(`BitmapFont`'s existing N/E/S/W letters), so this should be a
+straightforward `GameRenderer::RenderMinimap` follow-on, not a new
+primitive hunt, once there's a `SquareViewGrid` to feed it (`main.cpp`
+calling `populateMinimapGrid`/`populateVisibleGrid`'s own C++
+equivalent). Beyond that: an actual live game loop in `main.cpp` calling
 `GameRenderer`/`VisibleObjectRenderer`/`VisibleObjects::Refresh`/
-`MessagePopup::Tick` every tick instead of presenting a blank frame;
-the still-untranscribed tick-loop helpers (`tickStatusCountdowns`/
-`tickPerSecond`/`rollCampInterrupted`/`tickMovementAndAI`/
-`setSomeFlag`); and the still-unrecovered `tryRankUpSkills()`/
-`Monster.tick()`/`Monster.onDeath()` callers (flagged again this
-session, unchanged since M14/M15), which may well turn out to live in
-exactly those same tick-loop helpers. Following dawnstar's own later
-milestones roughly but expecting further Stormhold-specific divergences
-the way
+`MessagePopup::Tick`/`SampleSquareView` every tick instead of presenting
+a blank frame; the still-untranscribed tick-loop helpers
+(`tickStatusCountdowns`/`tickPerSecond`/`rollCampInterrupted`/
+`tickMovementAndAI`/`setSomeFlag`, one of which -- `a(boolean)` -- is
+now confirmed as `q()`/`p()`'s own real caller); and the still-
+unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.onDeath()`
+callers (flagged again this session, unchanged since M14/M15), which
+may well turn out to live in exactly those same tick-loop helpers.
+Following dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

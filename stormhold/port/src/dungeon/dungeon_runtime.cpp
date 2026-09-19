@@ -282,4 +282,102 @@ CorridorViewGrid DungeonRuntime::SampleCorridorView(const GeneratedLevel& level,
     return grid;
 }
 
+SquareViewGrid DungeonRuntime::SampleSquareView(const GeneratedLevel& level, const WorldRegistry& world, int x,
+                                                 int y, int facing, int size, const LevelLookup& levels,
+                                                 const HubMinimapMarkers* hubMarkers) {
+    SquareViewGrid grid(static_cast<size_t>(size), std::vector<uint8_t>(static_cast<size_t>(size), 0));
+    int half = size / 2;
+    size_t levelIndex = static_cast<size_t>(level.number - 1);
+
+    auto inBounds = [size](int v) { return v >= 0 && v < size; };
+
+    if (facing == 1 || facing == 3) {
+        int step = (facing == 1) ? 1 : -1;
+
+        for (int row = 0; row < size; row++) {
+            for (int col = 0; col < size; col++) {
+                uint8_t tile = TileAt(level, x + (col - half) * step, y + (row - half) * step, levels);
+                uint8_t bits = tile & 1;
+                if (bits == 0) bits = tile & 8;
+                grid[static_cast<size_t>(col)][static_cast<size_t>(row)] = bits;
+            }
+        }
+
+        if (level.number > 1) {
+            for (const auto& [spawnId, record] : world.monsters[levelIndex]) {
+                MonsterState m = MonsterRuntime::FromBytes(record);
+                int col = step * (m.tileX - x) + half;
+                int row = step * (m.tileY - y) + half;
+                if (inBounds(col) && inBounds(row) && m.unconfirmedFlag) {
+                    grid[static_cast<size_t>(col)][static_cast<size_t>(row)] |= 2;
+                }
+            }
+            for (const auto& [key, c] : world.chests[levelIndex]) {
+                int col = step * (c[0] - x) + half;
+                int row = step * (c[1] - y) + half;
+                if (inBounds(col) && inBounds(row)) grid[static_cast<size_t>(col)][static_cast<size_t>(row)] |= 4;
+            }
+            for (const auto& d : world.droppedItems[levelIndex]) {
+                int col = step * (d[0] - x) + half;
+                int row = step * (d[1] - y) + half;
+                bool visible = (d[6] & 1) != 0;
+                if (inBounds(col) && inBounds(row) && visible) {
+                    grid[static_cast<size_t>(col)][static_cast<size_t>(row)] |= 4;
+                }
+            }
+        } else if (hubMarkers != nullptr) {
+            for (int i = 0; i < 7 && (i != 6 || hubMarkers->wardenPresent); i++) {
+                if (!hubMarkers->questRewardClaimable[i]) continue;
+                int col = step * (kShopMarkerX[i] - x) + half;
+                int row = step * (kShopMarkerY[i] - y) + half;
+                if (inBounds(col) && inBounds(row)) grid[static_cast<size_t>(col)][static_cast<size_t>(row)] |= 4;
+            }
+        }
+    } else if (facing == 2 || facing == 4) {
+        int step = (facing == 2) ? 1 : -1;
+
+        for (int row = 0; row < size; row++) {
+            for (int col = 0; col < size; col++) {
+                uint8_t tile = TileAt(level, x - (row - half) * step, y + (col - half) * step, levels);
+                uint8_t bits = tile & 1;
+                if (bits == 0) bits = tile & 8;
+                grid[static_cast<size_t>(col)][static_cast<size_t>(row)] = bits;
+            }
+        }
+
+        if (level.number > 1) {
+            for (const auto& [spawnId, record] : world.monsters[levelIndex]) {
+                MonsterState m = MonsterRuntime::FromBytes(record);
+                int col = step * (m.tileY - y) + half;
+                int row = half - step * (m.tileX - x);
+                if (inBounds(col) && inBounds(row) && m.unconfirmedFlag) {
+                    grid[static_cast<size_t>(col)][static_cast<size_t>(row)] |= 2;
+                }
+            }
+            for (const auto& [key, c] : world.chests[levelIndex]) {
+                int col = step * (c[1] - y) + half;
+                int row = half - step * (c[0] - x);
+                if (inBounds(col) && inBounds(row)) grid[static_cast<size_t>(col)][static_cast<size_t>(row)] |= 4;
+            }
+            for (const auto& d : world.droppedItems[levelIndex]) {
+                int col = step * (d[1] - y) + half;
+                int row = half - step * (d[0] - x);
+                bool visible = (d[6] & 1) != 0;
+                if (inBounds(col) && inBounds(row) && visible) {
+                    grid[static_cast<size_t>(col)][static_cast<size_t>(row)] |= 4;
+                }
+            }
+        } else if (hubMarkers != nullptr) {
+            for (int i = 0; i < 7 && (i != 6 || hubMarkers->wardenPresent); i++) {
+                if (!hubMarkers->questRewardClaimable[i]) continue;
+                int col = step * (kShopMarkerY[i] - y) + half;
+                int row = half - step * (kShopMarkerX[i] - x);
+                if (inBounds(col) && inBounds(row)) grid[static_cast<size_t>(col)][static_cast<size_t>(row)] |= 4;
+            }
+        }
+    }
+
+    return grid;
+}
+
 }  // namespace stormhold

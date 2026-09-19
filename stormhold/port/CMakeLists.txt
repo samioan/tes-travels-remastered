@@ -246,3 +246,7 @@ target_link_libraries(message_popup_smoke PRIVATE stormhold_render)
 # M31 milestone smoke test -- see src/tests/m31_hud_renderer_smoke.cpp.
 add_executable(hud_renderer_smoke src/tests/m31_hud_renderer_smoke.cpp)
 target_link_libraries(hud_renderer_smoke PRIVATE stormhold_render)
+
+# M32 milestone smoke test -- see src/tests/m32_minimap_sample_smoke.cpp.
+add_executable(minimap_sample_smoke src/tests/m32_minimap_sample_smoke.cpp)
+target_link_libraries(minimap_sample_smoke PRIVATE stormhold_dungeon)

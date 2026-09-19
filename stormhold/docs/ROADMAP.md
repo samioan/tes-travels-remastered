@@ -38,11 +38,15 @@ GameCanvas split by content, among others. Left for later phases (not
 blocking phase 2/3): `GameCanvas.java`'s remaining tick-loop helpers
 (`tickStatusCountdowns`/`tickPerSecond`/`rollCampInterrupted`/
 `tickMovementAndAI`/`setSomeFlag` -- `showMessage` itself was filled in
-during phase-3 M30, see `PORT_ROADMAP.md`) and two brand-new `q()`/`p()`
-minimap-populate methods phase-3 M22 turned up --
-its pixel-rendering `paint*` methods are all transcribed for real now
-(phase-3 M21/M22, including two real mapping bugs found and fixed along
-the way, see `PORT_ROADMAP.md`), `ESGame.
+during phase-3 M30, see `PORT_ROADMAP.md`). Its pixel-rendering `paint*`
+methods are all transcribed for real now (phase-3 M21/M22, including
+two real mapping bugs found and fixed along the way, see
+`PORT_ROADMAP.md`); the two brand-new `q()`/`p()` minimap-populate
+methods phase-3 M22 turned up were filled in during phase-3 M32 (turned
+out `Dungeon.java`'s own `sampleView()`/`sampleSquareView7()`/
+`sampleSquareView17()` were already fully transcribed -- `q()`/`p()`
+themselves, renamed `populateMinimapGrid()`/`populateVisibleGrid()`,
+were the only actual gap). Also left: `ESGame.
 loadHelpTopicBodies()`'s remaining help topics, and a set
 of individually-flagged lower-confidence names throughout (see each file's
 header comment and CLASS_MAP.md).

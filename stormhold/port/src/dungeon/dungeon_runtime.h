@@ -18,6 +18,35 @@ namespace stormhold {
 // [i][depth], i in 0..8, depth in 0..4.
 using CorridorViewGrid = std::array<std::array<uint8_t, 5>, 9>;
 
+// Dungeon.sampleView()'s output shape (`byte[size][size]` in the
+// original, size 7 or 17 -- see DungeonRuntime::SampleSquareView below).
+// Sized dynamically (unlike CorridorViewGrid's fixed 9x5) since the same
+// method serves both the 7x7 zoomed-out and 17x17 normal minimap.
+// Indexed [col][row], matching the original's own outGrid[col][row].
+using SquareViewGrid = std::vector<std::vector<uint8_t>>;
+
+// Shop.SHOP_X[]/SHOP_Y[] (../../../src/Shop.java) -- the 7 hub-town NPCs'
+// fixed world positions, plain static data (unlike Shop's own live
+// quest-economy state below, this is safe to hardcode). Index 6 (Varus)
+// matches WardenState::kShopX/kShopY (world/warden.h) exactly.
+constexpr int kShopMarkerX[7] = {12, 3, 15, 6, 7, 12, 9};
+constexpr int kShopMarkerY[7] = {3, 7, 7, 13, 2, 13, 9};
+
+// Shop.questRewardClaimable[]/wardenPresent -- the LIVE per-NPC state
+// Dungeon.sampleView()'s hub-town branch (levelNumber==1) gates its own
+// marker overlay on, in place of SampleSquareView's normal monster/
+// chest/dropped-item overlay. This port has no live Shop/quest-economy
+// model at all yet (see world/warden.h's own class comment: deliberately
+// scoped to just the Warden visit mechanic, not Shop.java's full 7-NPC
+// dialogue/quest dispatcher) -- so, same "caller supplies/owns state"
+// pattern as render/hud_state.h's TargetMonsterInfo, the caller passes
+// whatever it currently believes this state to be, rather than this
+// method inventing a live tracker.
+struct HubMinimapMarkers {
+    std::array<bool, 7> questRewardClaimable{};
+    bool wardenPresent = false;
+};
+
 // Packs a tile position into a single map key -- a plain-int stand-in
 // for Util.posKey(x,y)'s "x,y" string (`Dungeon.storeChest`/
 // `removeChest`'s real key). The string key has no behavioral
@@ -250,6 +279,26 @@ public:
     // doesn't interpret it.
     static CorridorViewGrid SampleCorridorView(const GeneratedLevel& level, int x, int y, int facing,
                                                 const LevelLookup& levels);
+
+    // M32: Dungeon.sampleView(x,y,facing,size,outGrid) -- shared
+    // implementation behind Dungeon.sampleSquareView7()/17() (the two
+    // minimap zoom levels, GameCanvas's own still-untranscribed q()/p()
+    // wrappers, see docs/PORT_ROADMAP.md). Samples wall/special bits
+    // (TileAt's & 1, falling back to & 8 when that's 0) into a
+    // `size`x`size` grid centered on (x,y) and rotated for `facing`,
+    // then overlays either live monster (bit 2)/chest/dropped-item
+    // (both bit 4) positions from `world` (levelNumber > 1), or --
+    // preserved exactly as found, see this file's own HubMinimapMarkers
+    // doc comment -- hub-town (levelNumber == 1) NPC positions gated on
+    // `hubMarkers->questRewardClaimable[i]` (also bit 4), the SAME
+    // surprising gate Shop.java documents for its one-time quest-reward-
+    // collection branch, not a general visibility flag. `hubMarkers` is
+    // only read on the hub level; pass nullptr there to skip the marker
+    // overlay entirely (still samples wall bits) rather than guessing at
+    // unmodeled Shop state.
+    static SquareViewGrid SampleSquareView(const GeneratedLevel& level, const WorldRegistry& world, int x, int y,
+                                            int facing, int size, const LevelLookup& levels,
+                                            const HubMinimapMarkers* hubMarkers = nullptr);
 
     // Dungeon.viewGridAt(index, depth, grid): reads a SampleCorridorView
     // grid at a (dx, dy)-shaped relative offset -- confirmed to be the

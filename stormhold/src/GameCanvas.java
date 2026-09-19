@@ -1198,6 +1198,27 @@ public class GameCanvas extends FullCanvas implements Runnable {
       dg.drawPixels(img.pixels, true, 0, img.widthAgain, x - frame * frameWidth, y, img.width, img.height, transform, 4444);
    }
 
+   // Confirmed (phase-3 port M32): byte-for-byte from decompiled/e.java's
+   // q(). Refreshes minimapTileGrid from the player's own current
+   // position/facing -- the zoomed-out minimap's own populate step,
+   // paintMinimapZoomedOut()'s data source. Both real call sites (e.java
+   // lines 1288/1693) live inside still-untranscribed tick-loop helpers
+   // (`a(boolean)`/its own analog below) -- not reachable on its own
+   // yet, same gap this file's other confirmed-but-unwired methods
+   // already have (see showMessage()'s own M30 note).
+   private void populateMinimapGrid() {
+      this.player.currentDungeon().sampleSquareView7(this.player.tileX, this.player.tileY, this.player.facing,
+         minimapTileGrid);
+   }
+
+   // Confirmed (phase-3 port M32): byte-for-byte from decompiled/e.java's
+   // p(). Same role as populateMinimapGrid() above, for the normal-zoom
+   // (17x17 visibleTileGrid) minimap instead.
+   private void populateVisibleGrid() {
+      this.player.currentDungeon().sampleSquareView17(this.player.tileX, this.player.tileY, this.player.facing,
+         visibleTileGrid);
+   }
+
    // M22: fully transcribed from decompiled/e.java's k(Graphics) -- see
    // this file's header comment for why this replaces the earlier
    // pass's wrong "paintHotbar1()" name/mapping (this is the zoomed-out,
