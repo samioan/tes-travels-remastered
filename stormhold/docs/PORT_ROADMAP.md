@@ -2107,8 +2107,6 @@ read-through.
       remaining gap is "wire it all into an actual running loop," not
       "port more paint methods."
 
-## What's next
-
 - [x] **M34 -- wire the real pipeline into the actual windowed
       `stormhold_port.exe`** (this session). Until now `main.cpp` was
       still M1's placeholder: a solid-color `Backbuffer::Fill` and an
@@ -2233,8 +2231,6 @@ read-through.
       warnings only) after the `GameCanvas.java` fill-in. Re-verified
       the real windowed exe still launches and runs after the `main.cpp`
       changes.
-
-## What's next
 
 - [x] **M36 -- `PlayerCombatStats::TickPerSecond`, the second tick-loop
       helper** (this session). `GameCanvas.tickPerSecond()` (was
