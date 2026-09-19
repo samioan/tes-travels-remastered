@@ -2060,25 +2060,71 @@ read-through.
       recompiled clean (8 expected warnings only) after the
       `GameCanvas.java` fill-in.
 
+- [x] **M33 -- `GameRenderer::RenderMinimapZoomedOut`/
+      `RenderMinimapNormal`, `paintMinimap*()`'s own actual pixel
+      drawing** (this session). The "pixels" half of M32's own deferred
+      split -- as expected, a short follow-on: both primitives it
+      needed (`BitmapFont`, `Backbuffer::FillRect`) already existed.
+
+      Transcribes `paintMinimapZoomedOut()`/`paintMinimapNormal()`
+      directly (`../../../src/GameCanvas.java` lines 1229-1250): the
+      compass glyph (M31's `BitmapFont`, white, at each method's own
+      fixed position -- `compassGlyphs[facing]`, a plain char array
+      already covered entirely by existing letters/`'0'`, no new glyphs
+      needed), a black backdrop rect, then the grid itself via a shared
+      `DrawMinimapGrid` helper (mirroring `drawMinimapGrid()`'s own
+      shared-helper structure exactly) fed by M32's `SquareViewGrid`.
+
+      `DrawMinimapGrid` reproduces the original's own if/else-if color
+      precedence exactly (1=black/wall, 0=white/floor, else bit
+      2=red/bit 4=blue/bit 8=purple -- checked in that order, so a cell
+      with both bit 2 and bit 4 set draws red, never blue), plus the
+      unconditional green dead-center player marker painted OVER
+      whatever the cell's own color was. The purple color (bit 8) is
+      decoded directly from `drawMinimapGrid()`'s own literal
+      `13369599` (=0xCC00FF) rather than trusting that method's own
+      header comment's "cyan-ish" guess from an earlier, less certain
+      pass -- not corrected there, since the real RGB bytes are what
+      matters, not the color-name guess.
+
+      Verified with a new `minimap_renderer_smoke.exe`: the compass
+      glyph and backdrop for both zoom levels, cross-checked against
+      each method's own literal geometry directly; every one of
+      `DrawMinimapGrid`'s per-byte-value color branches, including the
+      bit2-vs-bit4 precedence case; and the dead-center marker
+      overriding an otherwise-wall cell. All 31 smoke tests pass; full
+      clean rebuild stayed at zero `/W4` warnings.
+
+      **Still not wired into any live tick loop** -- same gap every
+      rendering milestone so far has flagged; `main.cpp` still just
+      presents a blank frame. With this milestone, EVERY `paint*`
+      method `GameCanvas.java` transcribes real pixel logic for now has
+      a real C++ counterpart somewhere in this port (`GameRenderer`
+      here; `VisibleObjectRenderer` for `paintObjects`/`paintMonsters`,
+      M28; `MessagePopup` for `paintMessagePopup`, M30) EXCEPT
+      `paintFlashOverlays`/`paintUnknown_b`, both still gated on live
+      tick-loop state this port doesn't model yet -- the dominant
+      remaining gap is "wire it all into an actual running loop," not
+      "port more paint methods."
+
 ## What's next
 
-`paintMinimap*()`'s own actual pixel drawing -- `drawMinimapGrid()` plus
-the compass-glyph draw are both already fully transcribed/coverable
-(`BitmapFont`'s existing N/E/S/W letters), so this should be a
-straightforward `GameRenderer::RenderMinimap` follow-on, not a new
-primitive hunt, once there's a `SquareViewGrid` to feed it (`main.cpp`
-calling `populateMinimapGrid`/`populateVisibleGrid`'s own C++
-equivalent). Beyond that: an actual live game loop in `main.cpp` calling
-`GameRenderer`/`VisibleObjectRenderer`/`VisibleObjects::Refresh`/
-`MessagePopup::Tick`/`SampleSquareView` every tick instead of presenting
-a blank frame; the still-untranscribed tick-loop helpers
-(`tickStatusCountdowns`/`tickPerSecond`/`rollCampInterrupted`/
-`tickMovementAndAI`/`setSomeFlag`, one of which -- `a(boolean)` -- is
-now confirmed as `q()`/`p()`'s own real caller); and the still-
-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.onDeath()`
-callers (flagged again this session, unchanged since M14/M15), which
-may well turn out to live in exactly those same tick-loop helpers.
-Following dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way
+An actual live game loop in `main.cpp`, calling `GameRenderer`/
+`VisibleObjectRenderer`/`VisibleObjects::Refresh`/`MessagePopup::Tick`/
+`SampleSquareView`/`populateMinimapGrid`-and-`populateVisibleGrid`'s own
+C++ equivalents every tick instead of presenting a blank frame -- this
+is now the dominant remaining gap, not a missing paint method or
+primitive (see M33's own closing note). That in turn needs the
+still-untranscribed tick-loop helpers (`tickStatusCountdowns`/
+`tickPerSecond`/`rollCampInterrupted`/`tickMovementAndAI`/
+`setSomeFlag`, one of which -- `a(boolean)` -- is now confirmed as
+`q()`/`p()`'s own real caller) actually transcribed and wired, plus
+`paintFlashOverlays()`/`paintUnknown_b()` (the two remaining
+unported-pixel paint methods, both gated on that same live state). The
+still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/
+`Monster.onDeath()` callers (flagged again this session, unchanged
+since M14/M15) may well turn out to live in exactly those same
+tick-loop helpers. Following dawnstar's own later milestones roughly
+but expecting further Stormhold-specific divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
 found.

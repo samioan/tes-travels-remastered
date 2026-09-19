@@ -27,16 +27,19 @@ namespace stormhold {
 // digit glyphs plus a new HotbarAssets icon bundle (render/
 // hotbar_assets.h).
 //
-// Every OTHER paint* method M22 transcribed (paintObjects/paintMonsters/
-// paintMinimap*/paintMessagePopup [rendered separately, render/
-// message_popup.h, M30]/paintFlashOverlays/paintUnknown_b) is
-// deliberately still out of scope here -- each needs far more live
-// state this port doesn't have yet (Player.visibleObjects actually fed
-// by a live tick loop, GameCanvas's own still-unmodeled UI flags, the
-// still-untranscribed minimap-populate methods). Same "primitive first,
-// pipeline later" discipline M21/M23/M24 already established, just now
-// applied to a second whole vertical slice instead of a single
-// primitive.
+// M33: paintMinimapZoomedOut()/paintMinimapNormal() (lines 1229-1250) --
+// both minimap zoom levels, fed by M32's SampleSquareView output.
+//
+// paintObjects()/paintMonsters() are ALREADY ported (M28), just not on
+// this class -- see render/visible_object_renderer.h's own
+// RenderObjects/RenderMonsters. paintMessagePopup() likewise lives on
+// its own render/message_popup.h (M30), not here. Only
+// paintFlashOverlays()/paintUnknown_b() remain unported pixel-wise,
+// both still gated on live state (this class's own still-unmodeled
+// tick-loop flags) this port doesn't have wired up yet. Same
+// "primitive first, pipeline later" discipline M21/M23/M24 already
+// established, just now applied to whole vertical slices instead of a
+// single primitive.
 class GameRenderer {
 public:
     // GameCanvas.paintWalls(), transcribed directly from
@@ -84,6 +87,39 @@ public:
     // hotkey dispatch) is NOT modeled -- input handling remains out of
     // scope, same gap M29's own header comment already flagged.
     static void RenderHud(Backbuffer& bb, const HotbarAssets& assets, int iconSet);
+
+    // GameCanvas.paintMinimapZoomedOut(): the compass glyph (M32's
+    // `compassGlyphs[facing]`, white, at (16,10)), a black 23x23
+    // backdrop at (10,20), then the 7x7 `grid` (M32's
+    // `SampleSquareView(..., 7, ...)` output) via the shared
+    // `DrawMinimapGrid` helper below (origin (10,20), 3px cells, 1px
+    // offset). `grid` must be exactly 7x7 -- the caller's own job to
+    // supply the right `SampleSquareView` output, same "caller supplies/
+    // owns state" pattern this port already uses throughout.
+    static void RenderMinimapZoomedOut(Backbuffer& bb, const SquareViewGrid& grid, int facing);
+
+    // GameCanvas.paintMinimapNormal(): same shape as
+    // RenderMinimapZoomedOut above, larger scale -- compass glyph at
+    // (58,10), a black 89x89 backdrop at (15,25), then the 17x17 `grid`
+    // (M32's `SampleSquareView(..., 17, ...)` output) at origin
+    // (15,25), 5px cells, 2px offset.
+    static void RenderMinimapNormal(Backbuffer& bb, const SquareViewGrid& grid, int facing);
+
+private:
+    // GameCanvas.drawMinimapGrid(): shared by both methods above.
+    // `gridSize`x`gridSize` cells of `cellPx` pixels, each colored by
+    // its own byte value -- 1=black(wall), 0=white(floor), else bit 2=
+    // red, bit 4=blue, bit 8=purple (0xCC00FF -- decimal literal 13369599
+    // decoded directly, not independently re-derived; GameCanvas.java's
+    // own header comment calls this "cyan-ish" from a first, less
+    // certain pass, not corrected here since the actual RGB bytes are
+    // what matters, not the color-name guess) -- checked in that exact
+    // order, matching the original's own if/else-if chain (a byte with
+    // both bit 2 and bit 4 set draws red, never blue). The player's own
+    // dead-center cell (row==col==gridSize/2) draws green (0x00FF00)
+    // OVER whatever the grid's own cell color was, unconditionally.
+    static void DrawMinimapGrid(Backbuffer& bb, int originX, int originY, int gridSize, int cellPx, int pixelOffset,
+                                 const SquareViewGrid& grid);
 };
 
 }  // namespace stormhold

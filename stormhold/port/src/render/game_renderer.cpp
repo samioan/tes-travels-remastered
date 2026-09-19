@@ -28,6 +28,13 @@ constexpr HotbarRow kHotbarRows[3] = {
 constexpr int kHotbarX[4] = {14, 62, 104, 144};
 constexpr int kHotbarGlyphX[4] = {5, 53, 96, 135};
 
+// GameCanvas.compassGlyphs = {'0','N','E','S','W'} -- confirmed against
+// ../../../src/GameCanvas.java's own field declaration, indexed
+// directly by `facing` (index 0 = '0' is dead in practice, since
+// Player.facing is always 1-4 -- same assumption
+// DungeonRuntime::RelativeViewOffset already makes for the same field).
+constexpr char kCompassGlyphs[5] = {'0', 'N', 'E', 'S', 'W'};
+
 }  // namespace
 
 void GameRenderer::RenderCorridorView(Backbuffer& bb, const CorridorAssets& assets, const CorridorViewGrid& view,
@@ -77,6 +84,47 @@ void GameRenderer::RenderHud(Backbuffer& bb, const HotbarAssets& assets, int ico
         bb.Blit(kHotbarX[slot], 174, assets.icons[idx]);
         BitmapFont::DrawString(bb, kHotbarGlyphX[slot], 180, std::string(1, kHotbarKeyGlyphs[idx]),
                                 PackRGB565(0, 0, 0));
+    }
+}
+
+void GameRenderer::RenderMinimapZoomedOut(Backbuffer& bb, const SquareViewGrid& grid, int facing) {
+    BitmapFont::DrawString(bb, 16, 10, std::string(1, kCompassGlyphs[facing]), PackRGB565(255, 255, 255));
+    bb.FillRect(10, 20, 23, 23, PackRGB565(0, 0, 0));
+    DrawMinimapGrid(bb, 10, 20, 7, 3, 1, grid);
+}
+
+void GameRenderer::RenderMinimapNormal(Backbuffer& bb, const SquareViewGrid& grid, int facing) {
+    BitmapFont::DrawString(bb, 58, 10, std::string(1, kCompassGlyphs[facing]), PackRGB565(255, 255, 255));
+    bb.FillRect(15, 25, 89, 89, PackRGB565(0, 0, 0));
+    DrawMinimapGrid(bb, 15, 25, 17, 5, 2, grid);
+}
+
+void GameRenderer::DrawMinimapGrid(Backbuffer& bb, int originX, int originY, int gridSize, int cellPx,
+                                    int pixelOffset, const SquareViewGrid& grid) {
+    int center = gridSize / 2;
+
+    for (int row = 0; row < gridSize; row++) {
+        int py = originY + pixelOffset + row * cellPx;
+        for (int col = 0; col < gridSize; col++) {
+            int px = originX + pixelOffset + col * cellPx;
+            uint8_t cell = grid[static_cast<size_t>(col)][static_cast<size_t>(row)];
+
+            if (cell == 1) {
+                bb.FillRect(px, py, cellPx, cellPx, PackRGB565(0, 0, 0));
+            } else if (cell == 0) {
+                bb.FillRect(px, py, cellPx, cellPx, PackRGB565(255, 255, 255));
+            } else if ((cell & 2) != 0) {
+                bb.FillRect(px, py, cellPx, cellPx, PackRGB565(255, 0, 0));
+            } else if ((cell & 4) != 0) {
+                bb.FillRect(px, py, cellPx, cellPx, PackRGB565(0, 0, 255));
+            } else if ((cell & 8) != 0) {
+                bb.FillRect(px, py, cellPx, cellPx, PackRGB565(0xCC, 0x00, 0xFF));
+            }
+
+            if (row == center && col == center) {
+                bb.FillRect(px, py, cellPx, cellPx, PackRGB565(0, 255, 0));
+            }
+        }
     }
 }
 
