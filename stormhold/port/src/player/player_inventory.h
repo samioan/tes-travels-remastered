@@ -120,6 +120,17 @@ public:
     // uses (setHubSpawnPosition(false)). The two are genuinely different
     // fixed points in the original (../../../src/Player.java's own
     // setHubSpawnPosition() header comment).
+    //
+    // **Real, deliberately unwired gap (M25):** the original calls
+    // `this.refreshCorridorView()` as its own very next statement after
+    // this (Player.java line 2493) -- not reproduced here, since doing so
+    // faithfully needs a `PlayerMovement::LevelLookup` this method
+    // doesn't take. `p.corridorView` is left stale (still describing the
+    // pre-camp position) until the player's next `CommitMove`, which DOES
+    // refresh it (see `PlayerMovement::RefreshCorridorView`). Harmless for
+    // any caller that doesn't render off `corridorView` between this call
+    // and the next move -- true of every caller so far (M12's smoke test,
+    // player_movement.cpp's own auto-camp-on-tile branch).
     static void MarkCampAndReturnToTown(PlayerState& p);
 
     // Player.warpToCampMark(): restores position from the camp bookmark.
@@ -127,6 +138,10 @@ public:
     // the whole method confirms the original genuinely never resets
     // facing here, unlike markCampAndReturnToTown()'s own
     // setHubSpawnPosition(true) call, which does.
+    //
+    // Same real, deliberately unwired `refreshCorridorView()` gap as
+    // MarkCampAndReturnToTown above (Player.java line 2501) -- see that
+    // method's own header comment.
     static void WarpToCampMark(PlayerState& p);
 };
 

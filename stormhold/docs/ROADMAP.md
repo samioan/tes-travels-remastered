@@ -160,9 +160,18 @@ grepping ESGame.java's own asset-loading call sites, not M7's RawImage
 format -- plus a matching Backbuffer::Blit(DecodedImage) overload,
 cross-checked against the real floor3.png/newwallsnok.png files: their
 decoded widths [36px, 144px] match paintWalls()'s/drawWallSegment()'s
-own tiling constants exactly. Still not yet wired into an actual render
-pass: no single live asset bundle, no PlayerState::corridorView, no
-GameCanvas-equivalent render function calling any of this yet) are
+own tiling constants exactly), and M25 (GameRenderer, the first real
+end-to-end pixel render this port has -- a live PlayerState::corridorView
+field wired through PlayerMovement::CommitMove at all three of
+Player.commitMove()'s own refreshCorridorView() call sites, plus
+GameCanvas.paintWalls() itself finally drawing real pixels into a real
+Backbuffer by combining M21's CorridorRenderPlan selection logic with
+M23/M24's Blit() compositors, cross-checked pixel-by-pixel against real
+floor3.png/newwallsnok.png files and a real M6-generated level across
+36,608 floor pixels and 105,565 opaque wall pixels, zero mismatches.
+Every OTHER paint method GameCanvas needs -- monsters/objects/HUD/
+minimap/message popups -- still needs live state this port doesn't wire
+up yet, and there's still no actual game loop calling any of this) are
 done, all
 verified against real extracted data/ground truth. Given
 the shared Vir2L "ngame" engine with dawnstar, small

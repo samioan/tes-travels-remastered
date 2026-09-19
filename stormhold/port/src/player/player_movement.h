@@ -32,9 +32,11 @@ namespace stormhold {
 // comment for both, including a real confirmed inconsistency between
 // this method's own Warden-clearing path and `WardenState::Leave`'s.
 //
-// `refreshNearbyMonsterFlags()`/`refreshCorridorView()` (monster-
-// registry/rendering side effects) are still skipped -- no renderer
-// exists in this port yet.
+// **M25: `CommitMove` now also wires `refreshCorridorView()`** (see
+// `RefreshCorridorView` below) -- `refreshNearbyMonsterFlags()` (the
+// OTHER rendering-adjacent side effect this class header used to lump in
+// alongside it) is still skipped; it touches monster-registry state this
+// class doesn't otherwise depend on, a separate follow-up.
 class PlayerMovement {
 public:
     // Looks up a GeneratedLevel by its 1-based level number. This port has
@@ -65,6 +67,29 @@ public:
     // Player.isWalkableTileBits(tileBits): not a wall (bit 1), not
     // blocked (bit 32, hub-town shop tiles), not monster-occupied (bit 2).
     static bool IsWalkableTileBits(uint8_t tileBits);
+
+    // M25: Player.refreshCorridorView() -- `this.currentDungeon().
+    // sampleCorridorView(this.tileX, this.tileY, this.facing,
+    // this.corridorView)`, via DungeonRuntime::SampleCorridorView (M21).
+    // `level` is the player's CURRENT level (post-move, when called from
+    // CommitMove below) -- the caller's job to pass the right one, same
+    // "caller supplies/owns world state" pattern this whole module
+    // already uses. Wraps `levels` in a const-returning adaptor internally
+    // since DungeonRuntime::LevelLookup's own signature returns `const
+    // GeneratedLevel&` (read-only lookups only), unlike this class's own
+    // mutable-returning LevelLookup alias.
+    //
+    // Exposed standalone, not just inlined into CommitMove, because
+    // Player.java's own refreshCorridorView() has THREE more call sites
+    // this port doesn't wire yet -- resetState() (character creation),
+    // markCampAndReturnToTown(), warpToCampMark() (Player.java lines
+    // 339/2493/2501) -- all real, all deliberately deferred: none of
+    // those three port-side equivalents (PlayerCreation::CreateCharacter,
+    // PlayerInventory::MarkCampAndReturnToTown/WarpToCampMark) take a
+    // LevelLookup today, and threading one through just for this is a
+    // separate, smaller follow-up, not a blocker for this milestone's
+    // actual goal (a live render pass off CommitMove's own corridorView).
+    static void RefreshCorridorView(PlayerState& p, const GeneratedLevel& level, const LevelLookup& levels);
 
     // Player.commitMove(dir) -- see class header comment for what's
     // deliberately not modeled. `world`/`items` are the M17 addition: once

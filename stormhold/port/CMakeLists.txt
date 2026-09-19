@@ -87,12 +87,15 @@ target_include_directories(stormhold_combat PUBLIC src)
 target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster stormhold_dungeon)
 
 # M21: GameCanvas.paintWalls()'s corridor wall-segment SELECTION logic
-# (data only, no pixels yet -- see docs/PORT_ROADMAP.md) -- see src/render/.
+# (data only, no pixels yet -- see docs/PORT_ROADMAP.md). M25: GameRenderer,
+# actually drawing those decisions into a real Backbuffer -- see
+# src/render/.
 add_library(stormhold_render STATIC
   src/render/corridor_render_plan.cpp
+  src/render/game_renderer.cpp
 )
 target_include_directories(stormhold_render PUBLIC src)
-target_link_libraries(stormhold_render PUBLIC stormhold_dungeon)
+target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets)
 
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
@@ -199,3 +202,7 @@ target_link_libraries(backbuffer_blit_smoke PRIVATE stormhold_assets)
 add_executable(decoded_image_smoke src/tests/m24_decoded_image_smoke.cpp)
 target_include_directories(decoded_image_smoke PRIVATE src)
 target_link_libraries(decoded_image_smoke PRIVATE stormhold_assets)
+
+# M25 milestone smoke test -- see src/tests/m25_game_renderer_smoke.cpp.
+add_executable(game_renderer_smoke src/tests/m25_game_renderer_smoke.cpp)
+target_link_libraries(game_renderer_smoke PRIVATE stormhold_render stormhold_player)

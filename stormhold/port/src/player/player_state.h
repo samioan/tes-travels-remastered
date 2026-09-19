@@ -128,12 +128,28 @@ struct PlayerState {
     // when the tile's dropped item is flagged locked (record[6] bit 4).
     bool pendingLockedItemFlag = false;
 
+    // --- M25: touched by player/player_movement.h's CommitMove and
+    // render/game_renderer.h. Player.corridorView's own shape (`byte[9][5]`
+    // -- dungeon/dungeon_runtime.h's CorridorViewGrid alias, matched
+    // structurally here rather than by #including that header directly,
+    // to keep this otherwise-lightweight foundational header free of
+    // dungeon_runtime.h's much heavier transitive include graph;
+    // CorridorViewGrid IS this exact type, a plain `using` alias, so no
+    // conversion is needed at call sites). Refreshed by
+    // PlayerMovement::RefreshCorridorView wherever Player.java's own
+    // refreshCorridorView() runs -- see that method's own header comment
+    // for which of the original's 6 call sites are (CommitMove) and
+    // aren't yet (character creation, MarkCampAndReturnToTown/
+    // WarpToCampMark) wired.
+    std::array<std::array<uint8_t, 5>, 9> corridorView{};
+
     // --- Deferred to a later milestone, none touched by character
-    // creation, core movement, or inventory: the corridor-occlusion view
-    // grid (corridorView, PlayerMovement doesn't call
-    // refreshCorridorView() yet -- see its own header comment), UI/
-    // rendering-only scratch state (endOfGameTriggered, stateByteAb), and
-    // visibleObjects (the 13-slot "what's renderable this frame" cache).
+    // creation, core movement, or inventory: UI/rendering-only scratch
+    // state (endOfGameTriggered, stateByteAb), and visibleObjects (the
+    // 13-slot "what's renderable this frame" cache paintObjects()/
+    // paintMonsters() need -- corridorView alone is only enough to render
+    // GameCanvas.paintWalls(), see render/game_renderer.h's own scope
+    // note).
 };
 
 }  // namespace stormhold

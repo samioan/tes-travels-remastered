@@ -1552,21 +1552,95 @@ read-through.
       calls `CorridorRenderPlan::Plan()` (M21) + both `Blit()` overloads
       together.
 
+- [x] **M25 -- `GameRenderer`, the first real end-to-end pixel render**
+      (this session). `PlayerState::corridorView` (`byte[9][5]` in the
+      original -- matched structurally, not by including
+      `dungeon/dungeon_runtime.h`'s heavier `CorridorViewGrid` alias
+      directly, to keep `player_state.h` lightweight) is now a real
+      field, and `PlayerMovement::RefreshCorridorView` (`Player.
+      refreshCorridorView()`) wires it through `CommitMove` at all THREE
+      of `Player.commitMove()`'s own call sites: both locked-dropped-item
+      early returns (Player.java lines 860/894) and the final
+      end-of-method call (line 914) -- in the exact same relative order
+      as the original (refreshCorridorView() runs BEFORE
+      autoMarkCampOnTile(), matching the original's own statement order).
+
+      New `render/corridor_assets.h` (`CorridorAssets::Load` -- just
+      `floorTexture`/`wallTexture` via `DecodedImage::Load`, deliberately
+      NOT a general "GameAssets" bundle also covering `monsterImages`/
+      `chestImages`/`bagImages`/`crystalImages`/`effectImages`/
+      `hotbarIcons` -- those feed paint methods needing far more live
+      state this port doesn't have yet, see below) and `render/
+      game_renderer.h`/`.cpp` (`GameRenderer::RenderCorridorView`):
+      `GameCanvas.paintWalls()` transcribed directly against
+      `CorridorRenderPlan::Plan()`'s own output (M21) -- the ailment-4
+      dark-red fallback fill (color literal `10485760` = `0xA00000` =
+      RGB(160,0,0)), the ailment-3 "draw nothing" skip, the 5x tiled
+      floor, and each `WallDrawCall` blitted via `Backbuffer::Blit()`
+      (M23/M24) with the exact same shifted-then-clipped positioning
+      `drawWallSegment()` itself uses (frames 0-7 unmirrored at
+      `x - frame*18`, frames 8-15 mirrored at `x - (frame-8)*18`, both
+      clipped to `[x, x+18)`).
+
+      **Real, deliberately unwired gap, documented rather than silently
+      dropped:** `Player.java`'s other THREE `refreshCorridorView()` call
+      sites (character creation's `resetState()`, `markCampAndReturnToTown()`,
+      `warpToCampMark()` -- lines 339/2493/2501) aren't wired, since none
+      of their port-side equivalents (`PlayerCreation::CreateCharacter`,
+      `PlayerInventory::MarkCampAndReturnToTown`/`WarpToCampMark`) take a
+      `LevelLookup` today; threading one through each is a small, separate
+      follow-up, not a blocker for this milestone's actual goal. Harmless
+      in practice for every existing caller (none renders off
+      `corridorView` between one of those calls and the player's next
+      `CommitMove`, which does refresh it).
+
+      Verified with a new `game_renderer_smoke.exe`: `CommitMove` leaves
+      `p.corridorView` exactly matching a fresh, independently-computed
+      `SampleCorridorView` call at the landed position/facing (both for a
+      plain step and for the locked-item early return); synthetic
+      known-value `DecodedImage`s confirm `RenderCorridorView`'s floor-
+      tiling/fallback-fill/ailment-3-skip branches pixel-exactly; and a
+      real integration pass against `floor3.png`/`newwallsnok.png` and a
+      real M6-generated level (all 4 facings from the level's own
+      stairway-corridor point, same reference point M21's own test uses)
+      independently recomputes each wall segment's expected source column
+      (shift + mirror math) and compares it directly against
+      `DecodedImage`'s own `R()`/`G()`/`B()`/`A()` accessors -- 36,608
+      real floor pixels and 105,565 real opaque wall pixels checked, zero
+      mismatches, both plain (frames 0-7) and mirrored (frames 8-15)
+      wall frames actually exercised by the real generated level. All 23
+      smoke tests pass; full clean rebuild stayed at zero `/W4` warnings.
+
+      **Still deliberately NOT a complete render pass:** every OTHER
+      paint* method M22 transcribed (`paintObjects`/`paintMonsters`/
+      `paintStatusBars`/`paintHud`/`paintMinimapZoomedOut`/
+      `paintMinimapNormal`/`paintMessagePopup`/`paintFlashOverlays`/
+      `paintUnknown_b`) needs far more live state this port doesn't wire
+      up yet -- `Player.visibleObjects`, a populated `WorldRegistry`-backed
+      monster/chest/dropped-item cache actually feeding a frame, hotbar/
+      dialogue state, HP/Magicka/Fatigue bars -- and there's still no
+      live game loop calling any of this from `main.cpp` at all. Same
+      "primitive first, pipeline later" discipline M21/M23/M24 already
+      established, just now applied to one whole vertical slice (corridor
+      floor+walls, selection logic through real pixels) instead of a
+      single primitive.
+
 ## What's next
 
-M25 onward: wiring an actual render pass together -- a single live asset
-bundle loading every image `GameCanvas` needs (`floorTexture`/
-`wallTexture`/`effectImages`/`hotbarIcons` via `DecodedImage::Load`,
-`monsterImages`/`chestImages`/`bagImages`/`crystalImages` via
-`RawImage::Load`, all confirmed real filenames), a live
-`PlayerState::corridorView` field populated by
-`DungeonRuntime::SampleCorridorView` (M21), and a real per-frame render
-function that calls `CorridorRenderPlan::Plan()` (M21) + `Backbuffer::
-Blit()` (M23/M24) together to actually put pixels on screen. Also still
-open: the brand-new `q()`/`p()` minimap-populate methods M22 found but
-didn't transcribe (not paint methods, but needed before the minimap can
-actually show anything live); the still-untranscribed tick-loop helpers
-(`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
+M26 onward: the remaining paint methods' own render passes -- each needs
+its own slice of live state this port doesn't have yet: `paintObjects()`/
+`paintMonsters()` need `Player.visibleObjects` (the 13-slot "what's
+renderable this frame" cache) actually populated from a live
+`WorldRegistry`, plus `monsterImages`/`chestImages`/`bagImages`/
+`crystalImages` (`RawImage`, M23's compositor) loaded; `paintStatusBars()`/
+`paintHud()` need the HP/Magicka/Fatigue stat reads already available on
+`PlayerState` today, so may be the cheapest next slice; `paintMinimap*()`
+need the still-untranscribed `q()`/`p()` minimap-populate methods M22
+found but didn't transcribe (not paint methods themselves, but needed
+before the minimap can show anything live). Beyond that: an actual live
+game loop in `main.cpp` calling `GameRenderer`/whatever M26+ adds every
+tick instead of presenting a blank frame; the still-untranscribed
+tick-loop helpers (`showMessage`/`tickStatusCountdowns`/`tickPerSecond`/
 `rollCampInterrupted`/`tickMovementAndAI`/`setSomeFlag`); and the
 still-unrecovered `tryRankUpSkills()`/`Monster.tick()`/`Monster.
 onDeath()` callers (flagged again this session, unchanged since

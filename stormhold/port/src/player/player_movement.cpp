@@ -92,6 +92,13 @@ bool PlayerMovement::IsWalkableTileBits(uint8_t tileBits) {
     return (tileBits & 2) == 0;
 }
 
+void PlayerMovement::RefreshCorridorView(PlayerState& p, const GeneratedLevel& level, const LevelLookup& levels) {
+    DungeonRuntime::LevelLookup constLevels = [&levels](int levelNumber) -> const GeneratedLevel& {
+        return levels(levelNumber);
+    };
+    p.corridorView = DungeonRuntime::SampleCorridorView(level, p.tileX, p.tileY, p.facing, constLevels);
+}
+
 bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& levels, WorldRegistry& world,
                                  const ItemDatabase& items, const MonsterDatabase& monsterDb, WardenState& warden) {
     if (p.coreStats[6] <= 0) return false;
@@ -174,6 +181,7 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
             std::array<int8_t, 7> record = *DungeonRuntime::FirstDroppedItemAt(world, levelIndex, p.tileX, p.tileY);
             if (record[6] & 4) {
                 p.pendingLockedItemFlag = true;
+                RefreshCorridorView(p, target, levels);
                 return true;
             }
 
@@ -202,6 +210,7 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
             for (const auto& record : records) {
                 if (record[6] & 4) {
                     p.pendingLockedItemFlag = true;
+                    RefreshCorridorView(p, target, levels);
                     return true;
                 }
 
@@ -224,7 +233,16 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
         }
     }
 
+    RefreshCorridorView(p, target, levels);
+
     if (isStep && (tileBits & 8)) {
+        // Player.commitMove()'s own ordering: refreshCorridorView() runs
+        // BEFORE autoMarkCampOnTile(), matching the statement order
+        // above exactly. autoMarkCampOnTile() -> markCampAndReturnToTown()
+        // calls refreshCorridorView() AGAIN in the original (Player.java
+        // line 2493, for the NEW hub position) -- not reproduced here,
+        // see PlayerInventory::MarkCampAndReturnToTown's own header
+        // comment on why that one's still deliberately unwired.
         PlayerInventory::MarkCampAndReturnToTown(p);
         p.justMarkedCamp = false;
     }
