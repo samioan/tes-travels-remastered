@@ -81,6 +81,7 @@ extern wchar_t** __wargv;
 #include "ui/character_creation_flow.h"
 #include "ui/loading_screen.h"
 #include "ui/menu_flow.h"
+#include "ui/npc_menu.h"
 #include "ui/options_menu.h"
 #include "util/java_random.h"
 #include "util/text.h"
@@ -283,19 +284,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool gameOverCancelKeyWasDown = false;
     dawnstar::Screen gameOverScreen(dawnstar::ScreenMode::PlainList);
     dawnstar::Screen gameOverExitingScreen(dawnstar::ScreenMode::PlainList);
-    // M45: GameCanvas.openNpcDialogue()'s own greeting popup
-    // (`GenericInfoUI.setupMessage(Shop.NAMES[shopId], line)` +
-    // `setCurrentDisplay`) -- shown whenever InteractTick::
-    // ProcessInteract's npcInSight branch returns a real line. Same
-    // early-return-pauses-the-tick-loop shape as inGameOver/
-    // inOptionsMenu above (`activeScreen != null`). Dismissing it (Ok
-    // only -- SetupMessage's own PlainList mode attaches no Cancel
-    // command, matching the original's real GenericInfoUI) just returns
-    // to the game rather than opening the real NPCChoicesUI menu --
-    // see interact_tick.h's own doc comment on why that's deferred.
-    bool inNpcDialogue = false;
-    bool npcDialogueSelectKeyWasDown = false;
-    dawnstar::Screen npcDialogueScreen(dawnstar::ScreenMode::PlainList);
+    // M45/M46: GameCanvas.openNpcDialogue()'s greeting popup and, via its Ok,
+    // the whole NPCChoicesUI menu graph (buy/sell/train/give/question/warp
+    // -- see ui/npc_menu.h). Shown whenever InteractTick::ProcessInteract's
+    // npcInSight branch fires. Same early-return-pauses-the-tick-loop shape
+    // as inGameOver/inOptionsMenu above (`activeScreen != null`); leaves
+    // only when the flow itself returns to the game view (Cancel on a
+    // choices screen, a warp, ...).
+    bool inNpcMenu = false;
+    bool npcMenuUpKeyWasDown = false;
+    bool npcMenuDownKeyWasDown = false;
+    bool npcMenuSelectKeyWasDown = false;
+    bool npcMenuCancelKeyWasDown = false;
+    dawnstar::NpcMenu npcMenu;
     // GameCanvas.campStartTime -- a GameCanvas field, not one of
     // Player's own, same reasoning as lastAttackTimeMs below.
     int64_t campStartTimeMs = 0;
@@ -439,12 +440,37 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // replaced wholesale by a real load.
         dawnstar::OtherStateInfo otherState = dawnstar::OtherStateInfo::Reset();
         // M45: the real, live counterpart of the same Shop.* fields
-        // `otherState` above carries as an inert flat container (see
-        // npc/shop_interaction.h's own ShopState doc comment for why
-        // they're not synced yet -- that's the future "shops" milestone).
-        // Reset alongside `otherState`, same two call sites (startup and
-        // a fresh character's own Shop.reset() tail below).
+        // `otherState` above carries as a flat save container. M46 syncs the
+        // two around every save/load (see syncOtherStateFromLive/
+        // syncLiveFromOtherState below). Reset alongside `otherState`, same
+        // two call sites (startup and a fresh character's own Shop.reset()
+        // tail below).
         dawnstar::ShopState shopState = dawnstar::ShopState::Reset();
+        // M46: ESGame's own Shop.*/Item.nextSpawnId/Monster.nextSpawnIdCounter
+        // statics are what saveGameState()'s writeOtherStateInfoToBytes()
+        // serializes and readOtherStateInfo() restores; here the live copies
+        // are shopState/nextDropSpawnId/nextMonsterSpawnId, so mirror them
+        // into/out of the flat OtherStateInfo container around save/load.
+        auto syncOtherStateFromLive = [&] {
+            otherState.itemNextSpawnId = nextDropSpawnId;
+            otherState.monsterNextSpawnIdCounter = nextMonsterSpawnId;
+            otherState.shopFirstVisit = shopState.firstVisit;
+            otherState.shopInteractionCount = shopState.interactionCount;
+            otherState.shopRewardsGiven = shopState.rewardsGiven;
+            otherState.shopQuestState1 = shopState.questState1;
+            otherState.shopQuestState2 = shopState.questState2;
+            otherState.shopShowDeathGreeting = shopState.showDeathGreeting;
+        };
+        auto syncLiveFromOtherState = [&] {
+            nextDropSpawnId = otherState.itemNextSpawnId;
+            nextMonsterSpawnId = otherState.monsterNextSpawnIdCounter;
+            shopState.firstVisit = otherState.shopFirstVisit;
+            shopState.interactionCount = otherState.shopInteractionCount;
+            shopState.rewardsGiven = otherState.shopRewardsGiven;
+            shopState.questState1 = otherState.shopQuestState1;
+            shopState.questState2 = otherState.shopQuestState2;
+            shopState.showDeathGreeting = otherState.shopShowDeathGreeting;
+        };
         // The port's own RecordStore substitute: a directory of
         // "es_gamestate<N>" files, of which exactly one (the newest) is ever
         // kept -- see save/game_save.h's own class comment. Under
@@ -642,16 +668,38 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 return;
             }
 
-            // M45: only reachable once `playerSlot` holds a character
-            // (inNpcDialogue is only ever set true from inside the
-            // tick-gated interact dispatch further below) -- see its own
-            // declaration comment above for the full writeup.
-            if (inNpcDialogue) {
-                bool selectDown = KeyPressed(VK_RETURN);
-                if (selectDown && !npcDialogueSelectKeyWasDown) inNpcDialogue = false;
-                npcDialogueSelectKeyWasDown = selectDown;
+            // M45/M46: only reachable once `playerSlot` holds a character
+            // (inNpcMenu is only ever set true from inside the tick-gated
+            // interact dispatch further below) -- see its own declaration
+            // comment above.
+            if (inNpcMenu) {
+                bool upDown = KeyPressed(VK_UP);
+                if (upDown && !npcMenuUpKeyWasDown) npcMenu.OnUp();
+                npcMenuUpKeyWasDown = upDown;
 
-                npcDialogueScreen.Paint(backbuffer);
+                bool downDown = KeyPressed(VK_DOWN);
+                if (downDown && !npcMenuDownKeyWasDown) npcMenu.OnDown();
+                npcMenuDownKeyWasDown = downDown;
+
+                dawnstar::NpcMenuContext npcCtx{*playerSlot, shopState, charData,          items,
+                                                shopDialogue, levels,   world,             globalRng,
+                                                nextDropSpawnId};
+
+                bool cancelDown = KeyPressed(VK_ESCAPE);
+                if (cancelDown && !npcMenuCancelKeyWasDown &&
+                    npcMenu.OnCancel(npcCtx) == dawnstar::NpcMenuAction::ReturnToGame) {
+                    inNpcMenu = false;
+                }
+                npcMenuCancelKeyWasDown = cancelDown;
+
+                bool selectDown = KeyPressed(VK_RETURN);
+                if (selectDown && !npcMenuSelectKeyWasDown &&
+                    npcMenu.OnSelect(npcCtx) == dawnstar::NpcMenuAction::ReturnToGame) {
+                    inNpcMenu = false;
+                }
+                npcMenuSelectKeyWasDown = selectDown;
+
+                npcMenu.Render(backbuffer);
                 window.Present(backbuffer);
                 return;
             }
@@ -743,6 +791,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             dawnstar::LoadingScreen saveGameUI(dawnstar::LoadingScreenMode::SavingGame);
                             saveGameUI.Render(backbuffer);
                             window.Present(backbuffer);
+                            syncOtherStateFromLive();
                             bool saved = dawnstar::GameSave::SaveGameState(
                                 saveDir, optionsPlayer, world, otherState, globalRng, [&](int percent) {
                                     saveGameUI.SetPercent(percent);
@@ -775,6 +824,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                                 window.Present(backbuffer);
                                                                             });
                             if (loaded) {
+                                syncLiveFromOtherState();
                                 // run()'s own tail: resumeGame(), then
                                 // `loadGameUI.percent = 100` + one final
                                 // repaint, then setCurrentDisplay(gameCanvas)
@@ -953,13 +1003,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                           monsterAttacking);
                         campPending = false;
                     } else if (interactPending) {
+                        // GameCanvas.openNpcDialogue(npcInSight): capture the
+                        // shop id first -- a chest/no-target interact leaves
+                        // npcInSight < 0 and opens nothing.
+                        const int talkShopId = player.npcInSight;
                         std::optional<std::string> npcLine = dawnstar::InteractTick::ProcessInteract(
                             player, levels, world, items, charData, shopDialogue, shopState, messagePopup, globalRng,
                             nextDropSpawnId, nowMs);
-                        if (npcLine.has_value()) {
-                            npcDialogueScreen.SetupMessage(
-                                dawnstar::ShopInteraction::kNames[static_cast<size_t>(player.npcInSight)], *npcLine);
-                            inNpcDialogue = true;
+                        if (talkShopId >= 0 && npcMenu.Open(talkShopId, npcLine, player, shopState)) {
+                            inNpcMenu = true;
                         }
                         interactPending = false;
                     } else if (castActive) {

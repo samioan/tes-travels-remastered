@@ -35,6 +35,11 @@ const std::array<std::array<int8_t, 6>, 4> ShopInteraction::kRumorStringOffset =
     {2, 4, 5, 8, 9, 11},
 }};
 
+const std::array<int8_t, 24> ShopInteraction::kUnconfirmedA = {13, 19, 25, 31, 14, 20, 26, 32, 15, 21, 27, 33,
+                                                                17, 23, 29, 35, 16, 22, 28, 34, 18, 24, 30, 36};
+const std::array<int8_t, 24> ShopInteraction::kUnconfirmedB = {37, 43, 49, 55, 38, 44, 50, 56, 39, 45, 51, 57,
+                                                                41, 47, 53, 59, 40, 46, 52, 58, 42, 48, 54, 60};
+
 ShopState ShopState::Reset() {
     ShopState s;
     s.firstVisit.fill(true);

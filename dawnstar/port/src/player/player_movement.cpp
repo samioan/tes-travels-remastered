@@ -260,6 +260,15 @@ void PlayerMovement::WarpToCampMark(PlayerState& p, const std::vector<GeneratedL
     // chest/NPC-visibility refresh: SKIPPED, see class comment.
 }
 
+void PlayerMovement::WarpTo(PlayerState& p, int level, int x, int y, int facing,
+                             const std::vector<GeneratedLevel>& levels) {
+    p.currentLevel = level;
+    p.tileX = x;
+    p.tileY = y;
+    p.facing = facing;
+    RefreshCorridorView(p, levels);
+}
+
 void PlayerMovement::RefreshCorridorView(PlayerState& p, const std::vector<GeneratedLevel>& levels) {
     DungeonView view(levels, p.currentLevel - 1);
     uint8_t out[9][5];

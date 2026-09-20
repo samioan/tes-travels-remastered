@@ -45,14 +45,9 @@ public:
     // fallthrough -- see shop_interaction.h's own doc comment) -- either
     // way, nothing to show.
     //
-    // NOT reproduced: the real game's own Ok dispatch on that popup
-    // always proceeds into `NPCChoicesUI[shopId]`, a full buy/sell/
-    // quest-turn-in/rumor-question list-menu this port has no
-    // counterpart for yet (see shop_interaction.h's own class comment).
-    // Dismissing this port's popup just returns to the game instead --
-    // the same "the branch exists, but does less than the original
-    // until its own UI milestone lands" reasoning M32's monsterType-42
-    // end-of-game-UI skip already used.
+    // The real game's own Ok dispatch on that popup proceeds into
+    // `NPCChoicesUI[shopId]` -- reproduced by ui/npc_menu.h (M46), which
+    // main.cpp opens with this method's result.
     //
     // The chest-loot half (Player.pickUpDroppedItem()) is fully ported,
     // including two preserved real quirks: (1) the `result == -1`

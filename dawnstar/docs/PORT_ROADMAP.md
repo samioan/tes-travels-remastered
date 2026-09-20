@@ -3026,19 +3026,69 @@ milestone rather than just read-through.
       vs-Dialogue equivalence check in section G is this milestone's
       wiring evidence instead).
 
+- [x] **M46 -- the interactive NPC menus (`NPCChoicesUI` and every
+      sub-screen)** (this session). `NpcMenu` (`port/src/ui/npc_menu.h`/
+      `.cpp`, in `dawnstar_render`, which now links `dawnstar_npc` --
+      no cycle, `dawnstar_npc` only depends on player/assets) ports the
+      screen graph `ESGame.handleNPCChoices()`/`handleNPCAction()`/
+      `setAidPointsForNPC()` and the NPC `secondaryParam` branches of
+      `commandAction1()` drive: the M45 greeting popup's Ok now leads into
+      the real per-shop choices screen (Buy/Sell for the 4 hub peddlers;
+      Rumors/Cure/Warp/Recovery for Eustacia; Train/Give/Befriend/Threaten/
+      Ask a question/Warp for the 4 named shopkeepers), and from there the
+      Buy/Sell/Sell-confirm/Train/Give lists, the two-step "Ask about
+      what/whom" question chain (ported exactly, including the eventFlags
+      bookkeeping, the traitor-suspicion counter and its RNG draw's
+      short-circuit position), Eustacia's warp-destination list, and the
+      named shopkeepers' "Warp to camp" confirm. Every action is a call
+      into M45's `ShopInteraction::Dialogue`, shown in the one shared info
+      popup, so this milestone is pure orchestration on verified logic.
+      Same shape as `OptionsMenu`: one `Screen` per real screen, an `Active`
+      enum for `setCurrentDisplay`, caller-edge-detected keys, and
+      `OnSelect`/`OnCancel` returning whether the flow left for the game.
+      `main.cpp`'s M45 `inNpcDialogue` popup became `inNpcMenu`, and
+      `npcInSight` shop 4 (which has no greeting line) now opens Eustacia's
+      menu directly, as `GameCanvas.openNpcDialogue()` does.
+
+      Small pieces added along the way: `PlayerMovement::WarpTo` (the
+      hand-rolled position set + `refreshCorridorView()` of the warp-where
+      dispatch); `ShopInteraction::kUnconfirmedA/B` promoted out of
+      `options_menu.cpp` (now shared with the question chain); and the
+      deferred M42/M45 sync -- `main.cpp` mirrors live `ShopState` and the
+      two spawn-id counters into `OtherStateInfo` before every save and back
+      out after every load, so a save/load round trip actually carries shop
+      state now.
+
+      Original behavior preserved rather than tidied: Sell/Give labels use
+      `"E:"` (no space) where Inventory uses `"E: "`; screens with a
+      `backTarget` (Train/Give/Question*/Warp*) return to the choices screen
+      *without* refreshing the aid prompt, while Buy/Sell (none) refresh it;
+      `NPCChoicesUI`/`NPCQuestionWhatUI` keep their selection between
+      visits while every `newXxxUI()` list starts fresh; the "You have
+      nothing to give me!" popup on the peddlers' Sell (param 53) re-opens
+      an *empty* Sell list on Ok; the sell-confirm screen has no Cancel.
+
+      Verified via the new `npc_menu_smoke.exe` (no JVM ground truth, same
+      reason as M6/M9/M11/M13-M45) against the real 37-level world, real
+      item/character/dialogue data and a real character: every action's
+      resulting player/shop/RNG state compared against a twin
+      `ShopInteraction::Dialogue` call; list labels, prompts and Ok/Cancel
+      destinations checked for every screen; the question chain checked for
+      the flag/aid arithmetic, the non-traitor UNCONFIRMED_A line, the
+      already-asked repeat, the traitor's guaranteed admission at suspicion
+      2 (UNCONFIRMED_B), and suspicion 3's 20% draw predicted from a copy
+      of the live RNG; warp landing tile (one south of the shopkeeper,
+      facing north) checked against `GeneratedLevel::specialShopX/Y`. Full
+      rebuild zero warnings from the new code; all 44 smoke tests pass;
+      `dawnstar_port.exe` launches and stays up (not driven through a live
+      NPC conversation by hand this session).
+
 ## Milestones next
 
-- [ ] **M46 and beyond (not yet planned in detail):** the "shops"
-      milestone M45 left open -- the real `NPCChoicesUI[shopId]`
-      buy/sell/quest-turn-in/rumor-question list-menu screens
-      `ESGame.handleNPCAction()`/`handleNPCChoices()` drive
-      `ShopInteraction::Dialogue`'s actions 2-5/8/10-15 through (M45
-      only wired action 1, the greet), which would also let
-      `OtherStateInfo`'s own 26 saved `Shop.*` values sync with the new
-      live `ShopState` instead of sitting parallel to it, and the two
-      global spawn-id counters M42 saves but nothing yet advances become
-      live; `LoadingScreen.java`'s own modes 1/2 splash sequence, if the
-      boot flow is ever reproduced. Gets its own milestone(s) once the
-      shape of "how much fits in one slice" is clearer -- following
-      `shadowkey-decomp`'s pattern of not over-planning milestones far in
-      advance of actually reaching them.
+- [ ] **M47 and beyond (not yet planned in detail):** `LoadingScreen.java`'s
+      own modes 1/2 splash sequence, if the boot flow is ever reproduced;
+      the still-skipped chest/NPC-visibility refresh after warps and the
+      `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46. Gets its
+      own milestone(s) once the shape of "how much fits in one slice" is
+      clearer -- following `shadowkey-decomp`'s pattern of not
+      over-planning milestones far in advance of actually reaching them.

@@ -121,9 +121,12 @@ add_library(dawnstar_render STATIC
   src/ui/name_entry.cpp
   src/ui/character_creation_flow.cpp
   src/ui/loading_screen.cpp
+  src/ui/npc_menu.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
-target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon)
+# M46: ui/npc_menu.cpp drives ShopInteraction::Dialogue (dawnstar_npc, which
+# depends only on dawnstar_player/dawnstar_assets -- no cycle back to render).
+target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon dawnstar_npc)
 
 # M11/M12/M13/M14/M16/M17/M23/M25/M28: player character creation + full
 # save format + movement (now also touching the live world registry for
@@ -541,5 +544,9 @@ target_link_libraries(passive_tick_smoke PRIVATE dawnstar_passive dawnstar_dunge
 # dawnstar_player/dawnstar_assets come transitively.
 add_executable(shop_interaction_smoke src/tests/m45_shop_interaction_smoke.cpp)
 target_link_libraries(shop_interaction_smoke PRIVATE dawnstar_npc dawnstar_interact)
+
+# M46 milestone smoke test -- see src/tests/m46_npc_menu_smoke.cpp.
+add_executable(npc_menu_smoke src/tests/m46_npc_menu_smoke.cpp)
+target_link_libraries(npc_menu_smoke PRIVATE dawnstar_render dawnstar_npc)
 
 endif()  # NOT DAWNSTAR_DIST

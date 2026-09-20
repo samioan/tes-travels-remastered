@@ -24,16 +24,9 @@ namespace dawnstar {
 // Kept as its own struct rather than folded into PlayerState (Shop.java's
 // fields are genuinely GLOBAL shop state, not per-character -- e.g.
 // firstVisit tracks whether the WORLD has seen a given shop, independent
-// of any one Player instance) and deliberately NOT wired into save/
-// game_save.h's `OtherStateInfo` yet, even though that struct already
-// reserves the exact same 26 values as an inert flat container (see its
-// own class comment: "a container decision, not a format simplification
-// ... every one of the 26 is written and read back ... whether or not
-// anything in this port reads them yet"). Syncing the two -- so a real
-// save/load round-trip actually carries live Shop state -- is deferred to
-// the future "shops" milestone alongside `OtherStateInfo`'s other still-
-// inert fields (the two global spawn-id counters), per
-// docs/PORT_ROADMAP.md's own M42 entry.
+// of any one Player instance). save/game_save.h's `OtherStateInfo` reserves
+// the same 26 values as a flat save container; main.cpp mirrors this struct
+// into/out of it around every save/load (M46).
 struct ShopState {
     std::array<bool, 9> firstVisit{};
     std::array<int8_t, 4> questState1{};
@@ -61,14 +54,11 @@ struct ShopState {
 // (action 1) greeting this milestone actually wires into InteractTick --
 // same "port the whole self-contained method, verified by smoke test,
 // even before every branch has a live caller" standard M13/M14/M25 set.
-// What's NOT wired here: the real game's own Ok dispatch on the greeting
-// popup always proceeds into `NPCChoicesUI[shopId]`, a full buy/sell/
-// quest-turn-in/rumor-question list-menu screen this port has no
-// counterpart for yet (see GameCanvas.openNpcDialogue()/ESGame.
-// handleNPCAction()/handleNPCChoices()) -- that whole interactive menu,
-// and wiring OtherStateInfo to this struct, is the still-open "shops"
-// milestone this class's actions 2-5/8/10-15 are ready for once it
-// lands.
+// The real game's own Ok dispatch on the greeting popup proceeds into
+// `NPCChoicesUI[shopId]`, the buy/sell/quest-turn-in/rumor-question menu
+// graph -- ported in M46 as ui/npc_menu.h, which drives this class's actions
+// 2-5/10-15; main.cpp also mirrors this struct into OtherStateInfo around
+// save/load.
 //
 // `Shop.isValidShopAction()`/`shopActionCode()` are also ported (a
 // matched pair the original itself documents as having no confirmed call
@@ -93,6 +83,12 @@ public:
     // [traitorId 0-3][revealStep 0-5] -> offset into dialogue.groups[9]
     // (+5) for that step's rumor-fragment text.
     static const std::array<std::array<int8_t, 6>, 4> kRumorStringOffset;
+    // Shop.UNCONFIRMED_A/UNCONFIRMED_B: [qWhat*4 + suspectIndex] -> offset
+    // into dialogue.groups[9] (+5) for a "still unconfirmed" line and the
+    // traitor's own-admission line, respectively. Used by the Clue Log
+    // (ui/options_menu.cpp) and the "Ask a question" menu (ui/npc_menu.cpp).
+    static const std::array<int8_t, 24> kUnconfirmedA;
+    static const std::array<int8_t, 24> kUnconfirmedB;
 
     static bool IsNamedShop(int shopId) { return kCategory[static_cast<size_t>(shopId)] == 1; }
     static bool IsGenericPeddler(int shopId) { return kCategory[static_cast<size_t>(shopId)] == 4; }
@@ -135,7 +131,7 @@ public:
     // dialogue(). Returns std::nullopt exactly where the original returns
     // `null` (GameCanvas.openNpcDialogue()'s own null check decides
     // whether to show a greeting popup at all, or -- for Jakar's/shop 4
-    // specifically -- open the still-unported NPCChoicesUI menu instead).
+    // specifically -- open Eustacia's NPCChoicesUI menu instead (ui/npc_menu.h)).
     //
     // `levels` is needed only for action 11 at shop 4 (PlayerMovement::
     // WarpToCampMark's own neighbor-lookup signature); `nextItemSpawnId`

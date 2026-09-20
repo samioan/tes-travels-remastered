@@ -6,6 +6,7 @@
 #include "player/player_combat_stats.h"
 #include "player/player_inventory.h"
 #include "player/player_movement.h"
+#include "npc/shop_interaction.h"
 #include "player/player_spellcasting.h"
 #include "util/text.h"
 
@@ -67,10 +68,9 @@ std::string BuildCharacterSheet(const PlayerState& p, const CharacterData& charD
 constexpr int8_t kRumorStringOffset[4][6] = {
     {1, 3, 5, 8, 10, 12}, {1, 2, 4, 7, 9, 12}, {2, 3, 6, 7, 10, 11}, {2, 4, 5, 8, 9, 11},
 };
-constexpr int8_t kUnconfirmedA[24] = {13, 19, 25, 31, 14, 20, 26, 32, 15, 21, 27, 33,
-                                       17, 23, 29, 35, 16, 22, 28, 34, 18, 24, 30, 36};
-constexpr int8_t kUnconfirmedB[24] = {37, 43, 49, 55, 38, 44, 50, 56, 39, 45, 51, 57,
-                                       41, 47, 53, 59, 40, 46, 52, 58, 42, 48, 54, 60};
+// (M46 promoted these two to ShopInteraction, shared with ui/npc_menu.cpp.)
+const auto& kUnconfirmedA = ShopInteraction::kUnconfirmedA;
+const auto& kUnconfirmedB = ShopInteraction::kUnconfirmedB;
 
 // ESGame.java's own newClueLogUI(idx), transcribed exactly -- idx==4 is
 // the "Rumors" entry (accumulated from ANY suspect's own revealed rumor

@@ -98,6 +98,14 @@ public:
     // the chest/NPC-visibility refresh calls, same as ResetToHubPosition.
     static void WarpToCampMark(PlayerState& p, const std::vector<GeneratedLevel>& levels);
 
+    // M46: teleports to an explicit (level, x, y, facing) and refreshes the
+    // corridor view -- ESGame's own NPCWarpWhere dispatch (secondaryParam
+    // 29) sets currentLevel/tileX/tileY/facing by hand and calls
+    // refreshCorridorView() exactly like this. Unlike WarpToCampMark it
+    // does NOT set suppressStrafeAdjust. Same SIMPLIFIED skip of the
+    // chest/NPC-visibility refresh as its siblings.
+    static void WarpTo(PlayerState& p, int level, int x, int y, int facing, const std::vector<GeneratedLevel>& levels);
+
     // Player.java's npcInFront(): the shop id (5-8 for the named
     // shopkeepers on levels 3/12/21/30, or Shop.hubShopAt's lookup in
     // the hub town) of the NPC that a forward step would land on, or
