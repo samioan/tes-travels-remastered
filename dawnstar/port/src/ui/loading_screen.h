@@ -29,7 +29,9 @@ enum class LoadingScreenMode {
 // fresh `new LoadingScreen(this, 10, 303)`/`(this, 9, 302)`, shows it, and drives
 // its `percent` field from the background thread doing the real work.
 //
-// DELIBERATELY NOT PORTED -- modes 1/2 and everything that comes with them:
+// Modes 1/2 live in ui/boot_splash.h (M48), not here. What follows is the
+// original reasoning for leaving them out of THIS class:
+// DELIBERATELY NOT PORTED HERE -- modes 1/2 and everything that comes with them:
 // `runSplashSequence()`'s own startup timing loop (hold until percent==100 AND
 // 4s have passed, then the Vir2L/ZeniMax copyright card for 2s, the carrier logo
 // for 1s), `startThread()`/`stopThread()`/`run()`/`waitAtLeast()`, and

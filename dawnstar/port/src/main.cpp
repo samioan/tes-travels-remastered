@@ -81,6 +81,7 @@ extern wchar_t** __wargv;
 #include "ui/character_creation_flow.h"
 #include "ui/loading_screen.h"
 #include "ui/menu_flow.h"
+#include "ui/boot_splash.h"
 #include "ui/npc_menu.h"
 #include "ui/options_menu.h"
 #include "util/java_random.h"
@@ -342,6 +343,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // edge-detected at full frame rate the same way the 'M' zoom key
     // above already is, rather than gated behind clock.ConsumeTick().
     bool inMenu = true;
+    // M48: LoadingScreen mode 2 -- the boot splash shown before the main
+    // menu (ESGame.initSplash()). Runs first, timed from its own first
+    // frame; early-returns like inMenu below. The original has no skip key;
+    // Return/Esc/Space skip it here since a PC start-up has nothing left to
+    // load behind the wait.
+    bool inSplash = true;
+    int64_t splashStartMs = -1;
+    bool splashSkipKeyWasDown = false;
     bool menuUpKeyWasDown = false;
     bool menuDownKeyWasDown = false;
     bool menuSelectKeyWasDown = false;
@@ -502,7 +511,28 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::CharacterCreationFlow characterCreationFlow(charData, items, shopDialogue);
         std::optional<dawnstar::PlayerState> playerSlot;
 
+        dawnstar::BootSplash bootSplash = dawnstar::BootSplash::Load(root, imageArchive);
+
         window.RunMessageLoop([&] {
+            if (inSplash) {
+                const int64_t now = static_cast<int64_t>(GetTickCount64());
+                if (splashStartMs < 0) splashStartMs = now;
+                bool skipDown = KeyPressed(VK_RETURN) || KeyPressed(VK_ESCAPE) || KeyPressed(VK_SPACE);
+                bool skip = skipDown && !splashSkipKeyWasDown;
+                splashSkipKeyWasDown = skipDown;
+                if (skip || dawnstar::BootSplash::IsDone(now - splashStartMs)) {
+                    inSplash = false;
+                    // A key still held from the skip mustn't also fire
+                    // the main menu's first selection/cancel.
+                    menuSelectKeyWasDown = KeyPressed(VK_RETURN);
+                    menuCancelKeyWasDown = KeyPressed(VK_ESCAPE);
+                } else {
+                    bootSplash.Render(backbuffer, now - splashStartMs);
+                    window.Present(backbuffer);
+                    return;
+                }
+            }
+
             if (inMenu) {
                 bool upDown = KeyPressed(VK_UP);
                 if (upDown && !menuUpKeyWasDown) menuFlow.OnUp();

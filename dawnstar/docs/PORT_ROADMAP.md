@@ -3099,8 +3099,32 @@ milestone rather than just read-through.
       Verified in `use_item_smoke` (flag raised by both, not by `WarpTo`);
       the main.cpp wiring is not driven by hand.
 
+- [x] **M48 -- the boot splash (`LoadingScreen` mode 2).**
+      `ui/boot_splash.h`/`.cpp` ports `renderSplash()` and
+      `runSplashSequence()`/`waitAtLeast()`, the piece M42 left out. The
+      original runs it on its own Thread; here the whole timeline is a pure
+      function of elapsed time (`BootSplash::PhaseAt`), quantised to the
+      original's 500ms repaint step: 0-1s splash images, 1-4s images plus
+      the progress bar, 4-6.5s the Vir2L/ZeniMax copyright card with the
+      carrier logo, 6.5-8s images again, then the hand-off to the main menu
+      (8s total; `waitAtLeast`'s do-while runs one iteration more than its
+      argument suggests: 5x500ms and 3x500ms). Assets: `splashtop/
+      splashbot.png` are loose files in the data root, `vir2lLogo/
+      mformaLogo.png` are `imgfiles.lmp` entries. Assets load instantly on a
+      PC, so the bar is simply at 100% once it appears and the
+      `percent < 100` half of the hold condition never extends the 4s.
+      `main.cpp` shows it before the main menu (`inSplash`). One deliberate
+      addition: Return/Esc/Space skip it (the original has no skip key).
+      Verified by `boot_splash_smoke`: the phase timeline is checked against
+      a literal transcription of the two Java loops, and every phase's frame
+      is compared pixel-for-pixel against independently placed
+      Blit/FillRect/DrawString calls with the real assets. The on-screen
+      wiring was only checked as "launches and stays up", not watched
+      through by hand.
+
 ## Milestones next
 
-- [ ] **M48 and beyond (not yet planned in detail):** `LoadingScreen.java`'s
-      own modes 1/2 splash sequence, if the boot flow is ever reproduced;
-      the `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46.
+- [ ] **M49 and beyond (not yet planned in detail):** the
+      `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46 (currently
+      read from `GeneratedLevel::specialShopX/Y` instead), which is
+      internal plumbing with no visible effect.

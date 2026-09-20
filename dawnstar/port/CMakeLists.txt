@@ -121,6 +121,7 @@ add_library(dawnstar_render STATIC
   src/ui/name_entry.cpp
   src/ui/character_creation_flow.cpp
   src/ui/loading_screen.cpp
+  src/ui/boot_splash.cpp
   src/ui/npc_menu.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
@@ -520,6 +521,10 @@ target_link_libraries(inventory_skills_spells_smoke PRIVATE dawnstar_render dawn
 # reasoning as dawnstar_combat's own CMake comment above.
 add_executable(game_save_smoke src/tests/m42_game_save_smoke.cpp)
 target_link_libraries(game_save_smoke PRIVATE dawnstar_save dawnstar_render)
+
+# M48 milestone smoke test -- see src/tests/m48_boot_splash_smoke.cpp.
+add_executable(boot_splash_smoke src/tests/m48_boot_splash_smoke.cpp)
+target_link_libraries(boot_splash_smoke PRIVATE dawnstar_render)
 
 # M43 milestone smoke test -- see src/tests/m43_reveal_traitor_smoke.cpp.
 # Links dawnstar_player too (this test's own direct PlayerSave/
