@@ -3122,9 +3122,38 @@ milestone rather than just read-through.
       wiring was only checked as "launches and stays up", not watched
       through by hand.
 
+- [x] **M49 -- the level-up menu.**
+      Until now `levelUpPending` (set by `GainSkillExp` once level-exp hits
+      10) was written and never read: a character levelled up in the stats
+      but never got its attribute picks. `ui/level_up_menu.h`/`.cpp` ports
+      `ESGame.newLevelUpUI()` + the `secondaryParam 39` branch of
+      `commandAction1()` + `Player.availableAttributeIncreases()`/
+      `levelUp()`: three "Select an attribute to increase 3/2/1 point(s):"
+      lists (no Cancel) offering the attributes whose bit is set in
+      `attributeIncreaseFlags`, then attributes += 3/2/1,
+      `recalcMaxStats()` (now `PlayerCreation::RecalcMaxStats`, public),
+      flags cleared, `Shop.reset()` and level-exp -= 10. The list is
+      rebuilt but not shrunk between picks, so one attribute can take all
+      three (+6) -- kept. `main.cpp` opens it from the tick right after the
+      target-monster refresh and before `tickVisibleObjects` (the original's
+      spot), as an early-return `inLevelUp` block.
+      Not reproduced: with no flag set the original passes `null` to
+      `setupPromptList` and throws; the port's `Open()` returns false, so no
+      menu (and no crash) -- reachable only via item 92's bare level-exp +1.
+      Verified by `level_up_smoke`: flag-to-name mapping, the three prompts
+      (compared pixel-for-pixel with an independently built Screen), the
+      +3/+2/+1 and +6 cases, recalculated max stats, flags/exp/Shop state
+      after, and an end-to-end run from the real `GainSkillExp`. The
+      main.cpp hand-off was only checked as "launches and stays up".
+
 ## Milestones next
 
-- [ ] **M49 and beyond (not yet planned in detail):** the
-      `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46 (currently
-      read from `GeneratedLevel::specialShopX/Y` instead), which is
-      internal plumbing with no visible effect.
+- [ ] **M50: death and respawn.** `GameCanvas.run()`'s `deathState` 2/3
+      chain (5s after death: `normalizeForSummary`, drop unequipped items,
+      `resetState(true)`, `Shop.showDeathGreeting = true`, level-name
+      message), plus the `Shop.showDeathGreeting = false` reset on every
+      forward step (`Player.java` commitMove; `player_movement.cpp` still
+      carries a "Shop not ported yet" skip). Check first what the port does
+      today when HP reaches 0.
+- [ ] The `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46 -- internal
+      plumbing with no visible effect.

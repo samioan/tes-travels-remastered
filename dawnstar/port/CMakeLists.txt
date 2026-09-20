@@ -122,6 +122,7 @@ add_library(dawnstar_render STATIC
   src/ui/character_creation_flow.cpp
   src/ui/loading_screen.cpp
   src/ui/boot_splash.cpp
+  src/ui/level_up_menu.cpp
   src/ui/npc_menu.cpp
 )
 target_include_directories(dawnstar_render PUBLIC src)
@@ -525,6 +526,10 @@ target_link_libraries(game_save_smoke PRIVATE dawnstar_save dawnstar_render)
 # M48 milestone smoke test -- see src/tests/m48_boot_splash_smoke.cpp.
 add_executable(boot_splash_smoke src/tests/m48_boot_splash_smoke.cpp)
 target_link_libraries(boot_splash_smoke PRIVATE dawnstar_render)
+
+# M49 milestone smoke test -- see src/tests/m49_level_up_smoke.cpp.
+add_executable(level_up_smoke src/tests/m49_level_up_smoke.cpp)
+target_link_libraries(level_up_smoke PRIVATE dawnstar_render dawnstar_player)
 
 # M43 milestone smoke test -- see src/tests/m43_reveal_traitor_smoke.cpp.
 # Links dawnstar_player too (this test's own direct PlayerSave/

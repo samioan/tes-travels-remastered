@@ -11,13 +11,6 @@ namespace {
 // indexed by classIndex.
 const int kStartingItems[7][2] = {{1, 27}, {7, 27}, {7, 22}, {17, 27}, {12, 22}, {17, 27}, {12, 22}};
 
-// Player.java's recalcMaxStats().
-void RecalcMaxStats(PlayerState& p) {
-    p.coreStats[3] = static_cast<int16_t>((p.attributes[0] + p.attributes[10]) / 2);
-    p.coreStats[5] = static_cast<int16_t>(p.classMagickaFactor * p.attributes[2] / 4);
-    p.coreStats[7] = static_cast<int16_t>(p.attributes[0] + p.attributes[4] + p.attributes[6] + p.attributes[10]);
-}
-
 // Player.java's grantStartingItems(): grants classIndex's starting item
 // pair and auto-equips each one. addInventoryItem()/equipItem() (which
 // GrantStartingItems used to carry small private copies of here) now
@@ -183,6 +176,13 @@ std::string PlayerCreation::BuildCreationSummary(const PlayerState& p, const Cha
         }
     }
     return out;
+}
+
+// Player.java's recalcMaxStats().
+void PlayerCreation::RecalcMaxStats(PlayerState& p) {
+    p.coreStats[3] = static_cast<int16_t>((p.attributes[0] + p.attributes[10]) / 2);
+    p.coreStats[5] = static_cast<int16_t>(p.classMagickaFactor * p.attributes[2] / 4);
+    p.coreStats[7] = static_cast<int16_t>(p.attributes[0] + p.attributes[4] + p.attributes[6] + p.attributes[10]);
 }
 
 }  // namespace dawnstar

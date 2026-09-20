@@ -82,6 +82,7 @@ extern wchar_t** __wargv;
 #include "ui/loading_screen.h"
 #include "ui/menu_flow.h"
 #include "ui/boot_splash.h"
+#include "ui/level_up_menu.h"
 #include "ui/npc_menu.h"
 #include "ui/options_menu.h"
 #include "util/java_random.h"
@@ -298,6 +299,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool npcMenuSelectKeyWasDown = false;
     bool npcMenuCancelKeyWasDown = false;
     dawnstar::NpcMenu npcMenu;
+    // M49: GameCanvas.run()'s `levelUpPending` hand-off into ESGame's
+    // LevelUpUI (three attribute picks -- see ui/level_up_menu.h). Same
+    // early-return-pauses-the-tick-loop shape as inNpcMenu; there is no
+    // Cancel, so it only leaves after the third pick.
+    bool inLevelUp = false;
+    bool levelUpUpKeyWasDown = false;
+    bool levelUpDownKeyWasDown = false;
+    bool levelUpSelectKeyWasDown = false;
+    dawnstar::LevelUpMenu levelUpMenu;
     // GameCanvas.campStartTime -- a GameCanvas field, not one of
     // Player's own, same reasoning as lastAttackTimeMs below.
     int64_t campStartTimeMs = 0;
@@ -730,6 +740,29 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 npcMenuSelectKeyWasDown = selectDown;
 
                 npcMenu.Render(backbuffer);
+                window.Present(backbuffer);
+                return;
+            }
+
+            // M49: only reachable once a character exists (opened from the
+            // tick-gated block below).
+            if (inLevelUp) {
+                bool upDown = KeyPressed(VK_UP);
+                if (upDown && !levelUpUpKeyWasDown) levelUpMenu.OnUp();
+                levelUpUpKeyWasDown = upDown;
+
+                bool downDown = KeyPressed(VK_DOWN);
+                if (downDown && !levelUpDownKeyWasDown) levelUpMenu.OnDown();
+                levelUpDownKeyWasDown = downDown;
+
+                bool selectDown = KeyPressed(VK_RETURN);
+                if (selectDown && !levelUpSelectKeyWasDown &&
+                    levelUpMenu.OnSelect(*playerSlot, shopState, charData) == dawnstar::LevelUpAction::ReturnToGame) {
+                    inLevelUp = false;
+                }
+                levelUpSelectKeyWasDown = selectDown;
+
+                levelUpMenu.Render(backbuffer);
                 window.Present(backbuffer);
                 return;
             }
@@ -1169,6 +1202,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     dawnstar::CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsters, items,
                                                                            messagePopup, globalRng, nowMs,
                                                                            nextDropSpawnId);
+
+                    // run()'s own `if (player.levelUpPending)`, right after
+                    // processIdleTick and before tickVisibleObjects -- M49.
+                    // The flag is consumed even if there is nothing to pick
+                    // (see LevelUpMenu's doc comment on that null case).
+                    if (player.levelUpPending) {
+                        player.levelUpPending = false;
+                        if (levelUpMenu.Open(player, charData)) {
+                            inLevelUp = true;
+                            // Enter is likely still down from whatever
+                            // triggered this: don't let it pick at once.
+                            levelUpSelectKeyWasDown = true;
+                        }
+                    }
 
                     // GameCanvas.run()'s own per-tick order: movement
                     // first, then Player.tickVisibleObjects() (M25) --

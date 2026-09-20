@@ -44,6 +44,11 @@ public:
     // reusable Player.java ports living next to the class they came
     // from rather than the one UI screen that happens to call them.
     static std::string BuildCreationSummary(const PlayerState& p, const CharacterData& charData);
+
+    // Player.java's recalcMaxStats(): max HP/Magicka/Fatigue from the
+    // current attributes. Public since M49's level-up menu re-runs it after
+    // the attribute increases (ESGame's secondaryParam 39 branch).
+    static void RecalcMaxStats(PlayerState& p);
 };
 
 }  // namespace dawnstar
