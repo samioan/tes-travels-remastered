@@ -97,12 +97,19 @@ int main(int argc, char** argv) {
             Check(p.currentLevel == 1 && p.tileX == 13 && p.tileY == 6 && p.facing == 4,
                   "markCampAndReturnToTown should place the character at the alt-spawn hub position");
             Check(p.suppressStrafeAdjust, "markCampAndReturnToTown should set suppressStrafeAdjust");
+            Check(p.sightRefreshPending, "M47: the hub return should request the chest/NPC sighting refresh");
 
             p.suppressStrafeAdjust = false;
+            p.sightRefreshPending = false;
             p.currentLevel = 9;
             p.tileX = 1;
             p.tileY = 1;
             p.facing = 1;
+            PlayerMovement::WarpToCampMark(p, levels);
+            Check(p.sightRefreshPending, "M47: warpToCampMark should request the sighting refresh");
+            p.sightRefreshPending = false;
+            PlayerMovement::WarpTo(p, 5, 7, 11, 3, levels);
+            Check(!p.sightRefreshPending, "M47: WarpTo (the NPC-menu warp) faithfully does NOT request one");
             PlayerMovement::WarpToCampMark(p, levels);
             Check(p.currentLevel == 5 && p.tileX == 7 && p.tileY == 11 && p.facing == 3,
                   "warpToCampMark should restore the bookmarked position exactly");

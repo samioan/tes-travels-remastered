@@ -213,6 +213,13 @@ struct PlayerState {
     // per-tick value.
     bool chestInSight = false;
 
+    // --- M47: set by ResetToHubPosition/WarpToCampMark, which in the
+    // original end with gameCanvas.refreshChestInSight()/refreshNpcInSight()
+    // -- calls dawnstar_player can't make itself (they need the message
+    // popup and non-const levels, see PlayerMovement::ChestInFront's doc).
+    // main.cpp consumes it on the next tick. Transient, never serialized.
+    bool sightRefreshPending = false;
+
     // --- M32: GameCanvas.monsterTargeted. Same GameCanvas-static-
     // folded-in reasoning as chestInSight/npcInSight above -- needed
     // every frame by HotbarRenderer::ComputeHotbarContext (M31 had

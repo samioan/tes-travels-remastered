@@ -3083,12 +3083,24 @@ milestone rather than just read-through.
       `dawnstar_port.exe` launches and stays up (not driven through a live
       NPC conversation by hand this session).
 
+- [x] **M47 -- chest/NPC sighting refresh after hub/camp warps.**
+      `Player.resetToHubPosition()` and `warpToCampMark()` both end with
+      `gameCanvas.refreshChestInSight()`/`refreshNpcInSight()`; the port had
+      left them out (M18's "SIMPLIFIED" note), so after Eustacia's Warp,
+      the "Warp to Camp" item, a camp-marker tile or death, `chestInSight`
+      /`npcInSight` (hotbar context, interact target) went stale until the
+      next step. Both functions now raise the transient
+      `PlayerState::sightRefreshPending` (they cannot run the refresh
+      themselves: it needs the message popup and non-const levels), and
+      `main.cpp` runs one shared `refreshSightings()` lambda -- the same
+      code the move path uses -- at the start of the next tick.
+      `PlayerMovement::WarpTo` (the NPC-menu Warp, whose original hand-rolls
+      the move) deliberately does not request it, matching the source.
+      Verified in `use_item_smoke` (flag raised by both, not by `WarpTo`);
+      the main.cpp wiring is not driven by hand.
+
 ## Milestones next
 
-- [ ] **M47 and beyond (not yet planned in detail):** `LoadingScreen.java`'s
+- [ ] **M48 and beyond (not yet planned in detail):** `LoadingScreen.java`'s
       own modes 1/2 splash sequence, if the boot flow is ever reproduced;
-      the still-skipped chest/NPC-visibility refresh after warps and the
-      `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46. Gets its
-      own milestone(s) once the shape of "how much fits in one slice" is
-      clearer -- following `shadowkey-decomp`'s pattern of not
-      over-planning milestones far in advance of actually reaching them.
+      the `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46.

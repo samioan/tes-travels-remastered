@@ -233,7 +233,7 @@ void PlayerMovement::ResetToHubPosition(PlayerState& p, bool altSpawn, std::vect
     }
 
     RefreshCorridorView(p, levels);
-    // chest/NPC-visibility refresh: SKIPPED, see class comment.
+    p.sightRefreshPending = true;
 }
 
 void PlayerMovement::MarkCampAndReturnToTown(PlayerState& p, bool skipMark, std::vector<GeneratedLevel>& levels,
@@ -257,7 +257,7 @@ void PlayerMovement::WarpToCampMark(PlayerState& p, const std::vector<GeneratedL
 
     RefreshCorridorView(p, levels);
     p.suppressStrafeAdjust = true;
-    // chest/NPC-visibility refresh: SKIPPED, see class comment.
+    p.sightRefreshPending = true;
 }
 
 void PlayerMovement::WarpTo(PlayerState& p, int level, int x, int y, int facing,

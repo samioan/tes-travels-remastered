@@ -81,7 +81,8 @@ public:
     // being left if one is still tracked as alive (M23 -- shares
     // CleanupRoamingMonsterIfPresent with ComputeMoveTarget below), and
     // refreshes the corridor view. SIMPLIFIED: skips the chest/NPC-
-    // visibility refresh calls (rendering, not ported).
+    // visibility refresh calls itself; it raises p.sightRefreshPending
+    // instead and main.cpp runs the refresh next tick (M47).
     static void ResetToHubPosition(PlayerState& p, bool altSpawn, std::vector<GeneratedLevel>& levels,
                                     WorldRegistry& world);
 
@@ -94,16 +95,17 @@ public:
 
     // Player.java's warpToCampMark(): warps to the bookmarked camp
     // point. No roaming-monster cleanup in the original here (only
-    // ResetToHubPosition/ComputeMoveTarget have it). SIMPLIFIED: skips
-    // the chest/NPC-visibility refresh calls, same as ResetToHubPosition.
+    // ResetToHubPosition/ComputeMoveTarget have it). Raises
+    // p.sightRefreshPending for the chest/NPC refresh, same as
+    // ResetToHubPosition.
     static void WarpToCampMark(PlayerState& p, const std::vector<GeneratedLevel>& levels);
 
     // M46: teleports to an explicit (level, x, y, facing) and refreshes the
     // corridor view -- ESGame's own NPCWarpWhere dispatch (secondaryParam
     // 29) sets currentLevel/tileX/tileY/facing by hand and calls
     // refreshCorridorView() exactly like this. Unlike WarpToCampMark it
-    // does NOT set suppressStrafeAdjust. Same SIMPLIFIED skip of the
-    // chest/NPC-visibility refresh as its siblings.
+    // does NOT set suppressStrafeAdjust, and -- faithfully -- does NOT
+    // request the chest/NPC-visibility refresh its siblings do.
     static void WarpTo(PlayerState& p, int level, int x, int y, int facing, const std::vector<GeneratedLevel>& levels);
 
     // Player.java's npcInFront(): the shop id (5-8 for the named

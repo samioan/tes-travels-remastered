@@ -927,6 +927,38 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // for every showMessage/timeout check below -- M30.
                 int64_t nowMs = static_cast<int64_t>(GetTickCount64());
 
+                // refreshChestInSight() + refreshNpcInSight(), as one
+                // step: the query halves live in PlayerMovement (see
+                // ChestInFront's doc comment for why); the showMessage
+                // halves are here. Run after a committed move (below) and
+                // after a hub/camp warp (M47, sightRefreshPending).
+                auto refreshSightings = [&] {
+                    player.sightRefreshPending = false;
+                    const std::array<uint8_t, 8>* chest =
+                        dawnstar::PlayerMovement::ChestInFront(player, levels, world);
+                    // M31: persisted for HotbarRenderer::
+                    // ComputeHotbarContext (see player/player_state.h's
+                    // own doc comment on why).
+                    player.chestInSight = chest != nullptr;
+                    if (chest != nullptr) {
+                        dawnstar::MessagePopup::Show(messagePopup, {"Chest", ""}, 1, nowMs);
+                    }
+
+                    // RefreshNpcInSight itself only sets player.npcInSight
+                    // (M28); the shop-greeting showMessage call is here.
+                    dawnstar::PlayerMovement::RefreshNpcInSight(player, levels, world);
+                    if (player.npcInSight >= 0) {
+                        dawnstar::MessagePopup::Show(
+                            messagePopup,
+                            dawnstar::MessagePopup::WrapToTwoLines(
+                                dawnstar::ShopInteraction::kNames[static_cast<size_t>(player.npcInSight)]),
+                            1, nowMs);
+                    }
+                };
+                // A warp that happened outside the move path (NPC-menu
+                // Warp/Recovery, "Warp to Camp" item, Eustacia's warp).
+                if (player.sightRefreshPending) refreshSightings();
+
                 // GameCanvas.run()'s own per-tick campState 1/2/3 state
                 // machine -- the block immediately preceding
                 // dispatchTickActions() itself in the original. Returns
@@ -1092,29 +1124,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             // query half lives in PlayerMovement (see its
                             // own doc comment for why); the showMessage
                             // half is here.
-                            const std::array<uint8_t, 8>* chest =
-                                dawnstar::PlayerMovement::ChestInFront(player, levels, world);
-                            // M31: persisted for HotbarRenderer::
-                            // ComputeHotbarContext (see player/
-                            // player_state.h's own doc comment on why).
-                            player.chestInSight = chest != nullptr;
-                            if (chest != nullptr) {
-                                dawnstar::MessagePopup::Show(messagePopup, {"Chest", ""}, 1, nowMs);
-                            }
-
-                            // refreshNpcInSight(): same split as
-                            // refreshChestInSight above --
-                            // RefreshNpcInSight itself only sets
-                            // player.npcInSight (M28); the shop-greeting
-                            // showMessage call is here.
-                            dawnstar::PlayerMovement::RefreshNpcInSight(player, levels, world);
-                            if (player.npcInSight >= 0) {
-                                dawnstar::MessagePopup::Show(
-                                    messagePopup,
-                                    dawnstar::MessagePopup::WrapToTwoLines(
-                                        dawnstar::ShopInteraction::kNames[static_cast<size_t>(player.npcInSight)]),
-                                    1, nowMs);
-                            }
+                            refreshSightings();
 
                             // commitMove()'s own unconditional
                             // `this.minimapDirty = true;` -- M29.
