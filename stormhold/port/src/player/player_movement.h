@@ -106,6 +106,19 @@ public:
     static std::optional<MonsterState> MonsterInFront(PlayerState& p, const LevelLookup& levels,
                                                         const WorldRegistry& world);
 
+    // Player.chestAheadOfPlayer() (M43, phase-3 port; was decompiled/
+    // j.java's `h()` -- NOT the already-ported `h(long)`/
+    // resolveSpellCastInput, a distinct overload): the chest at the
+    // forward-facing look-ahead tile, via the SAME ComputeMoveTarget(1)
+    // MonsterInFront already uses, just reading `world.chests` (M16,
+    // position-keyed via PackTileKey) instead of `world.monsters`. Same
+    // shape as MonsterInFront in every respect, including its own
+    // explicit `pendingLevel<=0` guard (the original has one here too,
+    // unlike commitMove()'s own unguarded ComputeMoveTarget call) and the
+    // caught-exception stand-in for it.
+    static std::optional<std::array<int8_t, 8>> ChestAheadOfPlayer(PlayerState& p, const LevelLookup& levels,
+                                                                     const WorldRegistry& world);
+
     // Player.commitMove(dir) -- see class header comment for what's
     // deliberately not modeled. `world`/`items` are the M17 addition: once
     // position/facing/fatigue are committed (matching the original's own

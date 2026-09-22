@@ -146,6 +146,35 @@ std::optional<std::array<int8_t, 7>> PlayerInventory::DropInventoryItem(PlayerSt
     return record;
 }
 
+int PlayerInventory::CollectChestItem(PlayerState& p, std::array<int8_t, 8> record, const ItemDatabase& items,
+                                       GeneratedLevel& level, WorldRegistry& world) {
+    // record[2] = 2 -- confirmed dead, not reproduced; see this method's
+    // own declaration comment.
+    if (p.inventoryCount < 24) {
+        int8_t itemId = record[4];
+        int32_t packedValue = (static_cast<int32_t>(record[5]) << 8) + record[6];
+        int8_t charge = record[7];
+        AddInventoryItemRaw(p, itemId, packedValue, charge);
+        DungeonRuntime::RemoveChest(level, world, record);
+
+        int itemIndex = itemId - 1;
+        if (items.category[static_cast<size_t>(itemIndex)] == 11) {
+            p.giftPointsFound =
+                static_cast<int16_t>(p.giftPointsFound + items.subtype[static_cast<size_t>(itemIndex)]);
+            // ESGame.getGameAdvancementLevel()/checkOpenAndPopulateDungeons():
+            // SKIPPED, same reasoning as player_movement.h's own CommitMove
+            // dropped-item block -- no live ESGame session to open zones on.
+        }
+
+        return 1;
+    }
+
+    std::array<int8_t, 7> dropped{record[0], record[1], record[4], record[5], record[6], record[7], 1};
+    DungeonRuntime::AddDroppedItem(level, world, dropped);
+    DungeonRuntime::RemoveChest(level, world, record);
+    return 0;
+}
+
 bool PlayerInventory::HasCampMark(const PlayerState& p) { return p.campLevel > 0; }
 
 void PlayerInventory::MarkCampAndReturnToTown(PlayerState& p) {

@@ -2744,29 +2744,87 @@ read-through.
       own menu walkthrough) was NOT done this session, left as a
       lighter-weight verification gap worth closing in a follow-up.
 
+- [x] **M43 -- chest detection/interaction + the Warden-leaving trigger,
+      wired into the live port** (this session). The second of M41's
+      newly-transcribed dispatch pieces to reach `main.cpp`'s tick loop.
+      Two new methods, both mirroring `PlayerMovement::MonsterInFront`'s
+      own established shape (M38): `PlayerMovement::ChestAheadOfPlayer`
+      (`Player.chestAheadOfPlayer()`, was decompiled/j.java's `h()` --
+      NOT the already-ported `h(long)`/`resolveSpellCastInput`, a
+      distinct overload) and `PlayerInventory::CollectChestItem`
+      (`Player.collectChestItem()`) -- port `GameCanvas.checkChestAhead()`'s
+      "Chest" popup and `resolveInteractInput()`'s chest-opening half
+      (both M41).
+
+      **Deliberately NOT wired: `resolveInteractInput()`'s NPC-talk half**
+      (`Player.shopAheadOfPlayer()>=0 -> talkToNpc()`) and
+      `refreshNpcNameplateAndWardenLeave()`'s NPC-nameplate half (the
+      `bit-32-set` branch) -- both need `Shop.questShopAt()`, which reads
+      a live `questRewardClaimable[7]` array this port has no Shop
+      quest-economy model to back (same gap M8's `WardenState`/M11's
+      `ShopDialogue` class comments already flag), and `talkToNpc()`
+      itself is still an explicit stub (M41). Flagged at their own
+      omission points in `main.cpp` rather than silently dropped.
+
+      **The OTHER half of `refreshNpcNameplateAndWardenLeave()` DOES get
+      wired here, though** -- the Warden-leaving trigger (M41's own
+      finding: `WardenState::Leave`'s missing caller, open since M8),
+      needing none of the Shop quest-economy state the nameplate half
+      does. Reuses `DungeonRuntime::ViewGridAt` (M21) against the
+      player's own live `corridorView` to test the look-ahead tile's bit
+      32, `render/hud_state.h`'s `IsNpcDialogueDue` (M29), and
+      `WardenState::Leave` (M8, its own confirmed dungeons[1]/
+      dungeons[0] bug preserved exactly, untouched by this milestone).
+
+      Bound to a new 'F' key for the interact action (`ChestAheadOfPlayer`
+      is polled every tick regardless, matching `checkChestAhead()`'s own
+      unconditional per-tick check). `CollectChestItem` takes its
+      `record` parameter BY VALUE rather than by reference -- the
+      original's own `record[2] = 2` write is a confirmed dead byte (M6),
+      and the record is removed from the registry immediately after
+      either way, so there's no aliasing behavior worth preserving.
+
+      Verified with a new `chest_interaction_smoke.exe`: `ChestAheadOfPlayer`
+      finding a real stored chest directly ahead, resolving to `nullopt`
+      with nothing ahead, and the same no-neighbor edge case
+      `MonsterInFront` already handles gracefully; `CollectChestItem`'s
+      with-space path (item added, chest removed from both the tile bit
+      and the registry) cross-checked against a REAL category-11 item
+      from `itemsin.dat` (giftPointsFound increases by exactly that
+      item's own subtype column, not assumed); and the without-space path
+      (auto-drop onto the same tile, chest still removed). 40 smoke tests
+      now pass in total; full clean rebuild stayed at zero `/W4`
+      warnings. Manually launched the real windowed exe and confirmed it
+      starts and stays up -- same lighter-weight verification level M42
+      used, not a full interactive walkthrough.
+
 ## What's next
 
 `talkToNpc()` (`GameCanvas.java`, was decompiled/e.java's `void d(int)`)
 is the one remaining unread corner of `decompiled/e.java` -- see its own
 header comment for exactly what's missing (one `UIScreen` field
-cross-reference). M41's own dispatch web still has plenty left unwired
-in the C++ port beyond M42's camp/rest slice: spell casting/cycling
-(`resolveSpellCastInput`/`resolveSpellCycleInput`), opening the
-inventory screen (`openInventory` -- needs a real inventory UI this port
-doesn't have at all yet, a bigger lift than camp/rest was), and the
-chest/NPC-nameplate/Warden-leaving checks (`checkChestAhead`/
-`refreshNpcNameplateAndWardenLeave`) all have real, verified Java to
-port from now, but no C++ module yet. `paintFlashOverlays()`/
-`paintUnknown_b()` (the two remaining unported-PIXEL paint methods, both
-gated on that same live state -- `paintFlashOverlays()`'s own
-`unconfirmed_S` trigger is real since M39, so that one in particular may
-be a short follow-on rather than a fresh investigation). Beyond that: a
-real save/load system (`PlayerSave` exists, M20, but there's no
-`WorldRegistry`/master-list save format, and `main.cpp`'s own Main Menu
-"Continue Game" item always takes the no-saved-game branch until one
-exists, M40); the still-unwired death/respawn sequence (M42's own "what's
-next" note above); Help topics (the Java transcription itself stops at
-topic index 4). Following dawnstar's own later milestones roughly but
-expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42
+cross-reference), and it's now the single blocker for BOTH the NPC-talk
+half of `resolveInteractInput()` and the NPC-nameplate half of
+`refreshNpcNameplateAndWardenLeave()` (M43's own "what's next" note
+above) -- alongside `Shop.questShopAt()`'s own live
+`questRewardClaimable[7]` state, which has no C++ model at all yet
+either. Beyond that, M41's dispatch web still has spell casting/cycling
+(`resolveSpellCastInput`/`resolveSpellCycleInput` -- both fully confirmed
+Java, `Player.castOnSelf`/`castOnMonster`/`cycleSelectedSpell` already
+exist, but neither has a C++ port yet) and opening the inventory screen
+(`openInventory` -- needs a real inventory UI this port doesn't have at
+all yet, a bigger lift than camp/rest or chest interaction were) left
+unwired. `paintFlashOverlays()`/`paintUnknown_b()` (the two remaining
+unported-PIXEL paint methods, both gated on that same live state --
+`paintFlashOverlays()`'s own `unconfirmed_S` trigger is real since M39,
+so that one in particular may be a short follow-on rather than a fresh
+investigation). Beyond that: a real save/load system (`PlayerSave`
+exists, M20, but there's no `WorldRegistry`/master-list save format, and
+`main.cpp`'s own Main Menu "Continue Game" item always takes the
+no-saved-game branch until one exists, M40); the still-unwired
+death/respawn sequence (M42's own "what's next" note carried forward);
+Help topics (the Java transcription itself stops at topic index 4).
+Following dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43
 already found.

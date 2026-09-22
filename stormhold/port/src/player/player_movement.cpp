@@ -122,6 +122,21 @@ std::optional<MonsterState> PlayerMovement::MonsterInFront(PlayerState& p, const
     return DungeonRuntime::MonsterAt(pendingLevel, world, p.pendingTileX, p.pendingTileY);
 }
 
+std::optional<std::array<int8_t, 8>> PlayerMovement::ChestAheadOfPlayer(PlayerState& p, const LevelLookup& levels,
+                                                                          const WorldRegistry& world) {
+    try {
+        ComputeMoveTarget(p, 1, levels);
+    } catch (const std::runtime_error&) {
+        return std::nullopt;  // Same no-neighbor edge case as MonsterInFront.
+    }
+    if (p.pendingLevel <= 0) return std::nullopt;
+
+    const auto& chests = world.chests[static_cast<size_t>(p.pendingLevel - 1)];
+    auto it = chests.find(PackTileKey(p.pendingTileX, p.pendingTileY));
+    if (it == chests.end()) return std::nullopt;
+    return it->second;
+}
+
 bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& levels, WorldRegistry& world,
                                  const ItemDatabase& items, const MonsterDatabase& monsterDb, WardenState& warden) {
     if (p.coreStats[6] <= 0) return false;

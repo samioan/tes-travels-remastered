@@ -131,6 +131,30 @@ public:
     static std::optional<std::array<int8_t, 7>> DropInventoryItem(PlayerState& p, int slot, const ItemDatabase& items,
                                                                     GeneratedLevel& level, WorldRegistry& world);
 
+    // Player.collectChestItem(record) (M43, phase-3 port): the "open a
+    // chest" flow -- confirmed sole caller, GameCanvas.
+    // resolveInteractInput() (M41)'s own chest-interaction branch, which
+    // already found that its own `== -1` ("locked") outcome is
+    // unreachable, so this only ever returns 0 or 1. `record` is taken
+    // BY VALUE deliberately: the original's own `record[2] = 2;` write is
+    // a confirmed DEAD byte (M6's own finding -- no reader anywhere in
+    // ../../../src/ ever reads chest byte 2), and the record is removed
+    // from the registry immediately after regardless, so there is no
+    // aliasing behavior worth preserving by taking a reference instead.
+    //
+    // With inventory space: adds the item (AddInventoryItemRaw) and
+    // removes the chest (DungeonRuntime::RemoveChest); when the item's
+    // own category is 11 ("gift"), grants gift points too -- mirroring
+    // player_movement.h's own CommitMove dropped-item gift-point logic
+    // (M17) exactly, INCLUDING the same skipped
+    // ESGame.getGameAdvancementLevel()/checkOpenAndPopulateDungeons()
+    // call (no live ESGame session to open zones on). Without space:
+    // auto-drops the item onto the same tile instead (a 7-byte dropped-
+    // item record, matching DropInventoryItem's own record shape) and
+    // still removes the chest.
+    static int CollectChestItem(PlayerState& p, std::array<int8_t, 8> record, const ItemDatabase& items,
+                                 GeneratedLevel& level, WorldRegistry& world);
+
     // Player.hasCampMark().
     static bool HasCampMark(const PlayerState& p);
 

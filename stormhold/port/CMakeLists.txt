@@ -390,4 +390,8 @@ target_link_libraries(menu_flow_smoke PRIVATE stormhold_render stormhold_player)
 add_executable(camp_state_smoke src/tests/m42_camp_state_smoke.cpp)
 target_link_libraries(camp_state_smoke PRIVATE stormhold_player)
 
+# M43 milestone smoke test -- see src/tests/m43_chest_interaction_smoke.cpp.
+add_executable(chest_interaction_smoke src/tests/m43_chest_interaction_smoke.cpp)
+target_link_libraries(chest_interaction_smoke PRIVATE stormhold_player)
+
 endif()  # NOT STORMHOLD_DIST

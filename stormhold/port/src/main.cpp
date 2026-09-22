@@ -133,6 +133,20 @@
 // Java since long before this milestone) -- same "primitive/logic
 // first, pixels later" discipline M21/M27/M29 already used; the corridor
 // view just keeps rendering underneath for now.
+//
+// M43 layers in chest detection/interaction: new `PlayerMovement::
+// ChestAheadOfPlayer`/`PlayerInventory::CollectChestItem` (both new this
+// session, mirroring `MonsterInFront`'s own established shape) port
+// `GameCanvas.checkChestAhead()`'s "Chest" popup and
+// `resolveInteractInput()`'s chest-opening half (M41) -- NOT its NPC-talk
+// half, which still needs `Shop.questShopAt()`/`talkToNpc()`, both
+// unported. Bound to a new 'F' key. Also wires the OTHER half of
+// `refreshNpcNameplateAndWardenLeave()` (M41): the Warden-leaving
+// trigger, via the already-ported `WardenState::Leave` (M8) and
+// `DungeonRuntime::ViewGridAt` (M21) against the player's own
+// `corridorView` -- the NPC-nameplate half (gated on the SAME
+// `Shop.questShopAt()` gap) stays unported too, flagged at its own
+// omission point below rather than silently dropped.
 #include <windows.h>
 
 #include <array>
@@ -155,6 +169,7 @@
 #include "platform/win32/window.h"
 #include "player/camp_state.h"
 #include "player/player_combat_stats.h"
+#include "player/player_inventory.h"
 #include "player/player_creation.h"
 #include "player/player_movement.h"
 #include "player/visible_objects.h"
@@ -261,6 +276,34 @@ std::vector<stormhold::GeneratedLevel> BuildWorld(const stormhold::DungeonGeomet
         stormhold::DungeonRuntime::RegisterGeneratedSpawns(level, world, monsters);
     }
     return levels;
+}
+
+// GameCanvas.itemFoundMessageLines() (was decompiled/e.java's `k()`, M41)
+// -- splits an item's display name into the message popup's 2 lines: the
+// first 2 words merged onto line 1 when there are 3+ words (line 2 gets
+// just the 3rd, matching the original's own "only ever looks at the
+// first 3 words" shape exactly, never a 4th+), else one word per line.
+std::array<std::string, 2> ItemFoundMessageLines(const std::string& name) {
+    std::vector<std::string> words;
+    size_t start = 0;
+    while (start <= name.size()) {
+        size_t space = name.find(' ', start);
+        if (space == std::string::npos) {
+            words.push_back(name.substr(start));
+            break;
+        }
+        words.push_back(name.substr(start, space - start));
+        start = space + 1;
+    }
+
+    std::array<std::string, 2> lines{"", ""};
+    if (words.size() >= 3) {
+        lines[0] = words[0] + " " + words[1];
+        lines[1] = words[2];
+    } else {
+        for (size_t i = 0; i < words.size() && i < 2; i++) lines[i] = words[i];
+    }
+    return lines;
 }
 
 }  // namespace
@@ -405,6 +448,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             bool right = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0;
             bool mDown = (GetAsyncKeyState('M') & 0x8000) != 0;
             bool campKeyEdge = KeyEdge('C');
+            bool interactKeyEdge = KeyEdge('F');
             if (GetAsyncKeyState(VK_SPACE) & 0x8000) attackRequested = true;
 
             gameTimeMs += stormhold::GameClock::kTickInterval.count();
@@ -455,6 +499,59 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     stormhold::PlayerMovement::Move(player, 3, false, levelLookup, world, items, monsters, warden);
                 } else if (right) {
                     stormhold::PlayerMovement::Move(player, 4, false, levelLookup, world, items, monsters, warden);
+                }
+
+                // M43: GameCanvas.checkChestAhead() (was decompiled/
+                // e.java's `h()` no-arg, M41): polls the look-ahead tile
+                // for a chest every tick, showing "Chest" the moment one
+                // comes into view.
+                std::optional<std::array<int8_t, 8>> chestAhead =
+                    stormhold::PlayerMovement::ChestAheadOfPlayer(player, levelLookup, world);
+                if (chestAhead.has_value()) {
+                    stormhold::MessagePopup::Show(messagePopup, {"Chest", ""}, 1, gameTimeMs);
+                }
+
+                // M43: GameCanvas.resolveInteractInput()'s chest-opening
+                // half (M41, was decompiled/e.java's `f(long)`) -- its
+                // NPC-talk half (Player.shopAheadOfPlayer()>=0) is NOT
+                // wired here, see this file's own header comment. Bound
+                // to a new 'F' key, the same "no hotbar system exists"
+                // stand-in pattern as 'C' for camp/rest above.
+                // collectChestItem()'s own confirmed-unreachable `-1`
+                // ("locked") branch (M41's own finding) isn't reproduced
+                // here either -- CollectChestItem can only return 0 or 1.
+                if (interactKeyEdge && chestAhead.has_value()) {
+                    int result = stormhold::PlayerInventory::CollectChestItem(player, *chestAhead, items,
+                                                                                currentLevelMutable, world);
+                    if (result == 0) {
+                        stormhold::MessagePopup::Show(messagePopup, {"Inventory", "full!"}, -1, gameTimeMs);
+                    } else {
+                        int8_t newItemId = player.inventoryItemIds[static_cast<size_t>(player.inventoryCount - 1)];
+                        std::string name = items.name[static_cast<size_t>(std::abs(newItemId) - 1)];
+                        stormhold::MessagePopup::Show(messagePopup, ItemFoundMessageLines(name), -1, gameTimeMs);
+                    }
+                }
+
+                // M43: GameCanvas.refreshNpcNameplateAndWardenLeave()'s
+                // Warden-leaving half (M41, was decompiled/e.java's `c()`
+                // no-arg) -- the OTHER half (an NPC-nameplate popup when
+                // the tile ahead IS a shop tile) needs
+                // Player.shopAheadOfPlayer()/Shop.questShopAt(), not
+                // wired here either, see this file's own header comment.
+                // WardenState::Leave (M8) finally gets a real caller.
+                {
+                    uint8_t tileAhead = stormhold::DungeonRuntime::ViewGridAt(player.corridorView, 0, 1);
+                    if (!(tileAhead & 0x20)) {  // bit 32 clear -- not looking at a shop tile
+                        std::optional<stormhold::TargetMonsterInfo> npcCheckTarget;
+                        if (targetMonster.has_value()) {
+                            npcCheckTarget = stormhold::TargetMonsterInfo{targetMonster->tileX, targetMonster->tileY,
+                                                                            targetMonster->typeIndex};
+                        }
+                        bool dialogueDue = stormhold::IsNpcDialogueDue(player, npcCheckTarget);
+                        if (!dialogueDue && warden.present && player.wardenLoreStep == warden.visitCount) {
+                            warden.Leave(levelLookup(1), levelLookup(2));
+                        }
+                    }
                 }
 
                 // M38: GameCanvas.refreshTargetMonster() (was e.java's a()).
