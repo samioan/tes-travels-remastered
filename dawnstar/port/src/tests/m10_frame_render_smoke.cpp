@@ -136,8 +136,13 @@ int main(int argc, char** argv) {
 
         std::printf("level %d, standing at (%d,%d) facing %d\n", levelNumber, px, py, facing);
 
+        // M54: FrameRenderer::Render now also needs the player, for its
+        // own ailment-gated floor rendering -- a default-constructed
+        // PlayerState (ailmentMask == 0) takes the normal no-ailment
+        // floor path, preserving this test's own original frame exactly.
+        dawnstar::PlayerState player;
         dawnstar::Backbuffer bb;
-        dawnstar::FrameRenderer::Render(bb, textures, view, px, py, facing, level.number);
+        dawnstar::FrameRenderer::Render(bb, textures, view, px, py, facing, level.number, player);
         WriteBmp(outPath, bb);
         std::printf("wrote %s\n", outPath.c_str());
     } catch (const std::exception& e) {

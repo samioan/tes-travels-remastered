@@ -3342,6 +3342,40 @@ milestone rather than just read-through.
       through an actual in-game "curse of hunger" proc by hand this
       session).
 
+- [x] **M54 -- ailment-gated corridor floor rendering.**
+      `GameCanvas.paintCorridorWalls()`'s own opening `if
+      (!hasAilment(3)) { hasAilment(4) ? solid rect : floor texture }`
+      chain: Blind (ailment 3) skips the floor entirely (the black
+      `bb.Fill(0)` background shows through); Troll Thirst (ailment 4,
+      checked only when NOT Blind) draws a solid dark-red rect
+      (`g.setColor(10485760)`) sized to the FIXED (non-ice) floor
+      texture's own height, not whichever texture the dungeon-dependent
+      normal path would have used; otherwise the normal per-column
+      floor/floor-ice tiling, unchanged. `FrameRenderer::Render` always
+      took the default no-ailment path before this -- its own class
+      comment called the gating out of scope ("needs Player, not
+      ported"), stale since `PlayerState`/`HasAilment` have existed
+      since M14 and `combat/combat_resolution.cpp` already inflicts both
+      ailments via monster attacks (M15/M36). `FrameRenderer::Render`
+      now takes a `const PlayerState&`; `render/corridor_render_plan.h`'s
+      own doc comment (a second, now-stale "needs Player, not ported"
+      note about floor rendering -- correctly still out of ITS OWN
+      scope, since that class is wall-segment selection only) updated
+      too.
+      Verified by the new `ailment_floor_smoke`: each of the 4 ailment
+      combinations (none / Blind / Troll Thirst / both -- confirming
+      Blind's own priority) checked pixel-for-pixel against an
+      independently built expected frame (the wall segments from
+      `CorridorRenderPlan::Plan` directly, reproduced by hand, not via
+      `FrameRenderer` itself -- the same "known-good, unrelated to this
+      milestone" reuse M48/M50's own tests already established), plus a
+      hub-town case confirming the plain (non-ice) floor texture still
+      applies there. `frame_render_smoke`/`m10` updated for the
+      signature change (a default-constructed, no-ailment `PlayerState`,
+      preserving its own original frame exactly). Full rebuild zero new
+      warnings; all 51 smoke tests pass; `dawnstar_port.exe` launches
+      and stays up.
+
 ## Milestones next
 
 Found by a fresh full sweep of `../src/` against `port/src/` (every `.java`
@@ -3351,17 +3385,8 @@ comments turned out to be stale leftovers from before M40/M42/M44/M45/M46/
 M48/M49 closed the gap they describe -- those are listed at the bottom,
 doc-only. Three real, currently-reachable gaps survived the check, taken in
 this order (most player-visible / lowest-risk first); M52 is now done (see
-"Milestones done" above), M54 remains:
+"Milestones done" above); only the minor/cosmetic item remains:
 
-- [ ] **M54: ailment-gated corridor floor rendering is unported.**
-      `GameCanvas.paintCorridorWalls()`: while Blind (ailment 3) is active,
-      no floor is drawn at all; while Troll Thirst (ailment 4) is active,
-      the floor renders as a solid dark rect instead of the normal
-      texture. `render/frame_renderer.h` always takes the default
-      "draw the floor texture" path -- its own class comment calls this
-      out of scope ("needs Player, not ported"), stale since `PlayerState`/
-      `HasAilment` have existed since M14 and `combat/combat_resolution.cpp`
-      already inflicts both ailments via monster attacks.
 - [ ] Minor/cosmetic: the minimap compass glyph (a single facing-direction
       arrow character drawn next to the minimap image) is not drawn -- the
       minimap image itself, both zoom states, and the Blind-hides-everything

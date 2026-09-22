@@ -1476,7 +1476,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
             dawnstar::DungeonView view(levels, player.currentLevel - 1);
             dawnstar::FrameRenderer::Render(backbuffer, textures, view, player.tileX, player.tileY, player.facing,
-                                             levels[static_cast<size_t>(player.currentLevel - 1)].number);
+                                             levels[static_cast<size_t>(player.currentLevel - 1)].number, player);
             dawnstar::VisibleObjectRenderer::Render(backbuffer, visibleObjectTextures, player.visibleObjects);
             // GameCanvas.paintVisibleObjects()'s own `monsterAttacking`
             // recomputation -- M36. Only ever updated here (skipped

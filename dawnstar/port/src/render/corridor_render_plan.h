@@ -17,11 +17,13 @@ namespace dawnstar {
 // milestone's real pixel renderer to consume directly once PNG decoding
 // exists.
 //
-// Also out of scope here (both need Player, which isn't ported):
-// floor/ceiling rendering (paintCorridorWalls' Player.hasAilment-gated
-// branch -- draw the floor texture normally, or a solid dark rect for
-// one specific ailment, or nothing for another), and object/monster/
-// chest sprites (paintVisibleObjects). Just the wall/gate segments.
+// Also out of scope here, by design (not a gap -- this class is
+// selection logic only): floor/ceiling rendering (paintCorridorWalls'
+// own Player.hasAilment-gated branch -- draw the floor texture
+// normally, a solid dark rect for one ailment, or nothing for another
+// -- ported in render/frame_renderer.h instead, M54), and object/
+// monster/chest sprites (paintVisibleObjects). Just the wall/gate
+// segments.
 enum class WallTexture { kWall, kWallIce, kGate };
 
 struct WallDrawCall {
