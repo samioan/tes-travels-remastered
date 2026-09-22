@@ -2673,17 +2673,90 @@ read-through.
       the existing 37 smoke tests are unaffected (no C++ touched) and
       were not re-run.
 
+- [x] **M42 -- the camp/rest system, wired into the live C++ port**
+      (this session). The first of M41's newly-transcribed dispatch
+      pieces to actually reach `main.cpp`'s tick loop: new
+      `player/camp_state.h`/`.cpp` (`CampState`/`Camping`, `stormhold_
+      player`) ports `GameCanvas.startCampOrRest()` (M41) plus run()'s
+      own campState==1/2 handling (real Java since long before M41/M42
+      existed, just never had a C++ home or a trigger) -- `Camping::
+      Start`/`RollInterrupted`/`Tick`. Two new supporting methods it
+      drives: `PlayerCombatStats::ApplyRestRecovery` (`Player.
+      applyRestRecovery(fullyRested)` -- partial/full stat recovery,
+      buff clearing, the item-96/ailment-cure rolls) and `DungeonRuntime
+      ::SpawnAmbushMonsterNearPlayer` (`Dungeon.
+      spawnAmbushMonsterNearPlayer(Player)` -- a genuinely DIFFERENT
+      "ambush spawn" method from M16's own `SpawnAmbushMonsters`,
+      confirmed by reading it separately rather than assumed to share
+      that one's shape: exactly one monster, 5 fixed adjacent-tile
+      candidates, no-op in the hub town).
+
+      **A real, confirmed RNG-fidelity difference between the two
+      "ambush spawn" methods, caught by reading `spawnAmbushMonsterNearPlayer`
+      character-by-character rather than assuming it mirrors
+      `spawnAmbushMonsters(count)`'s own already-ported shape:**
+      `Monster.spawn(this)` rolls the monster type AND burns a spawnId
+      UNCONDITIONALLY, before the original's own for-loop even tries its
+      first candidate tile -- unlike M16's `SpawnAmbushMonsters`, which
+      only advances its spawnId counter once per actually-placed
+      monster (a confirmed, deliberate simplification there, since
+      spawnId's numeric value has no observable effect). This method
+      reproduces the real, unconditional burn exactly -- `m42_camp_state_
+      smoke.cpp` demonstrates it directly (every attempt against a real
+      generated level advances `spawnIdCounter` by exactly 1, success or
+      not).
+
+      Wired into `main.cpp`'s tick loop: a new 'C' key (same pragmatic
+      "no hotbar system exists" stand-in M39 already used for attack)
+      triggers `Camping::Start`, gated on `monsterRenderedLastFrame`
+      ("Cannot Camp!" when a monster is visible, matching
+      `tickPlayerAction`'s own `unconfirmed_A` gate). `Camping::Tick`
+      runs every tick regardless; while it returns `StillWaiting`,
+      movement/attack/target-monster-refresh/monster-AI are all skipped
+      for that tick (matching run()'s own `shouldRunTick==false` gate)
+      -- `TickStatusCountdowns`/`TickPerSecond`/`VisibleObjects::Refresh`
+      /rendering all keep running unconditionally every tick regardless,
+      same as the original's own tail-of-loop calls.
+
+      **Deliberately NOT rendered as its own screen:** `GameCanvas.
+      paintCampScreen()` (already real Java, transcribed long before
+      this milestone) has no C++ counterpart yet -- the corridor view
+      just keeps rendering underneath while camping, same "primitive/
+      logic first, pixels later" discipline M21/M27/M29 already
+      established. Also not wired: the death/respawn sequence
+      `tickDeathAndRegen` (M41) itself would trigger -- `main.cpp` still
+      has no live HP-reaching-0 handling at all, a pre-existing gap this
+      milestone didn't touch.
+
+      Verified with a new `camp_state_smoke.exe`: `Camping::Start`'s
+      3 branches (default/safeCampingBuff/hub-town); both `RollInterrupted`
+      outcomes reachable across 200 seeds; `Camping::Tick`'s full
+      state==0/1/2 machine (including exact partial-vs-full recovery
+      arithmetic on the disturbed/complete transitions, seed-searched to
+      exercise BOTH the disturbed and not-disturbed branches
+      deterministically); `ApplyRestRecovery`'s ailment-8 compounding
+      (2/3 * 3/4 = 1/2) and buff-clearing; `SpawnAmbushMonsterNearPlayer`'s
+      hub-town no-op and a real placement success against a real
+      generated level 2. All 38 smoke tests pass; full clean rebuild
+      stayed at zero `/W4` warnings. Manually launched the real windowed
+      exe and confirmed it starts and stays up -- a full interactive
+      keybd_event walkthrough of the camp/rest flow itself (like M40's
+      own menu walkthrough) was NOT done this session, left as a
+      lighter-weight verification gap worth closing in a follow-up.
+
 ## What's next
 
 `talkToNpc()` (`GameCanvas.java`, was decompiled/e.java's `void d(int)`)
 is the one remaining unread corner of `decompiled/e.java` -- see its own
 header comment for exactly what's missing (one `UIScreen` field
-cross-reference). Beyond that, `decompiled/e.java`'s own action-dispatch
-web is now FULLY transcribed (M41) but entirely unwired in the C++
-port -- camp/rest, spell casting/cycling, opening the inventory screen,
-and the chest/NPC-nameplate/Warden-leaving checks all have real,
-verified Java to port from now, but no C++ module, and `main.cpp`'s own
-tick loop doesn't call any of it. `paintFlashOverlays()`/
+cross-reference). M41's own dispatch web still has plenty left unwired
+in the C++ port beyond M42's camp/rest slice: spell casting/cycling
+(`resolveSpellCastInput`/`resolveSpellCycleInput`), opening the
+inventory screen (`openInventory` -- needs a real inventory UI this port
+doesn't have at all yet, a bigger lift than camp/rest was), and the
+chest/NPC-nameplate/Warden-leaving checks (`checkChestAhead`/
+`refreshNpcNameplateAndWardenLeave`) all have real, verified Java to
+port from now, but no C++ module yet. `paintFlashOverlays()`/
 `paintUnknown_b()` (the two remaining unported-PIXEL paint methods, both
 gated on that same live state -- `paintFlashOverlays()`'s own
 `unconfirmed_S` trigger is real since M39, so that one in particular may
@@ -2691,8 +2764,9 @@ be a short follow-on rather than a fresh investigation). Beyond that: a
 real save/load system (`PlayerSave` exists, M20, but there's no
 `WorldRegistry`/master-list save format, and `main.cpp`'s own Main Menu
 "Continue Game" item always takes the no-saved-game branch until one
-exists, M40); Help topics (the Java transcription itself stops at topic
-index 4). Following dawnstar's own later milestones roughly but
+exists, M40); the still-unwired death/respawn sequence (M42's own "what's
+next" note above); Help topics (the Java transcription itself stops at
+topic index 4). Following dawnstar's own later milestones roughly but
 expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41 already
-found.
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42
+already found.

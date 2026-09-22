@@ -97,6 +97,7 @@ target_link_libraries(stormhold_dungeon PUBLIC stormhold_monster stormhold_world
 # .h/player_inventory.h's own dropped-item auto-loot/drop registry wiring
 # -- see docs/PORT_ROADMAP.md and src/player/.
 add_library(stormhold_player STATIC
+  src/player/camp_state.cpp
   src/player/player_combat_stats.cpp
   src/player/player_creation.cpp
   src/player/player_inventory.cpp
@@ -384,5 +385,9 @@ target_link_libraries(attack_input_smoke PRIVATE stormhold_combat stormhold_play
 # M40 milestone smoke test -- see src/tests/m40_menu_flow_smoke.cpp.
 add_executable(menu_flow_smoke src/tests/m40_menu_flow_smoke.cpp)
 target_link_libraries(menu_flow_smoke PRIVATE stormhold_render stormhold_player)
+
+# M42 milestone smoke test -- see src/tests/m42_camp_state_smoke.cpp.
+add_executable(camp_state_smoke src/tests/m42_camp_state_smoke.cpp)
+target_link_libraries(camp_state_smoke PRIVATE stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST

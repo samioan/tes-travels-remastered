@@ -267,4 +267,48 @@ void PlayerCombatStats::TickPerSecond(PlayerState& p, const ItemDatabase& items)
     }
 }
 
+void PlayerCombatStats::ApplyRestRecovery(PlayerState& p, bool fullyRested, const ItemDatabase& items,
+                                           JavaRandom& rng) {
+    int missingHp = p.coreStats[3] - p.coreStats[2];
+    int missingMagicka = p.coreStats[5] - p.coreStats[4];
+    int missingFatigue = p.coreStats[7] - p.coreStats[6];
+    if (!fullyRested) {
+        missingHp = 2 * missingHp / 3;
+        missingMagicka = 2 * missingMagicka / 3;
+        missingFatigue = 2 * missingFatigue / 3;
+    }
+
+    if (HasAilment(p, 8)) {
+        missingHp = 3 * missingHp / 4;
+        missingMagicka = 3 * missingMagicka / 4;
+        missingFatigue = 3 * missingFatigue / 4;
+    }
+
+    p.coreStats[2] = static_cast<int16_t>(p.coreStats[2] + missingHp);
+    p.coreStats[4] = static_cast<int16_t>(p.coreStats[4] + missingMagicka);
+    p.coreStats[6] = static_cast<int16_t>(p.coreStats[6] + missingFatigue);
+    p.increaseHarmBuff = false;
+    p.increaseArmorBuff = false;
+    p.safeCampingBuff = false;
+
+    if (RandomInt1Based(rng, 100) <= 10) {
+        for (int slot = 0; slot < p.inventoryCount; slot++) {
+            int itemId = std::abs(static_cast<int>(p.inventoryItemIds[static_cast<size_t>(slot)]));
+            if (itemId == 96) {
+                PlayerInventory::RemoveInventorySlot(p, slot, items);
+                break;
+            }
+        }
+    }
+
+    for (int bit = 0; bit < 8; bit++) {
+        int ailmentId = bit + 1;
+        if (ailmentId != 4 && ailmentId != 5) {
+            if (RandomInt1Based(rng, 100) <= 25) {
+                p.ailmentMask = static_cast<int8_t>(p.ailmentMask & ~(1 << bit));
+            }
+        }
+    }
+}
+
 }  // namespace stormhold

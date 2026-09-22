@@ -190,6 +190,25 @@ public:
     // provably dead branch" discipline this port already used for
     // world/dungeon_generator.h's own dead chest-record byte.
     static void TickPerSecond(PlayerState& p, const ItemDatabase& items);
+
+    // Player.applyRestRecovery(fullyRested) (M42, phase-3 port): restores
+    // a fraction of missing HP/Magicka/Fatigue -- 2/3 when disturbed
+    // (fullyRested==false), the full amount when fullyRested, further
+    // reduced to 3/4 of THAT when HasAilment(8) is active (the two
+    // reductions compound: 2/3 * 3/4 = 1/2 when both apply) -- clears the
+    // 3 temporary combat buffs (increaseHarmBuff/increaseArmorBuff/
+    // safeCampingBuff), rolls a flat 10% chance to remove item id 96 from
+    // the FIRST inventory slot that holds it (not necessarily equipped,
+    // unlike TickPerSecond's own item-109 removal above -- a different
+    // mechanic, this item's real identity not yet confirmed beyond its
+    // numeric id), then independently rolls a 25% chance to cure EACH of
+    // the 6 non-vampirism/non-mana-burn ailments (ailments 4 and 5 are
+    // skipped entirely, matching the original's own `ailmentId != 4 &&
+    // ailmentId != 5` guard -- those two clear only via
+    // TickStatusCountdowns's own timers). Confirmed sole caller:
+    // CampState::Tick (player/camp_state.h) -- was GameCanvas's own
+    // camp-interrupted/camp-complete branches in run().
+    static void ApplyRestRecovery(PlayerState& p, bool fullyRested, const ItemDatabase& items, JavaRandom& rng);
 };
 
 }  // namespace stormhold

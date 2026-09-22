@@ -211,6 +211,31 @@ public:
     static void SpawnAmbushMonsters(GeneratedLevel& level, WorldRegistry& world, int count, JavaRandom& rng,
                                      const MonsterDatabase& monsterDb, int16_t& spawnIdCounter);
 
+    // Dungeon.spawnAmbushMonsterNearPlayer(Player) (M42, phase-3 port) --
+    // a DIFFERENT "ambush spawn" method from SpawnAmbushMonsters above,
+    // confirmed by reading it separately rather than assumed to share
+    // that one's shape: spawns exactly ONE monster adjacent to
+    // (playerTileX, playerTileY), tried at up to 5 candidate offsets in a
+    // FIXED order (W, E, N, S, S-again -- the original's own `i<2`/else
+    // split, transcribed as found, not simplified into a cleaner N/E/S/W
+    // ring), first walkable one wins; no-op in the hub town (level.number
+    // ==1) or when none of the 5 candidates is walkable. Confirmed sole
+    // caller: CampState::Tick (player/camp_state.h)'s own camp-
+    // interruption branch -- "a monster appears when your rest is
+    // disturbed."
+    //
+    // Unlike SpawnAmbushMonsters above, this DOES burn a monster type
+    // roll and a spawnId on every call, even when all 5 candidates turn
+    // out unwalkable and nothing actually gets stored -- matches
+    // `Monster.spawn(this)`'s own unconditional `nextSpawnId()`/tier-
+    // bucket roll, called once before the original's own for-loop even
+    // starts trying candidate tiles. A real, confirmed difference between
+    // the two methods' own RNG-stream fidelity, not an inconsistency in
+    // this port.
+    static void SpawnAmbushMonsterNearPlayer(GeneratedLevel& level, WorldRegistry& world, int playerTileX,
+                                               int playerTileY, JavaRandom& rng, const MonsterDatabase& monsterDb,
+                                               int16_t& spawnIdCounter);
+
     // M18: `Dungeon.populate()`'s own `spawnRoomMonsters()`/`placeChests()`
     // register directly into `ESGame.monsters[]`/`chests[]` AS PART OF
     // generation itself -- so in the real game, `WorldRegistry` is never

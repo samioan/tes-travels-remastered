@@ -113,6 +113,26 @@
 // intro, before finally handing off into the same tick/render pipeline
 // M34-M39 already built. The live gameplay loop itself is completely
 // unchanged; only what runs BEFORE it changed.
+//
+// M42 layers in `Camping`/`CampState` (player/camp_state.h, new this
+// session) -- GameCanvas's own campState/campRollAt fields and run()'s
+// already-Java-transcribed camp state machine (2.5s roll-for-
+// interruption, then 5s safe wait), finally with a real trigger
+// (GameCanvas.startCampOrRest(), M41) and a real driver
+// (Camping::Tick, this session). Bound to a new 'C' key, the same
+// pragmatic stand-in M39 used for attack (the real trigger, hotbar key
+// '0', stays out of scope). While camping, movement/attack/target-
+// monster refresh/monster-AI are all skipped for the tick (matching
+// run()'s own shouldRunTick==false gate) -- everything else
+// (TickStatusCountdowns/TickPerSecond/VisibleObjects::Refresh/
+// rendering) keeps running unconditionally, same as the original.
+// `PlayerCombatStats::ApplyRestRecovery` and `DungeonRuntime::
+// SpawnAmbushMonsterNearPlayer` (both new this session) are the two
+// Player/Dungeon methods it drives. Deliberately NOT rendered as its
+// own "CAMPING" screen (`GameCanvas.paintCampScreen()`, already real
+// Java since long before this milestone) -- same "primitive/logic
+// first, pixels later" discipline M21/M27/M29 already used; the corridor
+// view just keeps rendering underneath for now.
 #include <windows.h>
 
 #include <array>
@@ -133,6 +153,7 @@
 #include "graphics/backbuffer.h"
 #include "monster/monster_runtime.h"
 #include "platform/win32/window.h"
+#include "player/camp_state.h"
 #include "player/player_combat_stats.h"
 #include "player/player_creation.h"
 #include "player/player_movement.h"
@@ -306,6 +327,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // reasoning ESGame.nextSpawnId() itself documents (see player/
     // player_creation.h's own class comment).
     int16_t nextSpawnIdCounter = 10000;
+    // M42: GameCanvas's own campState/campRollAt, finally with a real
+    // trigger ('C' key, below) and a real Tick() driving run()'s own
+    // already-transcribed camp state machine.
+    stormhold::CampState camp;
     stormhold::MessagePopupState messagePopup;
     // M38: GameCanvas.targetMonster -- refreshed every tick by
     // PlayerMovement::MonsterInFront below.
@@ -379,85 +404,120 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             bool left = (GetAsyncKeyState(VK_LEFT) & 0x8000) != 0;
             bool right = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0;
             bool mDown = (GetAsyncKeyState('M') & 0x8000) != 0;
+            bool campKeyEdge = KeyEdge('C');
             if (GetAsyncKeyState(VK_SPACE) & 0x8000) attackRequested = true;
 
-            if (up) {
-                stormhold::PlayerMovement::Move(player, 1, false, levelLookup, world, items, monsters, warden);
-            } else if (down) {
-                stormhold::PlayerMovement::Move(player, 2, false, levelLookup, world, items, monsters, warden);
-            } else if (left) {
-                stormhold::PlayerMovement::Move(player, 3, false, levelLookup, world, items, monsters, warden);
-            } else if (right) {
-                stormhold::PlayerMovement::Move(player, 4, false, levelLookup, world, items, monsters, warden);
+            gameTimeMs += stormhold::GameClock::kTickInterval.count();
+            stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
+
+            // M42: GameCanvas.tickPlayerAction()'s own unconfirmed_I
+            // branch, gated there on unconfirmed_A -- "Cannot Camp!"
+            // instead of starting a rest when a monster is currently
+            // visible (monsterRenderedLastFrame, same flag
+            // TickStatusCountdowns's own ailment-7 coupling already
+            // reads) -- else GameCanvas.startCampOrRest() (M41, was
+            // decompiled/e.java's a(long)). Bound to a new 'C' key, the
+            // same pragmatic "no hotbar system exists" stand-in M39
+            // already used for attack (real key: '0' when
+            // hotbarActionSet==0, out of scope -- see M29/M31's own
+            // input-handling gap).
+            if (campKeyEdge && camp.state == 0) {
+                if (monsterRenderedLastFrame) {
+                    stormhold::MessagePopup::Show(messagePopup, {"Cannot", "Camp!"}, 1, gameTimeMs);
+                } else {
+                    stormhold::Camping::Start(camp, player, gameTimeMs);
+                }
+            }
+
+            // M42: run()'s own campState==1/2 handling (Java-
+            // transcribed long before this port's tick loop existed) --
+            // CampState::Tick returns StillWaiting while camping/
+            // waiting, matching run()'s own shouldRunTick==false gate
+            // below (movement/attack/monster-AI are the only things
+            // that gate on it -- TickStatusCountdowns/TickPerSecond/
+            // VisibleObjects::Refresh/rendering all run unconditionally
+            // every tick in the original, same as here).
+            stormhold::CampTickResult campResult =
+                stormhold::Camping::Tick(camp, player, currentLevelMutable, world, items, monsters, combatRng,
+                                          nextSpawnIdCounter, gameTimeMs);
+            if (campResult == stormhold::CampTickResult::Disturbed) {
+                stormhold::MessagePopup::Show(messagePopup, {"Rest", "disturbed!"}, 1, gameTimeMs);
+            } else if (campResult == stormhold::CampTickResult::Complete) {
+                stormhold::MessagePopup::Show(messagePopup, {"Rest", "complete!"}, 1, gameTimeMs);
+            }
+
+            if (campResult != stormhold::CampTickResult::StillWaiting) {
+                if (up) {
+                    stormhold::PlayerMovement::Move(player, 1, false, levelLookup, world, items, monsters, warden);
+                } else if (down) {
+                    stormhold::PlayerMovement::Move(player, 2, false, levelLookup, world, items, monsters, warden);
+                } else if (left) {
+                    stormhold::PlayerMovement::Move(player, 3, false, levelLookup, world, items, monsters, warden);
+                } else if (right) {
+                    stormhold::PlayerMovement::Move(player, 4, false, levelLookup, world, items, monsters, warden);
+                }
+
+                // M38: GameCanvas.refreshTargetMonster() (was e.java's a()).
+                targetMonster = stormhold::PlayerMovement::MonsterInFront(player, levelLookup, world);
+                hudState.unconfirmedAa = targetMonster.has_value();
+                if (targetMonster.has_value()) {
+                    std::string name = monsters.TypeName(targetMonster->typeIndex);
+                    size_t spaceAt = name.find(' ');
+                    std::array<std::string, 2> lines =
+                        (spaceAt == std::string::npos)
+                            ? std::array<std::string, 2>{name, ""}
+                            : std::array<std::string, 2>{name.substr(0, spaceAt), name.substr(spaceAt + 1)};
+                    stormhold::MessagePopup::Show(messagePopup, lines, 1, gameTimeMs);
+                }
+
+                // M38: GameCanvas.resolveTargetMonsterDeath() (was e.java's
+                // m()).
+                if (targetMonster.has_value() && targetMonster->currentHp <= 0) {
+                    bool guaranteedDrop = (targetMonster->typeIndex == 41);
+                    stormhold::MonsterRuntime::DeathDrop drop = stormhold::MonsterRuntime::OnDeath(
+                        *targetMonster, monsters, items, currentLevelMutable.tier, guaranteedDrop, nextSpawnIdCounter,
+                        combatRng);
+                    if (drop.dropped) {
+                        std::array<int8_t, 7> record;
+                        for (size_t i = 0; i < record.size(); i++) record[i] = static_cast<int8_t>(drop.record[i]);
+                        stormhold::DungeonRuntime::AddDroppedItem(currentLevelMutable, world, record);
+                    }
+                    stormhold::DungeonRuntime::RemoveMonster(currentLevelMutable, world, targetMonster->spawnId);
+                    if (stormhold::PlayerCombatStats::HasAilment(player, 4)) {
+                        int heal = 3 * player.coreStats[3] / 10;
+                        player.coreStats[2] = static_cast<int16_t>(
+                            std::min<int>(player.coreStats[2] + heal, player.coreStats[3]));
+                    }
+                    stormhold::MessagePopup::Show(messagePopup, {"Creature", "is dead!"}, 1, gameTimeMs);
+                    targetMonster = std::nullopt;
+                    hudState.unconfirmedAa = false;
+                }
+
+                // M39: GameCanvas.resolveAttackInput() (was e.java's
+                // d(long)) -- see this file's own header comment for the
+                // input-binding simplification.
+                if (attackRequested) {
+                    stormhold::CombatResolution::ResolveAttackInput(player, targetMonster, attackRequested,
+                                                                      gameTimeMs, lastAttackTimeMs, charData, items,
+                                                                      monsters, combatRng, world);
+                }
+
+                // M37: GameCanvas.run()'s own this.tickMonsterAI(frameStart)
+                // call (see this file's own header comment on the relative-
+                // order simplification). Only the player's OWN current level
+                // ever ticks -- matching the real ESGame.G[]-indexed read
+                // exactly, not an invented simplification.
+                bool showAttackMessage = stormhold::CombatResolution::TickMonstersOnLevel(
+                    world, currentLevelMutable, player, charData, items, monsters, levels, gameTimeMs, combatRng,
+                    ambushRng, nextSpawnIdCounter);
+                if (showAttackMessage) {
+                    stormhold::MessagePopup::Show(messagePopup, {"Creature", "attacks!"}, 2, gameTimeMs);
+                }
             }
 
             if (mDown && !mKeyWasDown) minimapZoomedOut = !minimapZoomedOut;
             mKeyWasDown = mDown;
 
-            gameTimeMs += stormhold::GameClock::kTickInterval.count();
-            stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
-
-            // M38: GameCanvas.refreshTargetMonster() (was e.java's a()).
-            targetMonster = stormhold::PlayerMovement::MonsterInFront(player, levelLookup, world);
-            hudState.unconfirmedAa = targetMonster.has_value();
-            if (targetMonster.has_value()) {
-                std::string name = monsters.TypeName(targetMonster->typeIndex);
-                size_t spaceAt = name.find(' ');
-                std::array<std::string, 2> lines =
-                    (spaceAt == std::string::npos)
-                        ? std::array<std::string, 2>{name, ""}
-                        : std::array<std::string, 2>{name.substr(0, spaceAt), name.substr(spaceAt + 1)};
-                stormhold::MessagePopup::Show(messagePopup, lines, 1, gameTimeMs);
-            }
-
-            // M38: GameCanvas.resolveTargetMonsterDeath() (was e.java's
-            // m()) -- currently unreachable in practice, since nothing
-            // yet lets the player actually damage targetMonster (no
-            // combat input is wired -- see this file's own header
-            // comment), but wired anyway, matching this port's own
-            // "wire the confirmed mechanic even ahead of its own
-            // trigger" precedent (M35-M37).
-            if (targetMonster.has_value() && targetMonster->currentHp <= 0) {
-                bool guaranteedDrop = (targetMonster->typeIndex == 41);
-                stormhold::MonsterRuntime::DeathDrop drop = stormhold::MonsterRuntime::OnDeath(
-                    *targetMonster, monsters, items, currentLevelMutable.tier, guaranteedDrop, nextSpawnIdCounter,
-                    combatRng);
-                if (drop.dropped) {
-                    std::array<int8_t, 7> record;
-                    for (size_t i = 0; i < record.size(); i++) record[i] = static_cast<int8_t>(drop.record[i]);
-                    stormhold::DungeonRuntime::AddDroppedItem(currentLevelMutable, world, record);
-                }
-                stormhold::DungeonRuntime::RemoveMonster(currentLevelMutable, world, targetMonster->spawnId);
-                if (stormhold::PlayerCombatStats::HasAilment(player, 4)) {
-                    int heal = 3 * player.coreStats[3] / 10;
-                    player.coreStats[2] = static_cast<int16_t>(
-                        std::min<int>(player.coreStats[2] + heal, player.coreStats[3]));
-                }
-                stormhold::MessagePopup::Show(messagePopup, {"Creature", "is dead!"}, 1, gameTimeMs);
-                targetMonster = std::nullopt;
-                hudState.unconfirmedAa = false;
-            }
-
-            // M39: GameCanvas.resolveAttackInput() (was e.java's
-            // d(long)) -- see this file's own header comment for the
-            // input-binding simplification.
-            if (attackRequested) {
-                stormhold::CombatResolution::ResolveAttackInput(player, targetMonster, attackRequested, gameTimeMs,
-                                                                  lastAttackTimeMs, charData, items, monsters,
-                                                                  combatRng, world);
-            }
-
-            // M37: GameCanvas.run()'s own this.tickMonsterAI(frameStart)
-            // call (see this file's own header comment on the relative-
-            // order simplification). Only the player's OWN current level
-            // ever ticks -- matching the real ESGame.G[]-indexed read
-            // exactly, not an invented simplification.
-            bool showAttackMessage = stormhold::CombatResolution::TickMonstersOnLevel(
-                world, currentLevelMutable, player, charData, items, monsters, levels, gameTimeMs, combatRng,
-                ambushRng, nextSpawnIdCounter);
-            if (showAttackMessage) {
-                stormhold::MessagePopup::Show(messagePopup, {"Creature", "attacks!"}, 2, gameTimeMs);
-            }
             stormhold::MessagePopup::Tick(messagePopup, gameTimeMs);
 
             // M35: GameCanvas.run()'s own this.c(deltaMs) call, ahead of

@@ -168,6 +168,37 @@ void DungeonRuntime::SpawnAmbushMonsters(GeneratedLevel& level, WorldRegistry& w
     }
 }
 
+void DungeonRuntime::SpawnAmbushMonsterNearPlayer(GeneratedLevel& level, WorldRegistry& world, int playerTileX,
+                                                   int playerTileY, JavaRandom& rng, const MonsterDatabase& monsterDb,
+                                                   int16_t& spawnIdCounter) {
+    if (level.number == 1) return;
+
+    // Monster.spawn(this) = spawn(ESGame.rng, this, -1): rolls the type
+    // and burns a spawnId unconditionally, BEFORE any candidate tile is
+    // even tried -- see this method's own declaration comment.
+    int monsterType = MonsterRuntime::PickMonsterType(rng, level.tier, -1);
+    int16_t spawnId = ++spawnIdCounter;
+    MonsterState m = MonsterRuntime::Spawn(spawnId, monsterType, level.number, monsterDb);
+
+    for (int i = 0; i <= 4; i++) {
+        int x = playerTileX;
+        int y = playerTileY;
+        if (i < 2) {
+            x += 2 * i - 1;
+        } else {
+            y += 2 * i - 5;
+        }
+
+        if (IsWalkable(level, x, y)) {
+            m.tileX = static_cast<int8_t>(x);
+            m.tileY = static_cast<int8_t>(y);
+            level.tiles[static_cast<size_t>(x)][static_cast<size_t>(y)] |= 2;
+            StoreMonster(world, m);
+            break;
+        }
+    }
+}
+
 void DungeonRuntime::RegisterGeneratedSpawns(const GeneratedLevel& level, WorldRegistry& world,
                                               const MonsterDatabase& monsterDb) {
     for (const GeneratedMonsterSpawn& spawn : level.monsters) {
