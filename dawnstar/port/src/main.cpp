@@ -614,6 +614,25 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             // M38's own fixed class-0 stand-in).
                             inMenu = false;
                             inCharacterCreation = true;
+                            // Bugfix: this same physical Enter press is
+                            // still held on the very next tick (the
+                            // inMenu block's own `return` below only
+                            // skips the REST of *this* tick, not the
+                            // next one) -- without this, the character
+                            // creation block's own `ccSelectKeyWasDown`
+                            // (still false, never touched before this
+                            // point) would read it as a brand new Select
+                            // press and immediately fire OnSelect() while
+                            // still on ClassSelect's own default index 0
+                            // (Barbarian), silently skipping the class-
+                            // selection screen the player never actually
+                            // saw yet. Same "a key still held from the
+                            // transition mustn't also fire the next
+                            // screen's own first action" precaution the
+                            // splash->menu transition above already
+                            // takes for exactly this reason.
+                            ccSelectKeyWasDown = KeyPressed(VK_RETURN);
+                            ccCancelKeyWasDown = KeyPressed(VK_ESCAPE);
                             break;
                         case dawnstar::MenuFlowAction::ContinueGame: {
                             // M52: ESGame's own mainMenuUI case 1

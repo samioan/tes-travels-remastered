@@ -3588,6 +3588,48 @@ milestone rather than just read-through.
       font ever did. Full rebuild zero new warnings; all 52 smoke tests
       pass.
 
+- [x] **M59 -- "New Game" no longer auto-picks Barbarian.** User-
+      reported: pressing "New Game" silently skipped straight past the
+      class-selection screen into "You selected: Barbarian", requiring
+      Esc to actually get back to it. Root cause: the same physical
+      Enter press that selected "New Game" on the main menu is still
+      physically held down on the very next tick -- `inMenu`'s own
+      block does `return` at the end of *that* tick (so no same-tick
+      leak), but on the *next* tick `inCharacterCreation` is now true
+      and its own `ccSelectKeyWasDown` had never been touched (still
+      its startup default, `false`), so `selectDown && !ccSelectKeyWasDown`
+      read the still-held key as a brand new Select press and
+      immediately called `CharacterCreationFlow::OnSelect()` while still
+      showing `ClassSelect`'s own default cursor position (index 0,
+      Barbarian) -- silently confirming a class the player never
+      actually chose. The exact same bug class the splash->menu
+      transition already guards against (`menuSelectKeyWasDown =
+      KeyPressed(VK_RETURN);` right after `inSplash = false;`) and the
+      M49 level-up transition already guards against
+      (`levelUpSelectKeyWasDown = true;`, with its own "Enter is likely
+      still down" comment) -- just never applied to this one
+      `StartNewGame` transition. Fixed the same way: seed
+      `ccSelectKeyWasDown`/`ccCancelKeyWasDown` from the real current
+      key state at the moment `inCharacterCreation` is set true.
+      Checked every other screen-transition site in main.cpp for the
+      same gap: NpcMenu/OptionsMenu are opened by 'I'/'O', different
+      physical keys than the menu's own Enter/Escape, so no leak is
+      possible there; both GameOver triggers and the LevelUp trigger
+      are state-driven (a tick-loop result or `player.levelUpPending`),
+      not a direct keypress, so nothing to leak; the character-
+      creation-Cancel-back-to-main-menu transition technically has the
+      same unguarded shape, but `MenuFlow::OnCancel()`'s own `MainMenu`
+      case is a real, confirmed no-op ("No Cancel command exists on the
+      real mainMenuUI at all"), so a leaked Escape there is harmless.
+      `StartNewGame` was the one real, observable gap.
+
+      Verified by screen-capturing the real `dawnstar_port.exe` window
+      through the exact reported sequence (skip splash, press Enter
+      once on "New Game") -- now lands correctly on "Select a Class:"
+      with Barbarian merely highlighted as the default cursor, not
+      auto-confirmed. Full rebuild zero new warnings; all 52 smoke
+      tests pass.
+
 ## Milestones next
 
 Nothing queued. A second fresh full sweep of `../src/` against `port/src/`
