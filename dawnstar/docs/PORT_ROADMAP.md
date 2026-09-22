@@ -3268,6 +3268,59 @@ milestone rather than just read-through.
 
 ## Milestones next
 
-None currently queued -- every item tracked here has been closed. See
-"Known remaining gaps" (if a future session adds one) or re-audit
-`../src/` for anything newly noticed.
+Found by a fresh full sweep of `../src/` against `port/src/` (every `.java`
+file re-read, every `ESGame` `secondaryParam` dispatch value cross-checked
+against the port) after M51 closed the previous list. Most flagged-looking
+comments turned out to be stale leftovers from before M40/M42/M44/M45/M46/
+M48/M49 closed the gap they describe -- those are listed at the bottom,
+doc-only. Three real, currently-reachable gaps survived the check, taken in
+this order (most player-visible / lowest-risk first):
+
+- [ ] **M52: "Continue Game" from the main menu is a no-op.** Should load
+      the last save and drop straight into gameplay (`ESGame`'s
+      `helperThreadState==6` -> `loadGameState()` + `resumeGame()`).
+      `ui/menu_flow.h`/`ui/options_menu.h` both flag this as deferred --
+      accurately when M38 wrote it (save/load didn't touch disk yet), but
+      M42 built the real file-backed `GameSave::SaveGameState/
+      LoadGameState/ResumeGame` and M46 already wires the in-game
+      Options-menu "Load Game" to it. Same machinery, never connected to
+      this entry point. An existing "No saved game" dialog
+      (`OptionsMenu::ShowNoSavedGame`) may be reusable with a different
+      back-target (main menu instead of Options).
+- [ ] **M53: the "curse of hunger" ailment side effect is a no-op.**
+      `Monster.tick()`'s 30%-chance on-hit ailment roll: ailment type 2 is
+      supposed to spawn 3 more monsters near the player
+      (`Dungeon.populateRandomMonsters(3)`). `combat/combat_resolution.cpp`'s
+      `MonsterTick` marks this `SKIPPED` with a stale comment ("no live
+      monster registry exists") -- `DungeonRuntime::PopulateRandomMonsters`
+      has existed since M22/M24 and `dawnstar_combat` already links
+      `dawnstar_dungeon`; `MonsterTick` just never got `levels`/`world`
+      threaded into its signature to call it.
+- [ ] **M54: ailment-gated corridor floor rendering is unported.**
+      `GameCanvas.paintCorridorWalls()`: while Blind (ailment 3) is active,
+      no floor is drawn at all; while Troll Thirst (ailment 4) is active,
+      the floor renders as a solid dark rect instead of the normal
+      texture. `render/frame_renderer.h` always takes the default
+      "draw the floor texture" path -- its own class comment calls this
+      out of scope ("needs Player, not ported"), stale since `PlayerState`/
+      `HasAilment` have existed since M14 and `combat/combat_resolution.cpp`
+      already inflicts both ailments via monster attacks.
+- [ ] Minor/cosmetic: the minimap compass glyph (a single facing-direction
+      arrow character drawn next to the minimap image) is not drawn -- the
+      minimap image itself, both zoom states, and the Blind-hides-everything
+      gate are all correctly ported; only this one glyph is missing. Real
+      MIDP built-in font glyph with no port-side equivalent to draw it --
+      low value, pick up opportunistically.
+
+Stale doc comments found along the way (not gaps -- just describe work as
+"unported"/"deferred" that a later milestone actually completed; worth a
+drive-by fix whenever the file is next touched, not urgent on their own):
+`npc/shop_interaction.h:114` (level-up, done M49), `render/
+hotbar_renderer.h:41` (camp/shop/options UI, all exist now), `monster/
+monster_runtime.h:66-69,87-88` ("no live registry... nothing calls
+store()" -- WorldRegistry exists since M22/M24, callers already write
+back), `ui/character_creation_flow.h:56` (Save/Load file I/O, done M42),
+`tests/m34_interact_tick_smoke.cpp:165` (openNpcDialogue, done M45/M46),
+`ui/options_menu.cpp:651` (ambush spawner, done M44), `util/text.h:40`
+(boot splash, mode 2 done M48, mode 1 is dead code in the original),
+`ui/menu_flow.h:52-54`/`menu_flow.cpp:74` (New Game's real flow, done M40).
