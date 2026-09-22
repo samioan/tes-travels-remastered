@@ -3696,6 +3696,24 @@ milestone rather than just read-through.
       real Options screen. Full rebuild zero new warnings; all 52 smoke
       tests pass.
 
+- [x] **M62 -- Q/E turning, interact/rest swapped to R/Z.** User-
+      reported discomfort turning via the Left/Right arrows while the
+      rest of the hand sits on WASD. Q/E (right next to WASD, no hand
+      movement needed) now turn left/right too, ADDED alongside the
+      arrow keys rather than replacing them -- same "add, don't remove"
+      precedent M60 already set for W/S/A/D next to Up/Down/Left/Right.
+      Freeing 'E' (M60's own interact key) meant Interact needed a new
+      key too: moved to 'R', which in turn freed 'R' (M60's own camp
+      key) for Camp/Rest to move back to 'Z' -- a small chain of 3
+      swaps requested together as one coherent scheme. `port/
+      dist_readme.txt` updated to match.
+
+      Verified by scripting the real exe into gameplay and holding 'E'
+      via a real `keybd_event` key-hold -- the minimap's own compass
+      glyph flips N->S (two real 90-degree turns registered), proving
+      the new key reaches `PlayerMovement::Move` for real. Full rebuild
+      zero new warnings; all 52 smoke tests pass.
+
 ## Milestones next
 
 Nothing queued. A second fresh full sweep of `../src/` against `port/src/`

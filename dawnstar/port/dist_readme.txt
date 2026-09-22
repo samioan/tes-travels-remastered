@@ -30,12 +30,12 @@ CONTROLS
 
   W / S / Up / Down     walk forward / backward
   A / D                 strafe left / right
-  Left / Right           turn left / right
+  Q / E / Left / Right  turn left / right
   Space                  attack
   F                      cast selected spell
   C                      cycle selected spell
-  E                      interact -- doors, people, chests, anything nearby
-  R                      rest / camp
+  R                      interact -- doors, people, chests, anything nearby
+  Z                      rest / camp
   Tab                    options menu (inventory, skills, spells, save/load)
   M                      toggle the zoomed-out minimap
   Enter                  confirm / select
@@ -43,10 +43,11 @@ CONTROLS
 
 A WASD + strafe layout, the same shape most first-person dungeon crawlers
 use today (Legend of Grimrock and its own genre-mates), not the original
-phone's own D-pad-and-numeric-keypad scheme. The arrow keys still turn
-in place exactly like they always did; strafing (A/D) is genuinely new --
-the original had it too (its own numeric '4'/'6' keys), it just never had
-a PC-keyboard binding here until now.
+phone's own D-pad-and-numeric-keypad scheme. Q/E sit right next to WASD
+so you can turn without moving your hand; the arrow keys still turn in
+place too, exactly like they always did. Strafing (A/D) is genuinely
+new -- the original had it too (its own numeric '4'/'6' keys), it just
+never had a PC-keyboard binding here until now.
 
 The window size (2x, 3x or 4x) is set in the launcher, not in the game.
 

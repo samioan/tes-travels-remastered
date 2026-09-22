@@ -1074,8 +1074,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // itself, reading whatever hotbarContext currently holds).
             // M60: remapped from 'I' to 'E' -- "E to interact" is the
             // near-universal modern PC convention (Half-Life 2, Skyrim,
-            // and most first-person games since).
-            bool interactKeyDown = KeyPressed('E');
+            // and most first-person games since). M62: moved again, off
+            // 'E' (now turn-right, next to WASD) to 'R'.
+            bool interactKeyDown = KeyPressed('R');
             if (interactKeyDown && !interactKeyWasDown && hotbarContext == 2) {
                 interactPending = true;
             }
@@ -1087,8 +1088,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // value (explore, not interact).
             // M60: remapped from 'Z' to 'R' -- "R to rest" is a common
             // modern RPG convention and reads more directly as "Rest"
-            // than 'Z' ever did.
-            bool campKeyDown = KeyPressed('R');
+            // than 'Z' ever did. M62: 'R' freed up for Interact instead
+            // (see above), so Camp/Rest moves back to 'Z'.
+            bool campKeyDown = KeyPressed('Z');
             if (campKeyDown && !campKeyWasDown && hotbarContext == 0) {
                 campPending = true;
             }
@@ -1354,15 +1356,24 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         // today use (Legend of Grimrock and its own
                         // genre-mates), rather than the original phone's
                         // turn-only D-pad.
+                        //
+                        // M62: user-reported discomfort turning via the
+                        // Left/Right arrows while the rest of the hand
+                        // sits on WASD -- Q/E (right next to WASD, no
+                        // hand movement needed) now turn left/right too,
+                        // alongside the arrow keys rather than replacing
+                        // them (same "add, don't remove" precedent M60
+                        // already set for W/S/A/D next to Up/Down/Left/
+                        // Right).
                         moveAttempted = true;
                         int slotsBefore = player.inventoryCount;
                         if (KeyPressed(VK_UP) || KeyPressed('W')) {
                             dawnstar::PlayerMovement::Move(player, 1, false, levels, world, items);
                         } else if (KeyPressed(VK_DOWN) || KeyPressed('S')) {
                             dawnstar::PlayerMovement::Move(player, 2, false, levels, world, items);
-                        } else if (KeyPressed(VK_RIGHT)) {
+                        } else if (KeyPressed(VK_RIGHT) || KeyPressed('E')) {
                             dawnstar::PlayerMovement::Move(player, 3, false, levels, world, items);
-                        } else if (KeyPressed(VK_LEFT)) {
+                        } else if (KeyPressed(VK_LEFT) || KeyPressed('Q')) {
                             dawnstar::PlayerMovement::Move(player, 4, false, levels, world, items);
                         } else if (KeyPressed('D')) {
                             dawnstar::PlayerMovement::Move(player, 3, true, levels, world, items);
