@@ -13,6 +13,7 @@
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
 #include "combat/combat_resolution.h"
+#include "dungeon/dungeon_runtime.h"
 #include "monster/monster_runtime.h"
 #include "player/player_creation.h"
 #include "world/dungeon_generator.h"
@@ -299,20 +300,31 @@ int main(int argc, char** argv) {
             Check(fatigueEverDropped, "at least one landed attack should have cost fatigue");
             (void)fatigueBefore;
 
+            // M53: MonsterTick now needs a real live world too (its own
+            // dungeonLevel-2, i.e. index 1 -- matching `attacker`'s own
+            // dungeonLevel below) for the ailment==2 "curse of hunger"
+            // 3-monster-spawn side effect this loop is long enough to
+            // reach at least once (30% chance per landed hit, 60 ticks).
+            dawnstar::WorldRegistry world(levels.size());
+            int16_t spawnIdCounter = 1;
+            size_t monstersOnLevel2Before = world.monsters[1].size();
+
             MonsterState attacker = MonsterRuntime::Spawn(9002, 2, 2, monsters);
             dawnstar::JavaRandom tickRng(97531);
             bool anyPlayerDamage = false;
             bool anyAilmentSet = false;
             int16_t hpBefore = player.coreStats[2];
             for (int i = 0; i < 60; i++) {
-                dawnstar::CombatResolution::MonsterTick(attacker, player, charData, items, monsters, i * 900LL, tickRng);
+                dawnstar::CombatResolution::MonsterTick(attacker, player, charData, items, monsters, i * 900LL,
+                                                         tickRng, levels, world, spawnIdCounter);
                 Check(player.coreStats[2] >= 0, "player HP must never go negative");
                 if (player.coreStats[2] < hpBefore) anyPlayerDamage = true;
                 if (player.ailmentMask != 0) anyAilmentSet = true;
             }
             Check(anyPlayerDamage, "at least one of 60 monster ticks (spanning many 800ms windows) should land damage");
-            std::printf("  after combat: monster hp=%d player hp=%d ailmentMask=0x%x\n", static_cast<uint8_t>(monster.hp),
-                        player.coreStats[2], static_cast<uint8_t>(player.ailmentMask));
+            std::printf("  after combat: monster hp=%d player hp=%d ailmentMask=0x%x, level-2 monsters %zu -> %zu\n",
+                        static_cast<uint8_t>(monster.hp), player.coreStats[2], static_cast<uint8_t>(player.ailmentMask),
+                        monstersOnLevel2Before, world.monsters[1].size());
             (void)anyAilmentSet;
         }
 

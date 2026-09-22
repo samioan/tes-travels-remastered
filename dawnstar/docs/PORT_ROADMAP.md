@@ -3296,6 +3296,52 @@ milestone rather than just read-through.
       milestone since M20 to be hand-verified with actual screenshots
       rather than only "launches and stays up".
 
+- [x] **M53 -- the "curse of hunger" ailment side effect.**
+      `Monster.tick()`'s 30%-chance on-hit ailment roll: ailment type 2
+      spawns 3 more monsters near the ATTACKING monster's own dungeon
+      level (`Dungeon.populateRandomMonsters(3)`, read off
+      `this.dungeonLevel`, not necessarily the player's `currentLevel` --
+      though the two are always equal in every real reachable case, since
+      this only ever runs from `TickNearbyMonsters`, which only ticks
+      monsters already registered on the player's own level). Was a
+      documented no-op; `CombatResolution::MonsterTick` now takes
+      `levels`/`world`/`spawnIdCounter` and calls the already-existing
+      `DungeonRuntime::PopulateRandomMonsters` directly.
+      `spawnIdCounter` threads all the way from `main.cpp`'s own
+      `nextMonsterSpawnId` through `CombatTick::TickNearbyMonsters` --
+      the SAME Monster.nextSpawnIdCounter substitute `camp/camp_tick.h`'s
+      own `TrySpawnMonsterNear` call already advances, not a second,
+      independent one (there is exactly one such counter in the
+      original too).
+      A real hazard caught while wiring this, not present before:
+      `TickNearbyMonsters` iterates `monsterMap` (the player's own level)
+      via an iterator captured before calling `MonsterTick`, but
+      `MonsterTick` can now itself INSERT new entries into that SAME map
+      (this exact side effect) -- `std::unordered_map` insertion can
+      rehash and invalidate iterators (though never references, except
+      on erase), so reusing that captured iterator afterward to write the
+      ticked monster's own updated bytes back would be undefined
+      behavior. Fixed by re-`find()`-ing the iterator after the
+      `MonsterTick` call rather than reusing the pre-call one.
+      Verified by the new `ailment_spawn_smoke`: scans the real
+      `MonsterDatabase` for an actual type whose own ailment column is 2
+      (not assumed), then probes real `MonsterTick` rounds across many
+      seeds (same "drive the real wrapper repeatedly instead of hand-
+      forcing the RNG sequence" philosophy M36 already established, since
+      this effect compounds a landed-hit-tier roll with a further 30%
+      ailment roll) until the population genuinely grows by exactly 3,
+      the spawnId counter advances by exactly 3, and each of the 3 new
+      registry entries (identified by registry KEY not present just
+      before the successful round -- not by spawnId, which this probe's
+      own fresh counter can and does collide in value with the level's
+      own unrelated, real generation-time spawnIds) is in-bounds,
+      walkable-tile-flagged, and alive. `combat_tick_smoke`/
+      `monster_ai_tick_smoke`/`monster_combat_smoke` updated for the
+      signature changes. Full rebuild zero new warnings; all 50 smoke
+      tests pass; `dawnstar_port.exe` launches and stays up (not driven
+      through an actual in-game "curse of hunger" proc by hand this
+      session).
+
 ## Milestones next
 
 Found by a fresh full sweep of `../src/` against `port/src/` (every `.java`
@@ -3305,17 +3351,8 @@ comments turned out to be stale leftovers from before M40/M42/M44/M45/M46/
 M48/M49 closed the gap they describe -- those are listed at the bottom,
 doc-only. Three real, currently-reachable gaps survived the check, taken in
 this order (most player-visible / lowest-risk first); M52 is now done (see
-"Milestones done" above), M53/M54 remain:
+"Milestones done" above), M54 remains:
 
-- [ ] **M53: the "curse of hunger" ailment side effect is a no-op.**
-      `Monster.tick()`'s 30%-chance on-hit ailment roll: ailment type 2 is
-      supposed to spawn 3 more monsters near the player
-      (`Dungeon.populateRandomMonsters(3)`). `combat/combat_resolution.cpp`'s
-      `MonsterTick` marks this `SKIPPED` with a stale comment ("no live
-      monster registry exists") -- `DungeonRuntime::PopulateRandomMonsters`
-      has existed since M22/M24 and `dawnstar_combat` already links
-      `dawnstar_dungeon`; `MonsterTick` just never got `levels`/`world`
-      threaded into its signature to call it.
 - [ ] **M54: ailment-gated corridor floor rendering is unported.**
       `GameCanvas.paintCorridorWalls()`: while Blind (ailment 3) is active,
       no floor is drawn at all; while Troll Thirst (ailment 4) is active,

@@ -93,7 +93,8 @@ void CombatResolution::PlayerAttack(PlayerState& player, MonsterState& target, c
 
 bool CombatResolution::MonsterTick(MonsterState& m, PlayerState& player, const CharacterData& charData,
                                     const ItemDatabase& items, const MonsterDatabase& monsterDb, int64_t now,
-                                    JavaRandom& globalRng) {
+                                    JavaRandom& globalRng, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
+                                    int16_t& spawnIdCounter) {
     bool act = false;
     if (m.aiPhase == 0) {
         m.timestamp = now;
@@ -165,8 +166,11 @@ bool CombatResolution::MonsterTick(MonsterState& m, PlayerState& player, const C
             player.ailmentMask = static_cast<int8_t>(player.ailmentMask | (1 << bit));
             if (ailment != 1) {
                 if (ailment == 2) {
-                    // Dungeon.populateRandomMonsters(3): SKIPPED, see
-                    // this method's doc comment in combat_resolution.h.
+                    // Dungeon.populateRandomMonsters(3), read off the
+                    // ATTACKING monster's own dungeonLevel -- see this
+                    // method's own doc comment in combat_resolution.h.
+                    DungeonRuntime::PopulateRandomMonsters(levels, world, m.dungeonLevel - 1, 3, globalRng,
+                                                            monsterDb, spawnIdCounter);
                 } else if (ailment != 3) {
                     if (ailment == 4) {
                         player.trollThirstTimer = 30000;

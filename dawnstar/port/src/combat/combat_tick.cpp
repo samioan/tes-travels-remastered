@@ -137,7 +137,7 @@ void CombatTick::CycleSpell(PlayerState& player, const SpellDatabase& spells, Me
 void CombatTick::TickNearbyMonsters(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
                                      const CharacterData& charData, const ItemDatabase& items,
                                      const MonsterDatabase& monsterDb, int64_t nowMs, JavaRandom& globalRng,
-                                     MessagePopupState& messagePopup) {
+                                     MessagePopupState& messagePopup, int16_t& spawnIdCounter) {
     auto& monsterMap = world.monsters[static_cast<size_t>(player.currentLevel - 1)];
 
     // Snapshot the in-range keys first: a successful Chase step below
@@ -161,10 +161,17 @@ void CombatTick::TickNearbyMonsters(PlayerState& player, std::vector<GeneratedLe
         MonsterState m = MonsterRuntime::FromBytes(it->second);
         int dist = std::abs(static_cast<int>(m.x) - player.tileX) + std::abs(static_cast<int>(m.y) - player.tileY);
         if (dist == 1) {
-            if (CombatResolution::MonsterTick(m, player, charData, items, monsterDb, nowMs, globalRng)) {
-                attacked = true;
-            }
-            it->second = MonsterRuntime::ToBytes(m);
+            bool landed = CombatResolution::MonsterTick(m, player, charData, items, monsterDb, nowMs, globalRng,
+                                                         levels, world, spawnIdCounter);
+            if (landed) attacked = true;
+            // MonsterTick (M53: the ailment==2 "curse of hunger" case)
+            // can insert new entries into THIS SAME monsterMap, which
+            // may rehash it and invalidate `it` -- re-find rather than
+            // reuse the iterator across that call. `key` itself (m's
+            // position before this tick) is unaffected by attacking,
+            // so it's still the right lookup.
+            auto refreshed = monsterMap.find(key);
+            if (refreshed != monsterMap.end()) refreshed->second = MonsterRuntime::ToBytes(m);
         } else {
             int oldX = m.x, oldY = m.y;
             if (MonsterRuntime::Chase(m, player.tileX, player.tileY, levels, globalRng)) {

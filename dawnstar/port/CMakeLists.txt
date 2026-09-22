@@ -554,6 +554,10 @@ target_link_libraries(death_respawn_smoke PRIVATE dawnstar_death dawnstar_player
 add_executable(fatigue_regen_smoke src/tests/m51_fatigue_regen_smoke.cpp)
 target_link_libraries(fatigue_regen_smoke PRIVATE dawnstar_player)
 
+# M53 milestone smoke test -- see src/tests/m53_ailment_spawn_smoke.cpp.
+add_executable(ailment_spawn_smoke src/tests/m53_ailment_spawn_smoke.cpp)
+target_link_libraries(ailment_spawn_smoke PRIVATE dawnstar_combat)
+
 # M43 milestone smoke test -- see src/tests/m43_reveal_traitor_smoke.cpp.
 # Links dawnstar_player too (this test's own direct PlayerSave/
 # PlayerInventory calls) on top of dawnstar_render (OptionsMenu itself,

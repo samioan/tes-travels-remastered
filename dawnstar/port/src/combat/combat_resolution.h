@@ -40,14 +40,26 @@ public:
     // the player's armorValue) directly mutating `player`'s HP/
     // ailments/timers, and rolls a 30%-chance on-hit ailment matching the
     // monster type's column-11 id. Returns whether an attack landed.
-    // SIMPLIFIED: the ailment==2 ("curse of hunger") side effect, which
-    // spawns 3 more monsters via Dungeon.populateRandomMonsters(3), is a
-    // no-op -- no live per-level monster registry exists to spawn into
-    // yet (same class of gap as player/player_movement.h's deferred
-    // roaming-monster cleanup).
+    // M53: the ailment==2 ("curse of hunger") side effect -- spawning 3
+    // more monsters near `m`'s own level via
+    // `DungeonRuntime::PopulateRandomMonsters` (Dungeon.
+    // populateRandomMonsters(3), read off `ESGame.dungeons[this.
+    // dungeonLevel - 1]`, i.e. the ATTACKING monster's own dungeonLevel,
+    // not necessarily the player's `currentLevel` -- though the two are
+    // equal in every real case that reaches here, since this only runs
+    // from combat/combat_tick.h's own TickNearbyMonsters, which only
+    // ever ticks monsters registered on the player's current level) --
+    // is now real, `levels`/`world`/`spawnIdCounter` threaded in for
+    // exactly that call. `spawnIdCounter` is `combat/combat_tick.h`'s
+    // own `TickNearbyMonsters` M35-style Monster.nextSpawnIdCounter
+    // substitute (the SAME counter camp/camp_tick.h's own
+    // TrySpawnMonsterNear call already advances elsewhere, not a
+    // separate one -- there is exactly one such counter in the
+    // original too).
     static bool MonsterTick(MonsterState& m, PlayerState& player, const CharacterData& charData,
                              const ItemDatabase& items, const MonsterDatabase& monsterDb, int64_t now,
-                             JavaRandom& globalRng);
+                             JavaRandom& globalRng, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
+                             int16_t& spawnIdCounter);
 
     // Player.castOnMonster(spellId, target): the third entry point that
     // needs both Player and Monster (case 14 -- "Blade Focus" or

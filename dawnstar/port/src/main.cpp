@@ -1157,9 +1157,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     // within Manhattan distance 1-3 either attacks
                     // (distance 1) or takes a step toward the player
                     // (distance 2-3), at most once every 5 calls each --
-                    // M36.
+                    // M36. `nextMonsterSpawnId` (M53) is the same
+                    // Monster.nextSpawnIdCounter substitute camp/
+                    // camp_tick.h's own TrySpawnMonsterNear call already
+                    // advances -- see CombatTick::TickNearbyMonsters's
+                    // own doc comment.
                     dawnstar::CombatTick::TickNearbyMonsters(player, levels, world, charData, items, monsters, nowMs,
-                                                              globalRng, messagePopup);
+                                                              globalRng, messagePopup, nextMonsterSpawnId);
 
                     // GameCanvas.paintHotbar()'s own `hotbarContext`
                     // field, as it stood after the LAST tick's

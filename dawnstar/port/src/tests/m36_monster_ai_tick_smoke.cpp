@@ -97,6 +97,10 @@ int main(int argc, char** argv) {
             dawnstar::DungeonRuntime::RegisterGeneratedSpawns(levels.back(), world);
         }
         std::printf("generated + registered %zu levels\n", levels.size());
+        // M53: TickNearbyMonsters now threads a Monster.nextSpawnIdCounter
+        // substitute through to CombatResolution::MonsterTick's own
+        // ailment==2 "curse of hunger" 3-monster spawn.
+        int16_t spawnIdCounter = 1;
 
         int levelIdx = -1;
         for (size_t i = 1; i < levels.size(); i++) {
@@ -131,7 +135,7 @@ int main(int argc, char** argv) {
             for (int round = 0; round < 60 && !landed; round++) {
                 MessagePopupState popup;
                 CombatTick::TickNearbyMonsters(player, levels, world, charData, items, monsterDb, nowMs, globalRng,
-                                                popup);
+                                                popup, spawnIdCounter);
                 if (popup.visible) {
                     Check(popup.lines[0] == "Creature" && popup.lines[1] == "attacks!" && popup.priority == 2,
                           "a landed monster attack should show \"Creature/attacks!\" at priority 2");
@@ -181,7 +185,8 @@ int main(int argc, char** argv) {
             player.minimapDirty = false;
 
             MessagePopupState popup;
-            CombatTick::TickNearbyMonsters(player, levels, world, charData, items, monsterDb, 5000, globalRng, popup);
+            CombatTick::TickNearbyMonsters(player, levels, world, charData, items, monsterDb, 5000, globalRng, popup,
+                                            spawnIdCounter);
 
             Check(player.minimapDirty, "a distance-2 monster's first call should always attempt a step (fresh moveCooldown == 0), marking the minimap dirty");
             Check(!popup.visible, "a chase step alone (no melee-range monster) should show no attack popup");
@@ -219,7 +224,7 @@ int main(int argc, char** argv) {
                 player.minimapDirty = false;
                 MessagePopupState popup;
                 CombatTick::TickNearbyMonsters(player, levels, world, charData, items, monsterDb, 9000, globalRng,
-                                                popup);
+                                                popup, spawnIdCounter);
                 Check(!player.minimapDirty && !popup.visible,
                       "a monster more than 3 tiles away should be completely untouched this tick");
             }

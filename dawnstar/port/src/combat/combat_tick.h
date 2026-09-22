@@ -157,10 +157,17 @@ public:
     // key, since none existed until M22/M24. This method is what finally
     // re-keys the WorldRegistry entry (erase the old position, insert at
     // the new one) after a step actually lands, closing that gap.
+    //
+    // `spawnIdCounter` (M53) is threaded straight through to
+    // CombatResolution::MonsterTick, for its own now-real ailment==2
+    // ("curse of hunger") 3-monster spawn -- the SAME Monster.
+    // nextSpawnIdCounter substitute camp/camp_tick.h's own
+    // TrySpawnMonsterNear call already advances (main.cpp's
+    // `nextMonsterSpawnId`), not a second independent one.
     static void TickNearbyMonsters(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
                                     const CharacterData& charData, const ItemDatabase& items,
                                     const MonsterDatabase& monsterDb, int64_t nowMs, JavaRandom& globalRng,
-                                    MessagePopupState& messagePopup);
+                                    MessagePopupState& messagePopup, int16_t& spawnIdCounter);
 };
 
 }  // namespace dawnstar
