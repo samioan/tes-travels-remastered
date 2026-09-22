@@ -51,15 +51,22 @@ private:
 
 // Renamed-source counterpart of GameCanvas's minimap subsystem
 // (refreshMinimap()/paintMinimapGrid()/sampleSquareView() plus
-// paintGameView()'s own compositing step) -- M29.
+// paintGameView()'s own compositing step) -- M29, plus the compass
+// glyph (M55).
 //
-// SIMPLIFIED: the compass glyph (`g.drawChar(COMPASS_GLYPHS[facing],
-// ...)`, drawn alongside the minimap image in both zoom states) is NOT
-// ported. It's real text/font rendering (MIDP's own built-in
-// Font.getFont(), not a game-data asset this port has extracted
-// anything for) -- this port has no text-rendering system at all yet
-// (same reason every message-popup call site across M13-M28 is
-// SIMPLIFIED away), not something specific to the minimap.
+// The compass glyph (`g.drawChar(COMPASS_GLYPHS[facing], ...)`, drawn
+// alongside the minimap image in both zoom states) went unported at M29
+// because this port had no text-rendering system at all yet (same
+// reason every message-popup call site across M13-M28 was SIMPLIFIED
+// away then). `graphics/bitmap_font.h`'s hand-authored `BitmapFont` --
+// added at M31 for the hotbar's own digit glyphs, and already covering
+// every letter A-Z including N/E/S/W -- closes that gap; `Composite`
+// below now draws it. One real simplification remains: the original
+// switches to a second, larger MIDP built-in font
+// (`COMPASS_FONT_ZOOMED`, `Font.getFont(64, 1, 16)`) only while zoomed
+// out, and `BitmapFont` -- a single hand-invented glyph set, not a real
+// recovered font with size variants -- has no larger counterpart to
+// switch to, so the same font/size draws the glyph in both zoom states.
 class MinimapRenderer {
 public:
     // GameCanvas.refreshMinimap(): resamples the world around the
@@ -74,14 +81,18 @@ public:
                          const WorldRegistry& world);
 
     // GameCanvas.paintGameView()'s own minimap-compositing step (the
-    // `if (!player.hasAilment(3))` gate and both drawImage calls; the
-    // compass glyph is not ported -- see class comment). Draws
-    // `surface` onto `bb` at its real fixed screen position: clipped to
-    // a 23x23 window at (10,20) when not zoomed out (g.setClip(10, 20,
-    // 23, 23) before that drawImage -- meaningful, since
-    // paintMinimapGrid's own real bugs leave most of the 89x89 surface
-    // either black or stale past that window anyway), or the full
-    // surface drawn at (15,25) when zoomed out.
+    // `if (!player.hasAilment(3))` gate, the compass glyph, and both
+    // drawImage calls). Draws `surface` onto `bb` at its real fixed
+    // screen position: clipped to a 23x23 window at (10,20) when not
+    // zoomed out (g.setClip(10, 20, 23, 23) before that drawImage --
+    // meaningful, since paintMinimapGrid's own real bugs leave most of
+    // the 89x89 surface either black or stale past that window anyway),
+    // or the full surface drawn at (15,25) when zoomed out. Also draws
+    // the facing-direction compass glyph (see class comment) at its own
+    // real fixed position, (16,10) not zoomed / (58,10) zoomed out --
+    // `COMPASS_GLYPHS[player.facing]`, white, drawn before the image in
+    // the original (paint order doesn't matter here: the glyph and image
+    // positions never overlap).
     static void Composite(Backbuffer& bb, const MinimapSurface& surface, const PlayerState& p);
 };
 

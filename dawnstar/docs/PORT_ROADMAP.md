@@ -3376,23 +3376,44 @@ milestone rather than just read-through.
       warnings; all 51 smoke tests pass; `dawnstar_port.exe` launches
       and stays up.
 
+- [x] **M55 -- the minimap compass glyph.** `GameCanvas.paintGameView()`'s
+      `g.drawChar(COMPASS_GLYPHS[player.facing], ...)`, drawn alongside
+      the minimap image in both zoom states -- the last item on M51's
+      sweep list, left as "pick up opportunistically" since M29
+      (`MinimapRenderer`) first ported the rest of that subsystem: at
+      that point this port had no text-rendering system at all to draw
+      it with. M31's `graphics/bitmap_font.h` (added for the hotbar's
+      own numeric glyphs) already covers every letter A-Z, including
+      N/E/S/W, so closing this was just wiring `MinimapRenderer::
+      Composite` to call it: white, at (16,10) when not zoomed out /
+      (58,10) when zoomed out, gated behind the same ailment-3 check
+      that already hides the rest of the minimap. One simplification
+      kept, documented inline: the original switches to a second,
+      larger MIDP built-in font only while zoomed out
+      (`COMPASS_FONT_ZOOMED`); `BitmapFont` is a single hand-invented
+      glyph set with no size variants, so the same font draws the glyph
+      in both zoom states.
+
+      Verified by extending `minimap_smoke.exe` (no JVM ground truth,
+      same reason as every prior milestone) rather than a specific
+      hand-picked lit pixel -- the glyph shape is this port's own
+      invented font, not something to hardcode a pixel-perfect
+      expectation for: checked the glyph draws somewhere inside its own
+      4x7 box at (16,10) not zoomed / (58,10) zoomed out (and nowhere
+      at the *other* state's position), and that ailment 3 hides it
+      along with the rest of the minimap. Full rebuild zero new
+      warnings; every smoke test passes (`launcher_smoke`'s one failure
+      when run from `port/` rather than `port/build/` is a pre-existing,
+      unrelated working-directory sensitivity in that specific test, not
+      a regression -- confirmed passing 80/80 when run from its own
+      expected cwd); `dawnstar_port.exe` launches and stays up.
+
 ## Milestones next
 
-Found by a fresh full sweep of `../src/` against `port/src/` (every `.java`
-file re-read, every `ESGame` `secondaryParam` dispatch value cross-checked
-against the port) after M51 closed the previous list. Most flagged-looking
-comments turned out to be stale leftovers from before M40/M42/M44/M45/M46/
-M48/M49 closed the gap they describe -- those are listed at the bottom,
-doc-only. Three real, currently-reachable gaps survived the check, taken in
-this order (most player-visible / lowest-risk first); M52 is now done (see
-"Milestones done" above); only the minor/cosmetic item remains:
-
-- [ ] Minor/cosmetic: the minimap compass glyph (a single facing-direction
-      arrow character drawn next to the minimap image) is not drawn -- the
-      minimap image itself, both zoom states, and the Blind-hides-everything
-      gate are all correctly ported; only this one glyph is missing. Real
-      MIDP built-in font glyph with no port-side equivalent to draw it --
-      low value, pick up opportunistically.
+Nothing queued. The previous list (found by a fresh full sweep of `../src/`
+against `port/src/` after M51) is fully closed: M52-M54's three real,
+currently-reachable gaps and M55's minor/cosmetic compass glyph are all
+done (see "Milestones done" above).
 
 Stale doc comments found along the way (not gaps -- just describe work as
 "unported"/"deferred" that a later milestone actually completed; worth a

@@ -30,6 +30,7 @@
 #include "assets/monster_database.h"
 #include "dungeon/dungeon_runtime.h"
 #include "graphics/backbuffer.h"
+#include "graphics/bitmap_font.h"
 #include "monster/monster_runtime.h"
 #include "player/player_state.h"
 #include "render/minimap_renderer.h"
@@ -298,6 +299,49 @@ int main(int argc, char** argv) {
             Check(BbPixelAt(bbZoomedOut, 15, 25) == kMarker, "zoomed-out composite's top-left corner (15,25)");
             Check(BbPixelAt(bbZoomedOut, 15 + 88, 25 + 88) == kMarker,
                   "zoomed-out composite should draw the surface's full 89x89 extent, unclipped");
+        }
+
+        // --- E: M55's compass glyph (COMPASS_GLYPHS[player.facing]) --
+        // drawn at its own real fixed position in both zoom states, and
+        // skipped along with the rest of the minimap under ailment 3.
+        // Checked via BitmapFont's own StringWidth/glyph box rather than
+        // a specific hand-picked lit pixel, since the exact glyph shape
+        // is this port's own invented font, not something to hardcode a
+        // pixel-perfect expectation for. ---
+        {
+            auto anyWhiteInBox = [](const Backbuffer& bb, int x0, int y0, uint16_t white) {
+                for (int y = y0; y < y0 + dawnstar::BitmapFont::kGlyphHeight; y++) {
+                    for (int x = x0; x < x0 + dawnstar::BitmapFont::kGlyphWidth; x++) {
+                        if (BbPixelAt(bb, x, y) == white) return true;
+                    }
+                }
+                return false;
+            };
+
+            MinimapSurface surf;  // left black -- isolates the glyph from the minimap image itself
+
+            PlayerState p;
+            p.facing = 2;  // 'E' -- COMPASS_GLYPHS[2]
+            p.minimapZoomedOut = false;
+            Backbuffer bbZoomedIn;
+            bbZoomedIn.Fill(0);
+            MinimapRenderer::Composite(bbZoomedIn, surf, p);
+            Check(anyWhiteInBox(bbZoomedIn, 16, 10, kWhite), "zoomed-in: the compass glyph should draw at (16,10)");
+
+            p.minimapZoomedOut = true;
+            Backbuffer bbZoomedOut;
+            bbZoomedOut.Fill(0);
+            MinimapRenderer::Composite(bbZoomedOut, surf, p);
+            Check(anyWhiteInBox(bbZoomedOut, 58, 10, kWhite),
+                  "zoomed-out: the compass glyph should draw at its own (58,10) position, not (16,10)");
+            Check(!anyWhiteInBox(bbZoomedOut, 16, 10, kWhite),
+                  "zoomed-out: nothing should be drawn at the zoomed-in glyph position");
+
+            p.ailmentMask = static_cast<int8_t>(1 << (3 - 1));  // ailment 3 active
+            Backbuffer bbBlind;
+            bbBlind.Fill(0);
+            MinimapRenderer::Composite(bbBlind, surf, p);
+            Check(!anyWhiteInBox(bbBlind, 58, 10, kWhite), "ailment 3 active should hide the compass glyph too");
         }
 
         if (g_ok) {

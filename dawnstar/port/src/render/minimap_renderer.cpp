@@ -1,5 +1,6 @@
 #include "render/minimap_renderer.h"
 
+#include "graphics/bitmap_font.h"
 #include "player/player_combat_stats.h"
 
 namespace dawnstar {
@@ -41,6 +42,10 @@ constexpr uint16_t kGreen = PackRGB565(0, 255, 0);
 constexpr uint16_t kRed = PackRGB565(255, 0, 0);
 constexpr uint16_t kBlue = PackRGB565(0, 0, 255);
 constexpr uint16_t kMagenta = PackRGB565(204, 0, 255);
+
+// GameCanvas.COMPASS_GLYPHS, index 0 unused (never reached -- Player's
+// own facing is always 1-4).
+constexpr char kCompassGlyphs[5] = {'0', 'N', 'E', 'S', 'W'};
 
 // Java's int `<<` operator masks its right-hand operand to the low 5
 // bits (JLS 15.19) rather than rejecting or sign-extending an
@@ -153,6 +158,16 @@ void MinimapRenderer::Refresh(MinimapSurface& surface, PlayerState& p, const std
 
 void MinimapRenderer::Composite(Backbuffer& bb, const MinimapSurface& surface, const PlayerState& p) {
     if (PlayerCombatStats::HasAilment(p, 3)) return;
+
+    int facing = p.facing;
+    if (facing >= 1 && facing <= 4) {
+        std::string glyph(1, kCompassGlyphs[facing]);
+        if (!p.minimapZoomedOut) {
+            BitmapFont::DrawString(bb, 16, 10, glyph, kWhite);
+        } else {
+            BitmapFont::DrawString(bb, 58, 10, glyph, kWhite);
+        }
+    }
 
     const std::vector<uint16_t>& pixels = surface.Pixels();
     if (!p.minimapZoomedOut) {
