@@ -1099,10 +1099,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // as interact/camp above, but with NO hotbarContext gate
             // (matching the original's own handler, which sets this
             // unconditionally). Remapped from the original's own
-            // numeric-keypad '7' to 'O' for a PC keyboard -- see
-            // `inOptionsMenu`'s own doc comment above for what actually
-            // opening this menu does.
-            bool optionsKeyDown = KeyPressed('O');
+            // numeric-keypad '7' to Tab for a PC keyboard (M60 first
+            // used 'O', M61 moved it to Tab -- the common "open a menu
+            // overlay" key in modern PC games) -- see `inOptionsMenu`'s
+            // own doc comment above for what actually opening this menu
+            // does.
+            bool optionsKeyDown = KeyPressed(VK_TAB);
             if (optionsKeyDown && !optionsKeyWasDown) {
                 optionsPending = true;
             }

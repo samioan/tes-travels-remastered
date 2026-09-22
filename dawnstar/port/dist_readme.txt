@@ -36,7 +36,7 @@ CONTROLS
   C                      cycle selected spell
   E                      interact -- doors, people, chests, anything nearby
   R                      rest / camp
-  O                      options menu (inventory, skills, spells, save/load)
+  Tab                    options menu (inventory, skills, spells, save/load)
   M                      toggle the zoomed-out minimap
   Enter                  confirm / select
   Escape                 back / cancel

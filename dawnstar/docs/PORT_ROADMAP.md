@@ -3687,6 +3687,15 @@ milestone rather than just read-through.
       to, correct wiring). Full rebuild zero new warnings; all 52 smoke
       tests pass.
 
+- [x] **M61 -- options key moved from 'O' to Tab.** User-requested
+      follow-up to M60. Tab is the common "open a menu overlay" key in
+      modern PC games (inventory/character/options screens), a closer
+      fit than a mnemonic letter key. `port/dist_readme.txt` (the real
+      source `build_dist.bat` packages) updated to match. Verified by
+      scripting the real exe into gameplay and confirming Tab opens the
+      real Options screen. Full rebuild zero new warnings; all 52 smoke
+      tests pass.
+
 ## Milestones next
 
 Nothing queued. A second fresh full sweep of `../src/` against `port/src/`
