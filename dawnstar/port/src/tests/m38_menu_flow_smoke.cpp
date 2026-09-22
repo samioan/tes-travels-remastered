@@ -98,13 +98,35 @@ int main(int argc, char** argv) {
         Check(TextRenderedAt(bb, 15, 20, "New Game", kItemTextColor),
               "the main menu's own first item should render (\"New Game\")");
 
-        // --- B: "Continue Game" (index 1) is a real, deliberate no-op --
-        // no real save-file I/O is wired anywhere in this port yet. ---
+        // --- B: "Continue Game" (index 1) -- M52: OnSelect() itself just
+        // returns the action; main.cpp does the real GameSave load/resume
+        // work (see main_smoke's own... no such test exists for main.cpp
+        // itself, so this is checked as "launches and stays up" only, same
+        // as every other main.cpp wiring since M28). What IS unit-testable
+        // here is MenuFlow's own half: the action returned, and
+        // ShowNoSavedGame()'s screen (main.cpp's own real call site on a
+        // failed load). ---
         menu.OnDown();
-        Check(menu.OnSelect() == MenuFlowAction::None, "Continue Game should be a deferred no-op action");
+        Check(menu.OnSelect() == MenuFlowAction::ContinueGame,
+              "Continue Game should return MenuFlowAction::ContinueGame (M52)");
         bb.Fill(0);
         menu.Render(bb);
-        Check(TitleShownIs(bb, "Main Menu"), "Continue Game should leave the main menu showing");
+        Check(TitleShownIs(bb, "Main Menu"),
+              "MenuFlow's own screen state doesn't change on ContinueGame -- only main.cpp acts on it");
+
+        // --- B2: ShowNoSavedGame() -- main.cpp's own call site for a
+        // failed load, reusing the shared info screen (like Credits/a Help
+        // topic body do) with backTarget left at MainMenu (unlike ui/
+        // options_menu.h's own separate copy of this same message, whose
+        // backTarget is OptionsUI instead). ---
+        menu.ShowNoSavedGame();
+        bb.Fill(0);
+        menu.Render(bb);
+        Check(TitleShownIs(bb, "Unavailable"), "ShowNoSavedGame should show the real \"Unavailable\" title");
+        Check(menu.OnSelect() == MenuFlowAction::None, "Ok on the no-saved-game screen is not a main.cpp-level action");
+        bb.Fill(0);
+        menu.Render(bb);
+        Check(TitleShownIs(bb, "Main Menu"), "Ok on the no-saved-game screen should return to the main menu");
 
         // --- C: "Help" (index 2) -> the real topic list, built from the
         // real M8 HelpText titles. ---

@@ -36,6 +36,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Populated by the CRT for a wWinMain entry point the same way argc/argv
@@ -576,6 +577,56 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             inMenu = false;
                             inCharacterCreation = true;
                             break;
+                        case dawnstar::MenuFlowAction::ContinueGame: {
+                            // M52: ESGame's own mainMenuUI case 1
+                            // (`gameCanvas.stopGameThread()` -- moot,
+                            // no game thread is running yet from the
+                            // main menu -- then `helperThreadState = 6`)
+                            // plus run()'s own helperThreadState==6
+                            // branch. Same GameSave::LoadGameState/
+                            // ResumeGame machinery M42/M46 already wired
+                            // to the in-game Options menu's own "Load
+                            // Game" (OptionsMenuAction::LoadGame below),
+                            // just reached from here instead, BEFORE any
+                            // game session exists -- so this populates a
+                            // fresh `playerSlot` rather than mutating an
+                            // already-live `*playerSlot`.
+                            dawnstar::LoadingScreen loadGameUI(dawnstar::LoadingScreenMode::LoadingGame);
+                            loadGameUI.Render(backbuffer);
+                            window.Present(backbuffer);
+                            dawnstar::PlayerState loaded;
+                            bool loadedOk = dawnstar::GameSave::LoadGameState(
+                                saveDir, loaded, world, otherState, [&](int percent) {
+                                    loadGameUI.SetPercent(percent);
+                                    loadGameUI.Render(backbuffer);
+                                    window.Present(backbuffer);
+                                });
+                            if (loadedOk) {
+                                playerSlot.emplace(std::move(loaded));
+                                syncLiveFromOtherState();
+                                // run()'s own tail: resumeGame(), then
+                                // `loadGameUI.percent = 100` + one final
+                                // repaint, then setCurrentDisplay(gameCanvas)
+                                // + startGameThread() -- this port's own
+                                // `inMenu = false` below plays that role.
+                                dawnstar::GameSave::ResumeGame(*playerSlot, levels, world, [&](int percent) {
+                                    loadGameUI.SetPercent(percent);
+                                    loadGameUI.Render(backbuffer);
+                                    window.Present(backbuffer);
+                                });
+                                loadGameUI.SetPercent(100);
+                                loadGameUI.Render(backbuffer);
+                                window.Present(backbuffer);
+                                inMenu = false;
+                            } else {
+                                // run()'s own else-branch: noSavedGameUI,
+                                // whose backTarget here is mainMenuUI
+                                // (see MenuFlow::ShowNoSavedGame's own
+                                // doc comment).
+                                menuFlow.ShowNoSavedGame();
+                            }
+                            break;
+                        }
                         case dawnstar::MenuFlowAction::Exit:
                             window.Close();
                             break;

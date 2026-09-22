@@ -74,9 +74,10 @@ MenuFlowAction MenuFlow::OnSelect() {
                          // than the original's own real (unported)
                          // class-selection/name-entry flow.
                     return MenuFlowAction::StartNewGame;
-                case 1:  // "Continue Game" -- deferred no-op, see this
-                         // class's own header doc comment.
-                    return MenuFlowAction::None;
+                case 1:  // "Continue Game" -- M52, see this class's own
+                         // header doc comment: main.cpp does the real
+                         // GameSave load/resume work.
+                    return MenuFlowAction::ContinueGame;
                 case 2:  // "Help": `this.helpUI.backTarget =
                          // this.mainMenuUI; this.setCurrentDisplay(this.
                          // helpUI);` -- backTarget itself isn't modeled
@@ -160,6 +161,18 @@ void MenuFlow::OnCancel() {
             // comment).
             return;
     }
+}
+
+void MenuFlow::ShowNoSavedGame() {
+    // ESGame.run()'s own helperThreadState==6 else-branch:
+    // `setCurrentDisplay(noSavedGameUI)` -- reuses `info_` exactly like
+    // Credits/a Help topic's body do (see `infoBackTarget_`'s own doc
+    // comment), with `backTarget` left at its default `MainMenu` (the
+    // original's own `noSavedGameUI.backTarget = mainMenuUI`, set right
+    // before this call at ESGame.java's own line ~762).
+    info_.SetupMessage("Unavailable", "No game is available for loading. Press OK to return to main menu.");
+    infoBackTarget_ = Active::MainMenu;
+    active_ = Active::Info;
 }
 
 void MenuFlow::Render(Backbuffer& bb) const { ActiveScreen().Paint(bb); }

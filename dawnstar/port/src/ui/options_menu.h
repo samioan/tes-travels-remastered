@@ -197,11 +197,14 @@ public:
     // to OptionsUI right before showing the LoadingScreen, so Ok returns
     // here, to the Options menu. Two real quirks worth noting: the message
     // says "return to main menu" while the code actually returns to the
-    // Options menu (the main-menu Load Game path -- unported here -- is the
-    // one that sets backTarget to mainMenuUI, at ESGame.java's own
-    // line 555), and the game thread is only restarted for the OptionsUI
-    // case (this port needs no equivalent: main.cpp's own inOptionsMenu
-    // early-return already pauses/resumes the whole tick).
+    // Options menu (the main-menu "Continue Game" path -- M52, `ui/
+    // menu_flow.h`'s own `MenuFlow::ShowNoSavedGame` -- is the one that
+    // sets backTarget to mainMenuUI, at ESGame.java's own line 555;
+    // that class keeps its own separate copy of this same screen rather
+    // than sharing this one, since the two classes don't otherwise
+    // share state), and the game thread is only restarted for the
+    // OptionsUI case (this port needs no equivalent: main.cpp's own
+    // inOptionsMenu early-return already pauses/resumes the whole tick).
     void ShowNoSavedGame();
 
     void Render(Backbuffer& bb) const;

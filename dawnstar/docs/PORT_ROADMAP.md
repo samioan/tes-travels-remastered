@@ -3266,6 +3266,36 @@ milestone rather than just read-through.
       Conclusion: this item was already fully closed by M46's own
       substitution; nothing here needed new code.
 
+- [x] **M52 -- "Continue Game" from the main menu.** Was a no-op;
+      `ESGame`'s own mainMenuUI case 1 + `run()`'s helperThreadState==6
+      branch load the last save and drop straight into gameplay. Reuses
+      the exact `GameSave::LoadGameState`/`ResumeGame` machinery M42
+      built and M46 already wired to the in-game Options menu's own
+      "Load Game" -- same calls, triggered from a new entry point
+      (`ui/menu_flow.h`'s `MenuFlowAction::ContinueGame`), before any
+      game session exists yet, so `main.cpp` populates a fresh
+      `playerSlot` rather than mutating an already-live one. On failure
+      (no save file), the new `MenuFlow::ShowNoSavedGame()` reuses
+      `info_` -- the same shared message screen Credits/a Help topic's
+      body already reuse -- with `backTarget` left at `MainMenu` (its
+      default), matching the original's own single shared
+      `noSavedGameUI` instance; `ui/options_menu.h`'s own separate copy
+      of this same message (whose `backTarget` is `OptionsUI` instead)
+      is untouched. `MenuFlow` itself does no file I/O -- `OnSelect()`
+      just returns the new action and `main.cpp` performs the real
+      load/resume, same "return what happened, let main.cpp perform the
+      real-world effect" shape as `StartNewGame`.
+      Verified by `menu_flow_smoke` (the action returned, and
+      `ShowNoSavedGame`'s screen/title/Ok-returns-to-MainMenu) plus a
+      full rebuild (zero new warnings) and hand-driven runs of
+      `dawnstar_port.exe` with a real save present (loads it and drops
+      into a real corridor view with HUD/hotbar/minimap all live,
+      screenshot-confirmed) and with no save at all (shows "Unavailable
+      / No game is available for loading..." and Ok correctly returns
+      to the main menu, also screenshot-confirmed) -- the first
+      milestone since M20 to be hand-verified with actual screenshots
+      rather than only "launches and stays up".
+
 ## Milestones next
 
 Found by a fresh full sweep of `../src/` against `port/src/` (every `.java`
@@ -3274,19 +3304,9 @@ against the port) after M51 closed the previous list. Most flagged-looking
 comments turned out to be stale leftovers from before M40/M42/M44/M45/M46/
 M48/M49 closed the gap they describe -- those are listed at the bottom,
 doc-only. Three real, currently-reachable gaps survived the check, taken in
-this order (most player-visible / lowest-risk first):
+this order (most player-visible / lowest-risk first); M52 is now done (see
+"Milestones done" above), M53/M54 remain:
 
-- [ ] **M52: "Continue Game" from the main menu is a no-op.** Should load
-      the last save and drop straight into gameplay (`ESGame`'s
-      `helperThreadState==6` -> `loadGameState()` + `resumeGame()`).
-      `ui/menu_flow.h`/`ui/options_menu.h` both flag this as deferred --
-      accurately when M38 wrote it (save/load didn't touch disk yet), but
-      M42 built the real file-backed `GameSave::SaveGameState/
-      LoadGameState/ResumeGame` and M46 already wires the in-game
-      Options-menu "Load Game" to it. Same machinery, never connected to
-      this entry point. An existing "No saved game" dialog
-      (`OptionsMenu::ShowNoSavedGame`) may be reusable with a different
-      back-target (main menu instead of Options).
 - [ ] **M53: the "curse of hunger" ailment side effect is a no-op.**
       `Monster.tick()`'s 30%-chance on-hit ailment roll: ailment type 2 is
       supposed to spawn 3 more monsters near the player
