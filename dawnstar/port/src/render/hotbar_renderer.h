@@ -35,11 +35,12 @@ struct HotbarTextures {
 //
 // GameCanvas.paintActionFlashes() is fully ported here (as
 // PaintActionFlashIcon below): monsterHitFlash since M32, spellHitFlash/
-// selfSpellFlash since M33. The actual keyPressed() dispatch that reads
+// selfSpellFlash since M33. The keyPressed() dispatch that reads
 // hotbarContext back for camp/interact/options
-// (campRequested/interactRequested/optionsRequested) is still not
-// ported -- no camp/shop/options UI exists yet (cast/cycle don't
-// consult hotbarContext at all, so they needed no such UI to wire).
+// (campRequested/interactRequested/optionsRequested) is main.cpp's own
+// job, not this renderer's -- see its Z/I/O key handling (camp: M35,
+// interact: M34, options: M39; cast/cycle don't consult hotbarContext at
+// all, so they needed no such gating).
 class HotbarRenderer {
 public:
     // GameCanvas.computeHotbarContext(): 0 = exploring, 1 = a monster is

@@ -39,8 +39,8 @@ public:
     // the attack landed a hit (hpBefore > hpAfter), for the hotbar's
     // own action-flash icon (GameCanvas.paintActionFlashes()'s
     // monsterHitFlash case -- the only one of its 3 cases reachable
-    // from this milestone; spellHitFlash/selfSpellFlash remain unported
-    // pending the spellcasting-wiring milestone).
+    // from this milestone; spellHitFlash/selfSpellFlash are the other
+    // two, wired by ProcessSpellCast below since M33).
     //
     // SIMPLIFIED, but not lossy: re-derives the front monster FRESH here
     // (via PlayerMovement::MonsterInFront) rather than reusing a cached

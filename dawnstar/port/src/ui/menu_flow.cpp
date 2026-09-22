@@ -69,10 +69,9 @@ MenuFlowAction MenuFlow::OnSelect() {
             // WRONG field to key this on).
             switch (mainMenu_.SelectedIndexOrMinusOne()) {
                 case 0:  // "New Game" -- see this class's own header
-                         // doc comment on why this still starts M20's
-                         // own fixed stand-in character directly, rather
-                         // than the original's own real (unported)
-                         // class-selection/name-entry flow.
+                         // doc comment: main.cpp hands this off to M40's
+                         // own real CharacterCreationFlow, not modeled
+                         // inside MenuFlow itself.
                     return MenuFlowAction::StartNewGame;
                 case 1:  // "Continue Game" -- M52, see this class's own
                          // header doc comment: main.cpp does the real

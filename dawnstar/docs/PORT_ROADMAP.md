@@ -3468,10 +3468,32 @@ milestone rather than just read-through.
 
 ## Milestones next
 
-Nothing queued. The previous list (found by a fresh full sweep of `../src/`
-against `port/src/` after M51) is fully closed: M52-M54's three real,
-currently-reachable gaps and M55's minor/cosmetic compass glyph are all
-done (see "Milestones done" above).
+Nothing queued. A second fresh full sweep of `../src/` against `port/src/`
+(same method as the post-M51 one: every `.java` file re-read, every
+`ESGame` `secondaryParam` dispatch value cross-checked, plus every
+self-flagged "not ported"/"unported" comment in `port/src/` re-checked
+against what's actually landed since) turned up exactly one real,
+currently-reachable gap -- closed as M56 below -- and a batch of stale
+doc comments, fixed as pure documentation/no-behavior-change edits
+(`combat/combat_tick.h`, `main.cpp`, `save/game_save.h` x2,
+`player/player_state.h` x4, `monster/monster_runtime.h`,
+`npc/shop_interaction.h`, `render/hotbar_renderer.h`,
+`ui/character_creation_flow.h`, `ui/options_menu.cpp`,
+`ui/menu_flow.cpp`, `tests/m34_interact_tick_smoke.cpp` -- the last one
+also strengthened a check that had been silently ignoring
+`ProcessInteract`'s own return value since M45 made it real). One of
+these turned into a genuine (if tiny) de-duplication rather than just a
+comment fix: `ui/boot_splash.cpp`'s own `BootSplash::kCopyString` was a
+byte-for-byte second copy of `util/text.h`'s `kCopyStringParts` (the
+Game Over/Victory chain's own copy of the same 6 copyright lines) --
+`BootSplash` now reuses that shared array instead of keeping its own,
+same reuse-over-duplication precedent `ReplaceFirstTag`/
+`GetGameAdvancementLevel` already set. `m48_boot_splash_smoke.cpp`'s own
+now-invalid direct reference to the removed `kCopyString` was replaced
+by relying on its existing, strictly stronger pixel-level `SameFrame`
+check (already independently transcribes the same 6 lines to build its
+own expected frame). Full rebuild zero new warnings; all 52 smoke tests
+pass; `dawnstar_port.exe` launches and stays up.
 
 Stale doc comments found along the way (not gaps -- just describe work as
 "unported"/"deferred" that a later milestone actually completed; worth a

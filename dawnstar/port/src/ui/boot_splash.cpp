@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "graphics/bitmap_font.h"
+#include "util/text.h"
 
 namespace dawnstar {
 
@@ -29,10 +30,6 @@ std::vector<uint8_t> ReadFile(const std::string& path) {
 }
 
 }  // namespace
-
-const char* const BootSplash::kCopyString[6] = {
-    "(c) 2003 Vir2L Studios, ",   "a ZeniMax Media company. ", "The Elder Scrolls and Vir2L ",
-    "are registered trademarks ", "of ZeniMax Media Inc. ",    "All rights reserved."};
 
 BootSplash BootSplash::Load(const std::string& root, const ImgArchive& images) {
     return BootSplash(DecodedImage::FromPng(ReadFile(root + "/splashtop.png")),
@@ -66,7 +63,7 @@ void BootSplash::Render(Backbuffer& bb, int64_t elapsedMs) const {
         bb.Fill(kWhite);
         DrawCentered(bb, vir2lLogo_, 10);
         int y = 10 + vir2lLogo_.height + 3;
-        for (const char* line : kCopyString) {
+        for (const char* line : kCopyStringParts) {
             const std::string s = line;
             BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(s) / 2, y, s, kBlack);
             y += 14;

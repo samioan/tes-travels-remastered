@@ -69,9 +69,6 @@ public:
     // leaving the backbuffer untouched.
     void Render(Backbuffer& bb, int64_t elapsedMs) const;
 
-    // ESGame.copyString: the six copyright lines.
-    static const char* const kCopyString[6];
-
 private:
     void DrawCentered(Backbuffer& bb, const DecodedImage& img, int y) const;
 

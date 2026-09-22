@@ -63,10 +63,12 @@ public:
     static void TakeDamage(MonsterState& m, int amount);
 
     // Monster.toBytes()/fromBytes(): the packed 28-byte record
-    // ESGame.monsters[]'s position-keyed hashtable stores (see store()
-    // -- no live per-level registry exists in this port yet, so nothing
-    // calls an equivalent of Store() yet; ToBytes/FromBytes are provided
-    // standalone for whichever milestone adds one).
+    // ESGame.monsters[]'s position-keyed hashtable stores (see store()).
+    // `WorldRegistry` (dungeon/dungeon_runtime.h, M22/M24) is that live
+    // per-level registry's own counterpart; every real caller writes a
+    // ticked/moved monster's updated bytes straight back into its own
+    // registry entry rather than through a separate Store() method (see
+    // e.g. combat/combat_tick.cpp's own TickNearbyMonsters).
     static std::array<uint8_t, 28> ToBytes(const MonsterState& m);
     static MonsterState FromBytes(const std::array<uint8_t, 28>& in);
 

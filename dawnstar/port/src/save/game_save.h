@@ -15,12 +15,14 @@ namespace dawnstar {
 
 // ESGame.java's own `Shop.*` static state that `writeOtherStateInfoToBytes()`/
 // `readOtherStateInfo()` persist alongside the character record and the world
-// registries -- one flat struct here rather than a ported `Shop` class, because
-// `Shop.java` itself is still unported (see docs/PORT_ROADMAP.md's own still-open
-// "shops" milestone). That's a container decision, not a format simplification:
-// every one of the 26 values below is written and read back in the exact field
-// order/width the original uses, so a save file carries them faithfully whether
-// or not anything in this port reads them yet.
+// registries -- one flat struct here rather than the save format reading/
+// writing `ShopState` (npc/shop_interaction.h's own M45 port of `Shop.java`'s
+// live state) directly, since main.cpp's own `syncOtherStateFromLive`/
+// `syncLiveFromOtherState` already have to bridge the two around every real
+// save/load anyway (this struct's own field layout matches the ORIGINAL's
+// save format exactly, not `ShopState`'s in-memory shape). Every one of the
+// 26 values below is written and read back in the exact field order/width
+// the original uses.
 //
 // Defaults reproduce `Shop.reset()`'s own post-condition exactly (all 9
 // `firstVisit` entries true, everything else zero/false) -- that's the state a
@@ -207,10 +209,11 @@ public:
     static RecordStore DeserializeRecordStore(const std::vector<uint8_t>& bytes);
 
     // `getGameAdvancementLevel(giftPointsFound)` -- 0/1/2/3/4/5 at the original's
-    // own 17/29/38/49/62 gift-point thresholds. Ported here because
-    // `resumeGame()` is its only ported caller; other (still-unported) callers
-    // exist in ESGame.java's own quest/shop gating and should reuse this rather
-    // than re-deriving it.
+    // own 17/29/38/49/62 gift-point thresholds. This class's own thin wrapper
+    // around `util/game_advancement.h`'s free function (`resumeGame()`'s real
+    // call site); npc/shop_interaction.cpp's own quest-gating call (M45)
+    // reuses that same shared header directly rather than this wrapper --
+    // see game_advancement.h's own doc comment.
     static int GetGameAdvancementLevel(int giftPointsFound);
 
     // `openAndRepopulateDungeons(advancementLevel)` -- see this class's own

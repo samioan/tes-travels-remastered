@@ -1,10 +1,11 @@
 // M34 smoke test: InteractTick::ProcessInteract (interact/
-// interact_tick.h) -- GameCanvas.processInteract()'s chest-looting half.
-// (The npcInSight half is now real too, M45 -- see
-// m45_shop_interaction_smoke.cpp for its own deep coverage; every
-// scenario here keeps npcInSight at -1, so this file's own additions are
-// just the extra parameters ProcessInteract's signature grew, unused in
-// every one of its own checks.) No JVM ground truth is available
+// interact_tick.h) -- GameCanvas.processInteract()'s chest-looting half,
+// plus (section B) a light confirmation that the real npcInSight half
+// (M45) genuinely delegates rather than no-op'ing -- deep coverage of
+// that half's own content lives in m45_shop_interaction_smoke.cpp; every
+// OTHER scenario here keeps npcInSight at -1, so this file's own
+// additions are just the extra parameters ProcessInteract's signature
+// grew, unused in the rest of its own checks. No JVM ground truth is available
 // (same reason as every prior milestone) -- verified against the real
 // 37-level generated world (M6/M24) and a real created character (M11),
 // including a real chest the world generator itself registered with the
@@ -152,17 +153,26 @@ int main(int argc, char** argv) {
                   "setup check: the real chest should still be registered");
         }
 
-        // --- B: npcInSight >= 0 -> still a no-op (npcInSight outranks
-        // chestInSight, and openNpcDialogue() isn't ported -- see
-        // interact_tick.h's own doc comment) ---
+        // --- B: npcInSight >= 0 outranks chestInSight -- the real
+        // dialogue greeting (M45's ShopInteraction::Dialogue) comes back
+        // through ProcessInteract's own RETURN VALUE, not `popup` (which
+        // this method never touches for the npc branch at all -- only
+        // main.cpp's own caller turns that return value into a message
+        // screen); the chest stays completely untouched either way. Deep
+        // coverage of Dialogue()'s own content lives in
+        // m45_shop_interaction_smoke.cpp -- this just confirms
+        // ProcessInteract really delegates to it rather than silently
+        // no-op'ing, and that the chest-priority behavior is unaffected. ---
         {
             player.chestInSight = true;
             player.npcInSight = 3;
             MessagePopupState popup;
             int inventoryBefore = player.inventoryCount;
-            InteractTick::ProcessInteract(player, levels, world, items, charData, shopDialogue, shop, popup,
-                                          globalRng, nextItemSpawnId, 2000);
-            Check(!popup.visible, "npcInSight >= 0 should show no message (openNpcDialogue is unported)");
+            auto greeting = InteractTick::ProcessInteract(player, levels, world, items, charData, shopDialogue, shop,
+                                                            popup, globalRng, nextItemSpawnId, 2000);
+            Check(greeting.has_value(),
+                  "npcInSight >= 0 should return the real npc greeting (ProcessInteract's own return value)");
+            Check(!popup.visible, "the npc greeting is returned, not shown through `popup`");
             Check(player.inventoryCount == inventoryBefore, "npcInSight >= 0 should not touch the inventory");
             Check(PlayerMovement::ChestInFront(player, levels, world) != nullptr,
                   "npcInSight >= 0 should leave the real chest untouched in the registry");

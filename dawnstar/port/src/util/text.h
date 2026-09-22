@@ -32,12 +32,13 @@ inline std::string ReplaceFirstTag(const std::string& source, const std::string&
 }
 
 // ESGame.java's own copyString (lines ~58-65): the copyright/legal
-// notice text, kept as the original's own 6-part array (several real
-// consumers concatenate the parts -- secondaryParam==200/201's own
-// "Exiting" screens and LoadingScreen.java's mode-2 splash -- rather
-// than display them line-by-line) plus that exact concatenation here.
-// main.cpp's M44 Game Over chain is its first consumer in this port; the
-// still-unported boot splash (LoadingScreen modes 1/2) will be another.
+// notice text, kept as the original's own 6-part array. Two real,
+// different consumers: secondaryParam==200/201's own "Exiting" screens
+// CONCATENATE the parts into one paragraph (`CopyStringText()` below,
+// main.cpp's M44/M56 Game Over/Victory chains), while
+// LoadingScreen.java's mode-2 splash draws them as 6 SEPARATE lines
+// (ui/boot_splash.cpp's own Copyright phase, M48) -- both real call
+// sites share this one array rather than each keeping its own copy.
 inline const char* const kCopyStringParts[6] = {
     "(c) 2003 Vir2L Studios, ",
     "a ZeniMax Media company. ",

@@ -110,8 +110,12 @@ public:
     static int QuestFlagsFor(int shopId, int itemId, const ItemDatabase& items);
 
     // Clears both quest-turn-in state arrays -- Shop.
-    // clearQuestTurnInState(), called on level-up in the original
-    // (Player.java's own level-up path, not yet ported here).
+    // clearQuestTurnInState(). Genuinely dead code in the original: it has
+    // ZERO real callers anywhere in `../src/` (confirmed directly --
+    // `Player.levelUp()`, the plausible-sounding candidate, actually calls
+    // `Shop.reset()` instead). Ported anyway for a complete, literal
+    // mirror of Shop.java's own public surface, same reasoning as
+    // ui/screen.h's own unused `CommandId::Exit`.
     static void ClearQuestTurnInState(ShopState& s);
 
     // Reveals the next traitor-rumor fragment for `player` at rumor topic

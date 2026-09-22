@@ -197,9 +197,6 @@ int main(int argc, char** argv) {
             BitmapFont::DrawString(want, 88 - BitmapFont::StringWidth("Distributed by:") / 2, 143, "Distributed by:", 0);
             want.Blit(88 - mforma.width / 2, 158, mforma);
             Check(SameFrame(got, want), "t=4000: white card, Vir2L logo, six 14px-spaced lines, Distributed by, carrier logo");
-            Check(std::string(BootSplash::kCopyString[5]) == "All rights reserved." &&
-                      std::string(BootSplash::kCopyString[0]) == "(c) 2003 Vir2L Studios, ",
-                  "ESGame.copyString's six lines");
             Backbuffer later;
             splash.Render(later, 6499);
             Check(SameFrame(got, later), "the card holds through t=6499");

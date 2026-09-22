@@ -466,9 +466,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // M42: ESGame's own `Shop.*` static state (Item.nextSpawnId,
         // Monster.nextSpawnIdCounter, the 9 firstVisit / 4 interactionCount /
         // 4 rewardsGiven / 4 questState1 / 4 questState2 arrays and
-        // showDeathGreeting), carried as plain data because Shop.java itself
-        // is still unported -- see save/game_save.h's own OtherStateInfo
-        // comment. Starts at Shop.reset()'s own post-condition, is reset to it
+        // showDeathGreeting), carried as this own flat save container
+        // (rather than read/written straight from `ShopState`, npc/
+        // shop_interaction.h's own M45 port of `Shop.java`'s live state)
+        // -- see save/game_save.h's own OtherStateInfo comment for why.
+        // Starts at Shop.reset()'s own post-condition, is reset to it
         // again whenever a new character is created (Player.resetState()'s own
         // `Shop.reset()` call, ../../../src/Player.java line 2576), and is
         // replaced wholesale by a real load.

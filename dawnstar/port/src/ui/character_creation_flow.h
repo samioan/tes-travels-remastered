@@ -53,8 +53,8 @@ enum class CharacterCreationAction {
 // here) and re-load `Shop`'s dialogue table (already loaded once at
 // startup in this port, so redundant here too) before immediately
 // showing the next real screen. There is no actual asynchronous work to
-// wait for, unlike Save/Load's own real file I/O (still unported, M39's
-// own header doc comment) -- so this class skips modeling that loading
+// wait for, unlike Save/Load's own real file I/O (save/game_save.h, M42)
+// -- so this class skips modeling that loading
 // screen/background-thread machinery entirely and transitions straight
 // from a confirmed name to the "Welcome" screen, which is functionally
 // identical to what a modern, non-memory-constrained runtime would do

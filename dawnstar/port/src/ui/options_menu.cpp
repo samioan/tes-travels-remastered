@@ -648,8 +648,8 @@ OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData
             // is the ONLY assignment of ambushTimer anywhere in the whole
             // game (the one CLASS_MAP.md had mis-resolved as dead code
             // before M38's dispatch fix -- see M43's roadmap entry): it
-            // arms GameCanvas.tickPerSecond's still-unported "overstayed
-            // in one place" ambush spawner. specialEncounterResolved
+            // arms passive/passive_tick.h's own "overstayed in one place"
+            // ambush spawner (M44). specialEncounterResolved
             // already round-trips through the save format (M12's packed
             // traitor byte), but ambushTimer/newGamePlus/
             // starFrostBonusActive are all transient -- see player_state.h.

@@ -152,8 +152,9 @@ struct PlayerState {
     // as a global, since there's only ever one player either way.
     std::array<VisibleSlot, 13> visibleObjects{};
 
-    // --- M14: touched by PlayerCombatStats::GainSkillExp. Consumed
-    // elsewhere by ESGame's level-up UI, not ported yet.
+    // --- M14: touched by PlayerCombatStats::GainSkillExp. Consumed by
+    // ui/level_up_menu.h's real level-up UI (M49) -- see main.cpp's own
+    // `if (player.levelUpPending)` hand-off.
     bool levelUpPending = false;
     // Set once PlayerInventory::GrantStarFrostItem has run (M43, the
     // Reveal Traitor quiz's correct-guess award -- Player.java's own
@@ -163,16 +164,15 @@ struct PlayerState {
     // loses the +4 while the StarFrost item itself stays -- preserved
     // transient behavior, checked by m43_reveal_traitor_smoke.cpp.
     // GameCanvas.java's own death branch also clears it back to false
-    // (line ~1337); that branch isn't ported yet either.
+    // (line ~1337); ported too, in death/death_tick.cpp (M50).
     bool starFrostBonusActive = false;
 
     // --- M43: Player.java's newGamePlus -- set ONLY by ESGame's Reveal
     // Traitor result (secondaryParam==66, a correct guess), read only by
-    // GameCanvas.tickPerSecond's ambush-spawner branch to pick the
-    // alternate checkpoint schedule (that per-second tick itself still
-    // unported -- see docs/PORT_ROADMAP.md's M43 entry). NOT part of
-    // either save format, so a save/load cycle silently loses it --
-    // preserved transient behavior.
+    // GameCanvas.tickPerSecond's ambush-spawner branch (ported at M44,
+    // passive/passive_tick.h) to pick the alternate checkpoint schedule.
+    // NOT part of either save format, so a save/load cycle silently loses
+    // it -- preserved transient behavior.
     bool newGamePlus = false;
     // --- M43: Player.java's ambushTimer -- the per-second "overstayed in
     // one place" ambush counter (-1 = inactive). Set to 1 ONLY by
@@ -180,8 +180,8 @@ struct PlayerState {
     // the ONLY assignment anywhere in the game, the one CLASS_MAP.md had
     // mis-resolved as dead code before M38's `.mode`->`.secondaryParam`
     // fix made it reachable; see M43's roadmap entry), then incremented
-    // per second by tickPerSecond's unported ambush branch. Transient
-    // like newGamePlus above (never serialized).
+    // per second by passive/passive_tick.h's own ambush branch (M44).
+    // Transient like newGamePlus above (never serialized).
     int ambushTimer = -1;
 
     // --- M28: GameCanvas.npcInSight (see player/player_movement.h's
