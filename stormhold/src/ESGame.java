@@ -194,6 +194,13 @@ public class ESGame extends ngame.midlet.RegisteredMIDlet implements Runnable, C
    // Declared but no confirmed assignment site found anywhere in this
    // file -- left unconfirmed rather than guessed at.
    UIScreen unconfirmedScreenAV;
+   // Confirmed (phase-3 port M41): assigned from GameCanvas.
+   // resolveMovementSideEffects() (was decompiled/e.java's n()), which
+   // shows newEndOfGameUI() through this field the moment Player.
+   // pendingLockedItemFlag comes back true after a move -- Stormhold's own
+   // end-of-game/victory trigger. The assignment site lives in GameCanvas,
+   // not here, which is why an earlier pass reading only this file never
+   // found it.
    UIScreen unconfirmedScreenAP;
    UIScreen creditsUI;
    private UIScreen helpTopicUI;

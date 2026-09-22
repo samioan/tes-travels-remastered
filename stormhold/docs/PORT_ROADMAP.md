@@ -2572,24 +2572,127 @@ read-through.
       confirmed every screen's text and the final hand-off render
       correctly.
 
+- [x] **M41 -- the rest of `GameCanvas`'s per-tick action dispatcher
+      (pure Java transcription, closing out decompiled/e.java)** (this
+      session). Same shape as M22 ("pure phase-1 Java transcription, no
+      C++ this time") applied to the LAST remaining unread part of
+      `decompiled/e.java` (roughly lines 1325-1823): the real per-tick
+      action dispatcher (`e(long)`, was this file's own
+      "tickStatusCountdowns_e" placeholder) and every one of its dispatch
+      targets that weren't already confirmed by M35-M39 --
+      `a(long)`/`c()`/`f()`/`f(long)`/`g(long)`/`h()`/`h(long)`/`k()`/
+      `n()`/`a(long,long)`. Only `void d(int)` (the NPC-dialogue-screen
+      trigger `f(long)` calls into) is deliberately left as an explicit
+      new stub -- see its own header comment -- everything else in the
+      file's remaining stub inventory is now real: `grep -rl
+      UnsupportedOperationException src/*.java` finds nothing outside
+      `GameCanvas.java`, and within it only `talkToNpc()` (new, was
+      `void d(int)`) still throws.
+
+      Resolving every remaining single-letter call site required the
+      same field-position cross-referencing this project has used since
+      M3, applied to THREE more classes this session: `Player`/`j.java`
+      (confirmed `i`=`crossingLevelBoundary`, `Q`=`justMarkedCamp`,
+      `s`/`L`/`I`=`increaseHarmBuff`/`increaseArmorBuff`/
+      `safeCampingBuff` by BEHAVIOR, not just position -- the
+      `computeMoveTarget()`/`resetState()` call sites these letters
+      appear in independently confirm each), `Shop`/`k.java` (confirmed
+      `k.a()`=`wardenLeaves()`, `k.d`=`wardenPresent`, `k.f`=
+      `wardenVisitCount` by reading `wardenLeaves()`'s own body directly
+      -- "WARDEN LEAVES!!", the exact dungeons[1]/dungeons[0] bug M8
+      already ported), and `ESGame.java` (confirmed `aq`=`npcHelloUI`,
+      `R[]`=`npcChoicesUI[]`, `t`=`inventoryUI`, `aP`=
+      `unconfirmedScreenAP`, `F()`=`newEndOfGameUI()` by counting
+      `UIScreen`-typed field declarations in original order and matching
+      position 1:1 against the already-renamed file -- unlike the other
+      12 classes, `ESGame.java` kept its real name through decompilation,
+      so its own decompiled source doubles as the position key directly).
+
+      **The session's single most consequential finding: the confirmed
+      trigger for Stormhold's own end-of-game/victory sequence, found
+      while transcribing `n()` (now `resolveMovementSideEffects()`).**
+      `Player.pendingLockedItemFlag` (M17's own name for decompiled `g`,
+      set when `commitMove()`'s dropped-item block picks up a record
+      with bit 2 (`0x4`) set on byte 6) coming back true after a move
+      doesn't just mean "this item is locked" the way M17's own naming
+      implied -- `GameCanvas.n()` responds to it by showing
+      `ESGame.newEndOfGameUI()` (already a real, fully-transcribed
+      method since `ESGame.java`'s own pass) and disabling auto-repaint.
+      This also resolves `ESGame.java`'s own "`unconfirmedScreenAP`...
+      no confirmed assignment site found" comment from that file's own
+      pass -- the assignment site was always in `GameCanvas.java`, which
+      that earlier pass never read. `Player.pendingLockedItemFlag`
+      itself is NOT renamed this session (would ripple through
+      `player_movement.h`/`dungeon_generator.cpp`'s own C++ callers) --
+      flagged in `resolveMovementSideEffects()`'s own header comment
+      instead, same "correction, not silent rename" policy M6's
+      stairway note and M19's warden-clearing note already established.
+
+      **A second real, previously-unrecovered caller, found transcribing
+      `c()` (now `refreshNpcNameplateAndWardenLeave()`):**
+      `WardenState::Leave`'s own missing driver (M8's own class comment:
+      "that caller still isn't recovered" -- still open as of M19).
+      When the tile directly ahead isn't a shop/NPC tile, and
+      `isNpcDialogueDue()` is false, and the Warden is present, and the
+      player's own `wardenLoreStep` has caught up to
+      `Shop.wardenVisitCount` (heard everything this visit has to
+      offer), `Shop.wardenLeaves()` finally gets called for real --
+      distinct from M19's own confirmed finding (a successful STEP
+      unconditionally clears `Shop.wardenPresent` straight to `false`,
+      no tile mutation) -- that one is `Player.commitMove()`'s own
+      direct assignment; this is the separate, tile-mutating trigger.
+
+      **A third, smaller confirmed-dead-branch finding, in
+      `resolveInteractInput()` (was `f(long)`):** its chest-interaction
+      3-way switch has an `== -1` branch (would show "Chest locked!")
+      that's UNREACHABLE -- `Player.collectChestItem()` (already ported
+      since M12) only ever returns `0` or `1`, never `-1`. Preserved
+      anyway, same "confirmed dead, not deleted" discipline as M10's
+      `leftLevelZone`/M19's unreachable neighbor-throw.
+
+      **Not transcribed, deliberately: `void d(int)`** (renamed
+      `talkToNpc()`, a new explicit stub) -- `resolveInteractInput()`'s
+      own NPC-talk branch. Its real body is straightforward (calls the
+      already-ported `Shop.dialogue()`, then wires the result into
+      `ESGame.npcHelloUI`/`npcChoicesUI[]`, both confirmed this session),
+      but its `"<TAG>"` template-substitution VALUE reads a `UIScreen`
+      field (decompiled `.N`, an `int`) this session didn't cross-
+      reference against `UIScreen.java`'s own field list with enough
+      confidence to transcribe responsibly -- left as a real stub rather
+      than guessed, same standard M29 already held `IsNpcDialogueDue`'s
+      dependencies to.
+
+      No C++ changes this milestone (same framing M22 used: nothing yet
+      to port these TO -- `main.cpp` still drives movement/attack
+      directly via `PlayerMovement::Move`/`CombatResolution::
+      ResolveAttackInput`, bypassing this whole dispatcher entirely, and
+      wiring camp/rest/spell-casting/inventory-open/NPC-dialogue into the
+      C++ port is real follow-on work of its own). Verified by `javac`
+      recompiling the whole renamed tree clean (zero errors, same 3
+      `[options]`-obsolete-source warnings the baseline already had) --
+      the existing 37 smoke tests are unaffected (no C++ touched) and
+      were not re-run.
+
 ## What's next
 
-`tickMovementAndAI` (the real per-tick action dispatcher, decompiled/
-e.java's `e(long)`) remains the biggest still-untranscribed piece --
-gates a whole further web of interconnected methods (`f()`/`g(long)`/
-`h(long)`/`n()`, all confirmed to exist and roughly what they each do,
-just not yet transcribed -- `a()`/`m()`/`d(long)` are done, M38/M39) --
-this is where camp/rest and the level-up/rank-up flow most likely live.
-`paintFlashOverlays()`/`paintUnknown_b()` (the two remaining
-unported-pixel paint methods, both gated on that same live state --
-`paintFlashOverlays()`'s own `unconfirmed_S` trigger is real since M39,
-so that one in particular may be a short follow-on rather than a fresh
-investigation). Beyond that: a real save/load system (`PlayerSave`
-exists, M20, but there's no `WorldRegistry`/master-list save format,
-and `main.cpp`'s own Main Menu "Continue Game" item always takes the
-no-saved-game branch until one exists, M40); Help topics (the Java
-transcription itself stops at topic index 4). Following dawnstar's own
-later milestones roughly but expecting further Stormhold-specific
-divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22 already
+`talkToNpc()` (`GameCanvas.java`, was decompiled/e.java's `void d(int)`)
+is the one remaining unread corner of `decompiled/e.java` -- see its own
+header comment for exactly what's missing (one `UIScreen` field
+cross-reference). Beyond that, `decompiled/e.java`'s own action-dispatch
+web is now FULLY transcribed (M41) but entirely unwired in the C++
+port -- camp/rest, spell casting/cycling, opening the inventory screen,
+and the chest/NPC-nameplate/Warden-leaving checks all have real,
+verified Java to port from now, but no C++ module, and `main.cpp`'s own
+tick loop doesn't call any of it. `paintFlashOverlays()`/
+`paintUnknown_b()` (the two remaining unported-PIXEL paint methods, both
+gated on that same live state -- `paintFlashOverlays()`'s own
+`unconfirmed_S` trigger is real since M39, so that one in particular may
+be a short follow-on rather than a fresh investigation). Beyond that: a
+real save/load system (`PlayerSave` exists, M20, but there's no
+`WorldRegistry`/master-list save format, and `main.cpp`'s own Main Menu
+"Continue Game" item always takes the no-saved-game branch until one
+exists, M40); Help topics (the Java transcription itself stops at topic
+index 4). Following dawnstar's own later milestones roughly but
+expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41 already
 found.

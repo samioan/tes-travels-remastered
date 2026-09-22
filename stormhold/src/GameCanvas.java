@@ -201,7 +201,12 @@ public class GameCanvas extends FullCanvas implements Runnable {
    long campRollAt;
    long unconfirmed_s;
    long unconfirmed_B;
-   long unconfirmed_V;
+   // Confirmed (phase-3 port M41): decompiled/e.java's instance field `V`
+   // -- gates resolveSpellCastInput()'s own 500ms cooldown between spell
+   // casts, the spell-side counterpart of lastAttackTimeMs/`B` above.
+   // Renamed from this file's own earlier "unconfirmed_V" placeholder now
+   // that its role is confirmed.
+   long lastSpellCastTimeMs;
    boolean strafeFlag;
    // Pending move direction (1-4), set by keyPressed, matches dawnstar's
    // `pendingMoveDir`.
@@ -318,7 +323,7 @@ public class GameCanvas extends FullCanvas implements Runnable {
       visibleTileGrid = new byte[17][17];
       hotbarActionSet = 0;
       this.unconfirmed_B = 0L;
-      this.unconfirmed_V = 0L;
+      this.lastSpellCastTimeMs = 0L;
    }
 
    // Top-level paint dispatch: dead-screen (facing/aD==3), camp screen
@@ -1673,8 +1678,8 @@ public class GameCanvas extends FullCanvas implements Runnable {
                   }
 
                   this.tickMonsterAI(frameStart);
-                  this.tickStatusCountdowns_e(frameStart);
-                  this.tickMovementAndAI(frameStart, deltaMs);
+                  this.tickPlayerAction(frameStart);
+                  this.tickDeathAndRegen(frameStart, deltaMs);
                   if (this.player.tryRankUpSkills()) {
                      this.pauseTicking();
                      this.game.levelUpUI = this.game.newLevelUpUI(1);
@@ -1815,25 +1820,62 @@ public class GameCanvas extends FullCanvas implements Runnable {
       }
    }
 
-   // RENAMED from this file's own earlier wrong "tickStatusCountdowns_e"
-   // guess -- confirmed (phase-3 port M38, reconnaissance only, body
-   // still not transcribed) to be the real per-tick ACTION dispatcher:
-   // decompiled/e.java's e(long) checks a chain of action-request flags
-   // (I/A/ay/ap/U/av/Z/this.p) and dispatches to whichever single
-   // handler applies (a(long)/f(long)/h(long)/g(long)/d(long)/f()/n()),
-   // then unconditionally calls 4 more methods every tick regardless:
-   // refreshTargetMonster()/tickStatusCountdowns_h (was h(), still
-   // unconfirmed)/refreshTargetMonster (was a(), CONFIRMED this session,
-   // see below)/resolveTargetMonsterDeath (was m(), CONFIRMED this
-   // session, see below). This method itself remains a stub -- the
-   // action-flag dispatch alone fans out into `d(long)` (attack input,
-   // confirmed to call the already-ported Player.attack() /
-   // PlayerAttack) and several UI-screen-dependent handlers
-   // (rest/camp/rumors/help) this port has no screens for at all yet --
-   // too large a web to responsibly finish alongside this session's
-   // actual deliverable.
-   private void tickStatusCountdowns_e(long now) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's e(long))");
+   // Confirmed (phase-3 port M41): the real body of decompiled/e.java's
+   // e(long) -- RENAMED from this file's own earlier "tickStatusCountdowns_e"
+   // placeholder now that its real role and every one of its dispatch
+   // targets are confirmed. The per-tick action-request dispatcher: checks
+   // a chain of flags set by keyPressed() (see that method's own header
+   // comment) and dispatches to whichever ONE applies, most specific
+   // first, then unconditionally runs 4 more checks every tick regardless
+   // of which (if any) action fired -- checkChestAhead()/
+   // refreshNpcNameplateAndWardenLeave() (both new this session, see their
+   // own header comments below) and refreshTargetMonster()/
+   // resolveTargetMonsterDeath() (M38).
+   //
+   // unconfirmed_I's own branch is gated HERE (not inside startCampOrRest()
+   // itself) on unconfirmed_A -- M35's own confirmed "did paintMonsters()
+   // draw a real monster sprite last frame" flag -- showing "Cannot Camp!"
+   // instead of actually starting a camp/rest when a monster is currently
+   // visible.
+   //
+   // The final movement branch's own original condition,
+   // "(this.p != 0 || this.v) && !this.v", is a tautology that always
+   // simplifies to exactly "this.p != 0 && !this.v" (when this.v is true
+   // the whole expression is false regardless of this.p; when this.v is
+   // false it reduces to this.p != 0) -- written out algebraically here
+   // rather than transcribed as the literal redundant original, since the
+   // redundancy has no observable effect and this port holds a real
+   // /W4-warnings bar that would flag the dead `|| this.v` term.
+   private void tickPlayerAction(long now) {
+      if (unconfirmed_I) {
+         if (unconfirmed_A) {
+            if (this.showMessage(MSG_CANNOT_CAMP, 1)) {
+               messageShownAt = now;
+               unconfirmed_ad = true;
+            }
+
+            unconfirmed_I = false;
+         } else {
+            this.startCampOrRest(now);
+         }
+      } else if (unconfirmed_ay) {
+         this.resolveInteractInput(now);
+      } else if (unconfirmed_ap) {
+         this.resolveSpellCastInput(now);
+      } else if (unconfirmed_U) {
+         this.resolveSpellCycleInput(now);
+      } else if (unconfirmed_av) {
+         this.resolveAttackInput(now);
+      } else if (unconfirmed_Z) {
+         this.openInventory();
+      } else if (this.pendingMoveDir != 0 && !unconfirmed_v) {
+         this.resolveMovementSideEffects();
+      }
+
+      this.checkChestAhead();
+      this.refreshNpcNameplateAndWardenLeave();
+      this.refreshTargetMonster();
+      this.resolveTargetMonsterDeath();
    }
 
    // Confirmed (phase-3 port M38): byte-for-byte from decompiled/e.java's
@@ -1935,8 +1977,406 @@ public class GameCanvas extends FullCanvas implements Runnable {
       unconfirmed_av = false;
    }
 
-   private void tickMovementAndAI(long now, long deltaMs) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's a(long,long))");
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // h() (no-arg) -- one of tickPlayerAction/e(long)'s own 4 unconditional
+   // per-tick calls (see that method's own header comment), alongside
+   // refreshTargetMonster()/resolveTargetMonsterDeath() (M38) and
+   // refreshNpcNameplateAndWardenLeave() (below). Player.chestAheadOfPlayer()
+   // (already fully ported since M12/M13's own supporting cast) is polled
+   // every tick; when it finds a chest on the look-ahead tile, sets
+   // unconfirmed_m true (resolveInteractInput()'s own gate for actually
+   // opening it, below) and shows the "Chest" popup (MSG_CHEST, priority 1).
+   private void checkChestAhead() {
+      byte[] chest = this.player.chestAheadOfPlayer();
+      unconfirmed_m = chest != null;
+
+      if (unconfirmed_m && this.showMessage(MSG_CHEST, 1)) {
+         messageShownAt = System.currentTimeMillis();
+         unconfirmed_ad = true;
+      }
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // c() (no-arg) -- the other of tickPlayerAction/e(long)'s own 4
+   // unconditional per-tick calls not yet transcribed before this session.
+   // Samples the tile directly ahead (Dungeon.viewGridAt(0, 1,
+   // player.corridorView), reusing M21's own confirmed reader) and tests
+   // bit 32 -- the shop/Varus tile marker M6/M8 already established.
+   //
+   // When set: shows the NPC's name as a 2-line popup (npcNameLines[shopId],
+   // via Player.shopAheadOfPlayer()) and sets unconfirmed_W true.
+   //
+   // **A real, previously-unrecovered caller, found while transcribing this
+   // method: WardenState::Leave's own missing driver (M8's own class
+   // comment: "that caller still isn't recovered").** When NOT looking at
+   // a shop tile: if isNpcDialogueDue() is false, the Warden is actually
+   // present (Shop.wardenPresent), AND the player's own wardenLoreStep has
+   // already caught up to Shop.wardenVisitCount (i.e. the player has heard
+   // everything this visit has to offer), calls Shop.wardenLeaves() --
+   // the SAME tile-clearing method (with its own confirmed dungeons[1]/
+   // dungeons[0] bug, M8) already ported to C++, just never wired to a real
+   // caller until now. Distinct from M19's own confirmed finding (a
+   // successful STEP unconditionally clears Shop.wardenPresent straight to
+   // false, no tile mutation) -- that's Player.commitMove()'s own direct
+   // assignment; THIS is the real, separate, tile-mutating "Warden leaves"
+   // trigger, gated on the player having actually finished listening.
+   private void refreshNpcNameplateAndWardenLeave() {
+      Dungeon dungeon = this.player.currentDungeon();
+      byte tileAhead = dungeon.viewGridAt(0, 1, this.player.corridorView);
+      if (Util.testBit((byte)32, tileAhead)) {
+         int shopId = this.player.shopAheadOfPlayer();
+         unconfirmed_W = true;
+         if (this.showMessage(npcNameLines[shopId], 1)) {
+            messageShownAt = System.currentTimeMillis();
+            unconfirmed_ad = true;
+         }
+      } else {
+         unconfirmed_W = false;
+         if (!this.isNpcDialogueDue() && Shop.wardenPresent && this.player.wardenLoreStep == Shop.wardenVisitCount) {
+            Shop.wardenLeaves();
+         }
+      }
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // a(long) -- tickPlayerAction/e(long)'s own unconfirmed_I branch,
+   // gated there (not here) on unconfirmed_A -- see tickPlayerAction's own
+   // header comment for that gate ("Cannot Camp!" when a monster is
+   // visibly rendered). Starts the ALREADY-transcribed run()-level camp
+   // state machine (campState 1=rolling for interruption, 2=safe wait --
+   // see run()'s own header comment) that, until this session, had no
+   // confirmed trigger anywhere in this file: campState=1 by default, but
+   // upgrades straight to 2 (skip the interruption roll) when the player
+   // has Player.safeCampingBuff active OR is standing in the hub town
+   // (currentLevel==1).
+   private void startCampOrRest(long now) {
+      this.campState = 1;
+      if (this.player.safeCampingBuff) {
+         this.campState = 2;
+      }
+
+      if (this.player.currentLevel == 1) {
+         this.campState = 2;
+      }
+
+      this.campRollAt = now;
+      unconfirmed_I = false;
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // h(long) -- tickPlayerAction/e(long)'s own unconfirmed_ap branch (key
+   // '3', the spell-cast hotkey). Validates player.selectedSpellId via
+   // Spell.isValidId() (prints and bails if somehow invalid -- defensive,
+   // not confirmed reachable); shows "Not enough magic!" when the spell's
+   // magickaCost exceeds Player.effectiveStat(4) (current Magicka); else,
+   // once lastSpellCastTimeMs's own 500ms cooldown has elapsed (a separate
+   // timer from resolveAttackInput()'s own lastAttackTimeMs), dispatches to
+   // Player.castOnMonster()/castOnSelf() (both already fully ported since
+   // M13) depending on Spell.isOffensive() -- an offensive spell with no
+   // targetMonster set shows "No monster here!" instead of casting. Sets
+   // unconfirmed_ao ("spell hit monster" flash, paintFlashOverlays()'s own
+   // M22 finding) or unconfirmed_am ("self spell" flash) accordingly --
+   // confirms M22's own header-comment mapping for both flags directly,
+   // not just by name.
+   private void resolveSpellCastInput(long now) {
+      if (unconfirmed_ap) {
+         byte spellId = this.player.selectedSpellId;
+         if (!Spell.isValidId(spellId)) {
+            System.out.println("Invalid spell id,= " + spellId);
+            unconfirmed_ap = false;
+            return;
+         }
+
+         if (Spell.byId(spellId).magickaCost > this.player.effectiveStat(4)) {
+            if (this.showMessage(MSG_NOT_ENOUGH_MAGICKA, 3)) {
+               messageShownAt = now;
+               unconfirmed_ad = true;
+            }
+         } else if (now - this.lastSpellCastTimeMs >= 500L && Spell.isValidId(spellId)) {
+            unconfirmed_at = true;
+            if (Spell.isOffensive(spellId)) {
+               if (!unconfirmed_aa) {
+                  if (this.showMessage(MSG_NO_MONSTER, 1)) {
+                     messageShownAt = now;
+                     unconfirmed_ad = true;
+                  }
+               } else {
+                  this.player.castOnMonster(spellId, targetMonster);
+                  System.out.println("monster health is " + targetMonster.currentHp);
+                  unconfirmed_ao = true;
+               }
+            } else {
+               this.player.castOnSelf(spellId);
+               unconfirmed_am = true;
+            }
+
+            this.lastSpellCastTimeMs = now;
+         }
+
+         unconfirmed_ap = false;
+      }
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // g(long) -- tickPlayerAction/e(long)'s own unconfirmed_U branch (key
+   // '5', the spell-cycle hotkey). Player.cycleSelectedSpell() (already
+   // fully ported) returns 0 when the player knows no spells at all
+   // ("No spells!"); otherwise re-stamps selectedSpellId (redundant with
+   // whatever cycleSelectedSpell() already set internally, preserved
+   // exactly rather than assumed dead) and shows the newly-selected
+   // spell's name, split onto 2 lines the same way itemFoundMessageLines()
+   // (below) splits an item name -- but inlined here rather than shared,
+   // matching the original's own two separate, near-identical blocks.
+   private void resolveSpellCycleInput(long now) {
+      if (unconfirmed_U) {
+         int spellId = this.player.cycleSelectedSpell();
+         if (spellId == 0) {
+            if (this.showMessage(MSG_NO_SPELLS, -1)) {
+               messageShownAt = now;
+               unconfirmed_ad = true;
+            }
+         } else {
+            this.player.selectedSpellId = (byte)spellId;
+            String name = Spell.byId(spellId).name;
+            String[] words = Util.splitWords(name);
+            String[] lines;
+            if (words.length == 1) {
+               lines = new String[]{name, ""};
+            } else if (words.length >= 3) {
+               lines = new String[]{words[0] + " " + words[1], words[2]};
+            } else {
+               lines = words;
+            }
+
+            if (this.showMessage(lines, -1)) {
+               messageShownAt = now;
+               unconfirmed_ad = true;
+            }
+         }
+
+         unconfirmed_U = false;
+      }
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // f() (no-arg) -- tickPlayerAction/e(long)'s own unconfirmed_Z branch
+   // (key '7', unconditional -- no hotbarActionSet gate, unlike keys
+   // '0'/'1'/'9'). Shows ESGame.inventoryUI (confirmed by this file's own
+   // field-position cross-reference against decompiled/ESGame.java) and
+   // disables auto-repaint the same way run()'s own level-up trigger
+   // already does.
+   private void openInventory() {
+      this.game.showScreen(this.game.inventoryUI);
+      autoRepaintEnabled = false;
+      unconfirmed_Z = false;
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // k() -- shared by resolveInteractInput() (below, "Found <item>" after
+   // a successful chest collect) and resolveMovementSideEffects() (below,
+   // the same message after a single-item auto-loot pickup during a move).
+   // Reads the MOST RECENTLY ADDED inventory slot (inventoryCount-1) --
+   // valid immediately after either caller's own item-adding call, since
+   // both add exactly one slot right before reaching this helper -- and
+   // formats Item.nameOf() (Math.abs()'d, matching M12's own confirmed
+   // sign-extension quirk on inventoryItemIds) onto 2 lines.
+   private String[] itemFoundMessageLines() {
+      int slot = this.player.inventoryCount - 1;
+      int itemId = Math.abs(this.player.inventoryItemIds[slot]);
+      String[] words = Util.splitWords(Item.nameOf(itemId));
+      String[] lines = new String[]{"", ""};
+      if (words.length >= 3) {
+         lines[0] = words[0] + " " + words[1];
+         lines[1] = words[2];
+      } else {
+         for (int i = 0; i < words.length; i++) {
+            lines[i] = words[i];
+         }
+      }
+
+      return lines;
+   }
+
+   // NOT transcribed this session -- was decompiled/e.java's `void d(int)`
+   // (distinct from the already-ported d(long) = resolveAttackInput()).
+   // Confirmed caller: resolveInteractInput() (below) when
+   // Player.shopAheadOfPlayer() finds an NPC/shop tile directly ahead.
+   // Real body confirmed by reading decompiled/e.java directly: calls
+   // Shop.dialogue(player, npcId, 1, 0) (already fully ported), then wires
+   // the result into ESGame.npcHelloUI (decompiled `aq`, position-confirmed
+   // against ESGame.java's own field order this session) --
+   // setTitle(Shop.NAMES[npcId]), setMessageBody(dialogueText),
+   // nextScreen=ESGame.npcChoicesUI[npcId] (decompiled `R[]`, also
+   // position-confirmed) -- plus a "<TAG>" template substitution
+   // (UIScreen.tagTemplate, Util's own substitution helper) using one of
+   // Shop's per-NPC point totals depending on which NPC. A null dialogue()
+   // result falls back to a hardcoded "has nothing more to say" message for
+   // Beneca(4)/Helga(5) specifically. NOT finished this session: the exact
+   // UIScreen field this reads for the substitution VALUE (decompiled
+   // `.N`, an int) hasn't been cross-referenced against UIScreen.java's own
+   // field list with confidence yet -- needs one more pass before this can
+   // be transcribed responsibly rather than guessed.
+   private void talkToNpc(int npcId) {
+      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's void d(int))");
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // f(long) -- tickPlayerAction/e(long)'s own unconfirmed_ay branch (key
+   // '9' when hotbarActionSet==2). Player.shopAheadOfPlayer() (already
+   // ported) first: >=0 means an NPC/shop tile is directly ahead ->
+   // delegates to talkToNpc() (above -- NOT transcribed this session, see
+   // its own header comment). Otherwise, when checkChestAhead() (above)
+   // already found a chest on the look-ahead tile this tick
+   // (unconfirmed_m), re-reads it and calls Player.collectChestItem()
+   // (already ported since M12) -- confirmed 0=auto-dropped (inventory
+   // full)/1=collected, "Found <item>".
+   //
+   // **A real, confirmed dead branch, found by reading collectChestItem()'s
+   // full body rather than assuming its return contract matches this call
+   // site's own 3-way switch:** the `== -1` branch here (would show
+   // MSG_CHEST_LOCKED) is UNREACHABLE -- collectChestItem() only ever
+   // returns 0 or 1, never -1. Preserved anyway (same "confirmed dead, not
+   // deleted" discipline as M10's leftLevelZone/M19's unreachable
+   // neighbor-throw), not "cleaned up" into a 2-way branch.
+   private void resolveInteractInput(long now) {
+      int shopId = this.player.shopAheadOfPlayer();
+      System.out.println("NPC In front is " + shopId);
+      if (shopId >= 0) {
+         this.talkToNpc(shopId);
+         System.out.println("done interacting with NPC, must paint as well");
+      } else if (unconfirmed_m) {
+         byte[] chest = this.player.chestAheadOfPlayer();
+         int result = this.player.collectChestItem(chest);
+         if (result == -1) {
+            // Confirmed unreachable -- see this method's own header comment.
+            if (this.showMessage(MSG_CHEST_LOCKED, 4)) {
+               messageShownAt = now;
+               unconfirmed_ad = true;
+            }
+         } else if (result == 0) {
+            if (this.showMessage(MSG_INVENTORY_FULL, -1)) {
+               messageShownAt = now;
+               unconfirmed_ad = true;
+            }
+         } else if (this.showMessage(this.itemFoundMessageLines(), -1)) {
+            messageShownAt = now;
+            unconfirmed_ad = true;
+         }
+      }
+
+      unconfirmed_ay = false;
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // n() -- tickPlayerAction/e(long)'s own final dispatch branch, gated on
+   // pendingMoveDir != 0 (see tickPlayerAction's own header comment for the
+   // algebra behind that simplified condition). Calls Player.move(
+   // pendingMoveDir, strafeFlag) (already fully ported since M10/M17/M19/
+   // M25 -- this is a DIFFERENT, real caller from main.cpp's own direct
+   // PlayerMovement::Move calls, which bypass this whole dispatcher
+   // entirely) and inspects what changed:
+   //
+   // **A real, previously-undocumented finding: the confirmed trigger for
+   // Stormhold's own end-of-game/victory sequence.** Player.
+   // pendingLockedItemFlag (decompiled `g`, M17's own "locked item" name)
+   // being true after the move -- set by commitMove()'s dropped-item block
+   // when a picked-up item's record has bit 2 (0x4) set on byte 6, per
+   // M17's own finding -- doesn't just mean "this item is locked": it shows
+   // ESGame.newEndOfGameUI() (already a real, fully-transcribed method,
+   // decompiled ESGame.F()) and disables auto-repaint. This ALSO resolves
+   // ESGame.java's own "unconfirmedScreenAP... no confirmed assignment
+   // site found" comment (see ESGame.java's own field list) -- this is
+   // that assignment site. Renaming M17's own "locked item" flag is out of
+   // scope for this milestone (would ripple through player_movement.h/
+   // dungeon_generator.cpp's own C++ callers) -- flagged here, not
+   // silently reworded, same "correction, not silent rename" policy M6's
+   // own stairway note and M19's own warden-clearing note already
+   // established.
+   //
+   // Otherwise: shows the entered/left-level-zone messages (MSG_WARDENS_CAMP/
+   // MSG_OUTER_CAMP) or the current level's own display name (matching
+   // run()'s own already-transcribed dead-respawn message selection
+   // EXACTLY, byte-for-byte the same 3-way choice) when crossing a level
+   // boundary; else, compares inventoryCount before/after the move to show
+   // "Found <item>!" (exactly 1 new item) or "Several items!" (more than 1)
+   // -- the SAME single-vs-multi-item distinction M17's own C++ port
+   // already wires through DungeonRuntime, here confirmed as the real
+   // Java-side message trigger for it.
+   private void resolveMovementSideEffects() {
+      if (this.pendingMoveDir != 0) {
+         byte inventoryCountBefore = this.player.inventoryCount;
+         unconfirmed_at = true;
+         this.player.move(this.pendingMoveDir, this.strafeFlag);
+         if (Player.pendingLockedItemFlag) {
+            this.game.unconfirmedScreenAP = this.game.newEndOfGameUI();
+            this.game.showScreen(this.game.unconfirmedScreenAP);
+            autoRepaintEnabled = false;
+         } else {
+            if (this.player.crossingLevelBoundary || this.player.enteredNewLevelZone || this.player.leftLevelZone) {
+               unconfirmed_E = true;
+               if (unconfirmed_E) {
+                  String[] lines;
+                  if (this.player.enteredNewLevelZone) {
+                     lines = MSG_WARDENS_CAMP;
+                  } else if (this.player.leftLevelZone) {
+                     lines = MSG_OUTER_CAMP;
+                  } else {
+                     lines = this.player.currentDungeon().displayNames();
+                  }
+
+                  if (this.showMessage(lines, 1)) {
+                     messageShownAt = System.currentTimeMillis();
+                     unconfirmed_ad = true;
+                  }
+
+                  unconfirmed_E = false;
+               }
+            }
+
+            if (this.strafeFlag) {
+               this.strafeFlag = false;
+            }
+         }
+
+         this.pendingMoveDir = 0;
+         int itemsFound = this.player.inventoryCount - inventoryCountBefore;
+         if (itemsFound == 1) {
+            if (this.showMessage(this.itemFoundMessageLines(), -1)) {
+               messageShownAt = System.currentTimeMillis();
+               unconfirmed_ad = true;
+            }
+         } else if (itemsFound > 1 && this.showMessage(MSG_FOUND_SEVERAL_ITEMS, -1)) {
+            messageShownAt = System.currentTimeMillis();
+            unconfirmed_ad = true;
+         }
+      }
+   }
+
+   // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
+   // a(long, long) -- RENAMED from this file's own earlier
+   // "tickMovementAndAI" placeholder guess (it has nothing to do with
+   // movement or monster AI at all) now that its real body is confirmed.
+   // Two unrelated per-tick checks fused into one original method:
+   // Player.effectiveStat(2) (current HP) reaching 0 or below triggers the
+   // death sequence -- clears targetMonster, sets facing=2 (run()'s own
+   // ALREADY-transcribed dead-screen sequence advances this to 3 next
+   // tick, see run()'s own header comment), and stamps unconfirmed_s (the
+   // 5-second-before-respawn timer run() also already reads). Separately,
+   // unless an action was already resolved THIS tick (unconfirmed_at, set
+   // by resolveAttackInput()/resolveSpellCastInput()/
+   // resolveMovementSideEffects() above), ticks passive fatigue
+   // regeneration (Player.tickFatigueRegen(), already fully ported).
+   private void tickDeathAndRegen(long now, long deltaMs) {
+      int hp = this.player.effectiveStat(2);
+      if (hp <= 0) {
+         unconfirmed_aa = false;
+         this.facing = 2;
+         this.unconfirmed_s = now;
+      }
+
+      if (!unconfirmed_at) {
+         this.player.tickFatigueRegen(deltaMs);
+      }
    }
 
    // Sets threadStarted (was `e()`), the exact counterpart of
