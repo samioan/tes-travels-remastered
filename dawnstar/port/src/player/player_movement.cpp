@@ -173,7 +173,10 @@ bool PlayerMovement::CommitMove(PlayerState& p, int direction, std::vector<Gener
     target.visited = true;
 
     if (direction == 1 || direction == 2) {
-        // Shop.showDeathGreeting reset: SKIPPED, Shop not ported yet.
+        // Shop.showDeathGreeting reset: raised here, consumed by main.cpp
+        // -- see PlayerState::clearDeathGreetingPending's own doc comment
+        // (M50) for why this can't just clear ShopState directly.
+        p.clearDeathGreetingPending = true;
         int cost = 1 * FatigueCostMultiplier(p);
         int16_t newFatigue = static_cast<int16_t>(p.coreStats[6] - cost);
         p.coreStats[6] = newFatigue < 0 ? int16_t{0} : newFatigue;
@@ -234,6 +237,38 @@ void PlayerMovement::ResetToHubPosition(PlayerState& p, bool altSpawn, std::vect
 
     RefreshCorridorView(p, levels);
     p.sightRefreshPending = true;
+}
+
+void PlayerMovement::ResetState(PlayerState& p, bool respawning, std::vector<GeneratedLevel>& levels,
+                                 WorldRegistry& world) {
+    if (!respawning) {
+        p.giftPointsFound = 0;
+        p.rumorRevealStep = 0;
+    }
+
+    p.ailmentMask = 0;
+    p.trollThirstTimer = 0;
+    p.glacierCurseTimer = 0;
+    p.terrifiedTimer = 0;
+    p.unconfirmedZ = false;
+
+    ResetToHubPosition(p, respawning, levels, world);
+
+    if (!respawning) {
+        p.campLevel = 0;
+        p.campX = 0;
+        p.campY = 0;
+        p.campFacing = 0;
+    }
+
+    p.effectDurations.fill(0);
+    p.combatTargetSpawnId = 0;
+    p.tempArmorBonus = 0;
+    p.increaseHarmBuff = false;
+    p.increaseArmorBuff = false;
+    p.safeCampingBuff = false;
+    // grantStartingItems() (respawning==false only): SKIPPED, see this
+    // method's own doc comment in player_movement.h.
 }
 
 void PlayerMovement::MarkCampAndReturnToTown(PlayerState& p, bool skipMark, std::vector<GeneratedLevel>& levels,

@@ -86,6 +86,24 @@ public:
     static void ResetToHubPosition(PlayerState& p, bool altSpawn, std::vector<GeneratedLevel>& levels,
                                     WorldRegistry& world);
 
+    // Player.java's resetState(respawning): clears the ailment mask and
+    // the troll-thirst/glacier-curse/terrified timers, resets
+    // unconfirmedZ, repositions via ResetToHubPosition(respawning) (the
+    // hub's alt spawn point when respawning, matching resetState's own
+    // pass-through of its own argument), zeroes every effectDurations
+    // entry, and clears the combat-target spawnId + the harm/armor/
+    // safe-camping buffs. When NOT respawning, also clears the camp
+    // bookmark (campLevel/X/Y/facing) -- the character-creation path,
+    // which is not respawning=false's only real caller in the original
+    // (Player's own constructor-adjacent setup calls it there too) but
+    // IS the only branch this port actually needs: M50's death handler
+    // is the one real caller, always with respawning=true.
+    // SIMPLIFIED: does not reproduce the respawning==false branch's
+    // grantStartingItems() call -- PlayerCreation::CreateCharacter
+    // already has its own equivalent inline (see that method's own doc
+    // comment), and no real caller here ever passes respawning=false.
+    static void ResetState(PlayerState& p, bool respawning, std::vector<GeneratedLevel>& levels, WorldRegistry& world);
+
     // Player.java's markCampAndReturnToTown(skipMark): bookmarks the
     // current position (unless skipMark, a path never actually
     // exercised in the original either -- always called with false) and

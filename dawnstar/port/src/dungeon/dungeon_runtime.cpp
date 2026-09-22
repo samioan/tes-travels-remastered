@@ -2,6 +2,26 @@
 
 namespace dawnstar {
 
+namespace {
+
+// Dungeon.java's own static final String[] NAMES, transcribed verbatim.
+const char* const kDungeonNames[37] = {
+    "Dawnstar",         "North Creek",       "North Creek 2",     "North Creek 3",
+    "Ice Spike",        "Ice Spike 2",       "Ice Spike 3",       "Blind Fjord",
+    "Blind Fjord 2",    "Blind Fjord 3",     "Slipneck Fjord",    "Slipneck Fjord 2",
+    "Slipneck Fjord 3", "Troll Pace",        "Troll Pace 2",      "Troll Pace 3",
+    "Ice Tribe Haven",  "Ice Tribe Haven 2", "Ice Tribe Haven 3", "Dawnstar Run",
+    "Dawnstar Run 2",   "Dawnstar Run 3",    "Massacre Caves",    "Massacre Caves 2",
+    "Massacre Caves 3", "Frostheim",         "Frostheim 2",       "Frostheim 3",
+    "Glacier Run",      "Glacier Run 2",     "Glacier Run 3",     "Troll Hole",
+    "Troll Hole 2",     "Troll Hole 3",      "Ice Council",       "Ice Council 2",
+    "Ice Council 3",
+};
+
+}  // namespace
+
+const char* DungeonRuntime::DisplayName(int levelNumber) { return kDungeonNames[levelNumber - 1]; }
+
 void DungeonRuntime::RegisterGeneratedSpawns(GeneratedLevel& level, WorldRegistry& world) {
     auto& monsterMap = world.monsters[static_cast<size_t>(level.number - 1)];
     for (const GeneratedMonsterSpawn& spawn : level.monsters) {

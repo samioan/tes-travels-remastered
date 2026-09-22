@@ -54,6 +54,18 @@ public:
     // whether a message is even currently visible.
     static void Tick(MessagePopupState& state, int64_t nowMs);
 
+    // M50: GameCanvas.run()'s own `messageVisible = false; messagePriority
+    // = 0;` pair -- the death sequence's own inline hide, the same two
+    // assignments Tick's own timeout branch above makes, just triggered
+    // by an event instead of a timeout. Factored out here rather than
+    // left as two bare field writes at its one call site, matching this
+    // class's own "always go through MessagePopup, never touch
+    // MessagePopupState's fields directly" convention.
+    static void Clear(MessagePopupState& state) {
+        state.visible = false;
+        state.priority = 0;
+    }
+
     // GameCanvas.wordWrap(text, maxWidth, font): ported using
     // BitmapFont::kAdvance in place of the original's real (device-
     // dependent, unrecoverable) SMALL_FONT metrics -- see

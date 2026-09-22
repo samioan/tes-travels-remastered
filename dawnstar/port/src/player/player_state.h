@@ -247,6 +247,26 @@ struct PlayerState {
     // field, not Player's own" reasoning as MessagePopupState/
     // lastAttackTimeMs).
     int campState = 0;
+
+    // --- M50: GameCanvas.deathState. Same GameCanvas-static-folded-in
+    // reasoning as campState just above -- main.cpp's own render step
+    // needs it every frame to choose paintDeathScreen() over the normal
+    // game view. 1 = alive; 2 = just died, HP-check-to-screen-flip
+    // transition (collapses to 3 on the very next tick, see
+    // death/death_tick.h); 3 = the "You're Dead!" screen is up, counting
+    // down to respawn. GameCanvas.deathTime itself is NOT folded in here,
+    // same "only the tick-gated state machine reads it" reasoning as
+    // campStartTimeMs -- it stays a plain main.cpp local.
+    int deathState = 1;
+
+    // --- M50: one-shot flag for Player.commitMove()'s own
+    // `if (Shop.showDeathGreeting) Shop.showDeathGreeting = false;` on
+    // every forward/backward step. Same reason sightRefreshPending exists
+    // above: dawnstar_player cannot reach npc/shop_interaction.h's
+    // ShopState (that would cycle, since dawnstar_npc already depends on
+    // dawnstar_player), so PlayerMovement::CommitMove raises this instead
+    // and main.cpp clears shopState.showDeathGreeting on the next tick.
+    bool clearDeathGreetingPending = false;
 };
 
 }  // namespace dawnstar

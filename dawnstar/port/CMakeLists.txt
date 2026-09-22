@@ -210,6 +210,19 @@ add_library(dawnstar_camp STATIC
 target_include_directories(dawnstar_camp PUBLIC src)
 target_link_libraries(dawnstar_camp PUBLIC dawnstar_player dawnstar_dungeon dawnstar_render)
 
+# M50: the death/respawn tick state machine (deathState 2/3), needing
+# dawnstar_player (PlayerInventory::IsEquipped/RemoveSlot,
+# PlayerMovement::ResetState) + dawnstar_render (the message popup) +
+# dawnstar_npc (ShopState::showDeathGreeting) at once -- same "own small
+# module, no cycle" shape as dawnstar_camp above (dawnstar_npc itself
+# only depends on dawnstar_player/dawnstar_assets, so no cycle results
+# here either). See docs/PORT_ROADMAP.md and src/death/.
+add_library(dawnstar_death STATIC
+  src/death/death_tick.cpp
+)
+target_include_directories(dawnstar_death PUBLIC src)
+target_link_libraries(dawnstar_death PUBLIC dawnstar_player dawnstar_render dawnstar_npc)
+
 # M44: GameCanvas.run()'s own timed tail (tickStatusCountdowns +
 # tickPerSecond/the ambush spawner), needing dawnstar_player
 # (PlayerCombatStats::HasAilment, PlayerInventory::FindSlotOf/RemoveSlot)
@@ -267,13 +280,15 @@ target_link_libraries(dawnstar_save PUBLIC dawnstar_player)
 # npcInSight branch now calls the real ShopInteraction::Dialogue, and
 # main.cpp constructs the ShopState it's threaded through directly (the
 # same "constructed and reset alongside OtherStateInfo" pattern its own
-# doc comment describes).
+# doc comment describes). M50 adds dawnstar_death: the deathState 2/3
+# tick state machine, checked right after dawnstar_camp's own campState
+# machine in the same priority chain (see main.cpp's own doc comment).
 add_executable(dawnstar_port WIN32
   src/main.cpp
   src/platform/win32/window.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
-target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_passive dawnstar_save dawnstar_npc)
+target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_death dawnstar_passive dawnstar_save dawnstar_npc)
 if(WIN32)
   target_compile_definitions(dawnstar_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_link_libraries(dawnstar_port PRIVATE user32 gdi32)
@@ -530,6 +545,10 @@ target_link_libraries(boot_splash_smoke PRIVATE dawnstar_render)
 # M49 milestone smoke test -- see src/tests/m49_level_up_smoke.cpp.
 add_executable(level_up_smoke src/tests/m49_level_up_smoke.cpp)
 target_link_libraries(level_up_smoke PRIVATE dawnstar_render dawnstar_player)
+
+# M50 milestone smoke test -- see src/tests/m50_death_respawn_smoke.cpp.
+add_executable(death_respawn_smoke src/tests/m50_death_respawn_smoke.cpp)
+target_link_libraries(death_respawn_smoke PRIVATE dawnstar_death dawnstar_player dawnstar_npc)
 
 # M43 milestone smoke test -- see src/tests/m43_reveal_traitor_smoke.cpp.
 # Links dawnstar_player too (this test's own direct PlayerSave/

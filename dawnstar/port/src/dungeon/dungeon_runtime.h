@@ -202,6 +202,15 @@ public:
     static void SampleSquareView(const std::vector<GeneratedLevel>& levels, int levelIndex, int x, int y,
                                   int direction, int size, const WorldRegistry& world,
                                   std::array<std::array<uint8_t, 17>, 17>& out);
+
+    // Dungeon.NAMES[levelNumber-1] via Dungeon.displayName(): the hub
+    // town ("Dawnstar", level 1) plus 12 zones x 3 levels each, 37
+    // names total. M50's death/respawn message ("you wake up back in
+    // <level>") is the first real caller; exposed here rather than in
+    // world/dungeon_generator.h since Dungeon.java (this module's own
+    // renamed-source counterpart, not DungeonGenerator.java's) is where
+    // displayName() itself lives.
+    static const char* DisplayName(int levelNumber);
 };
 
 }  // namespace dawnstar

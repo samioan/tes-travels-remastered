@@ -58,6 +58,7 @@ extern wchar_t** __wargv;
 #include "camp/camp_tick.h"
 #include "combat/combat_resolution.h"
 #include "combat/combat_tick.h"
+#include "death/death_tick.h"
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
@@ -66,6 +67,7 @@ extern wchar_t** __wargv;
 #include "npc/shop_interaction.h"
 #include "passive/passive_tick.h"
 #include "platform/win32/window.h"
+#include "player/player_combat_stats.h"
 #include "player/player_creation.h"
 #include "player/player_movement.h"
 #include "player/player_state.h"
@@ -311,6 +313,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // GameCanvas.campStartTime -- a GameCanvas field, not one of
     // Player's own, same reasoning as lastAttackTimeMs below.
     int64_t campStartTimeMs = 0;
+    // GameCanvas.deathTime -- same "GameCanvas field, not Player's own,
+    // read only by the tick-gated state machine itself" reasoning as
+    // campStartTimeMs just above (see player/player_state.h's own
+    // deathState doc comment for why deathState itself, unlike this, DID
+    // need to move into PlayerState) -- M50.
+    int64_t deathTimeMs = 0;
     // Monster.nextSpawnIdCounter -- see camp/camp_tick.h's own doc
     // comment on TickCampState for why this is a SEPARATE counter from
     // nextDropSpawnId below, not the same one.
@@ -1022,6 +1030,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // Warp/Recovery, "Warp to Camp" item, Eustacia's warp).
                 if (player.sightRefreshPending) refreshSightings();
 
+                // Player.commitMove()'s own `Shop.showDeathGreeting = false`
+                // reset on a forward/backward step -- M50. Same
+                // one-tick-later, main.cpp-consumes-the-flag shape as
+                // sightRefreshPending just above, and the same reason
+                // (PlayerState::clearDeathGreetingPending's own doc
+                // comment).
+                if (player.clearDeathGreetingPending) {
+                    player.clearDeathGreetingPending = false;
+                    shopState.showDeathGreeting = false;
+                }
+
                 // GameCanvas.run()'s own per-tick campState 1/2/3 state
                 // machine -- the block immediately preceding
                 // dispatchTickActions() itself in the original. Returns
@@ -1031,9 +1050,28 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // true on the one tick a camp cycle actually resolves --
                 // see camp/camp_tick.h's own doc comment on both.
                 bool suppressMoveThisTick = false;
+                // Captured BEFORE TickCampState can change it: GameCanvas.
+                // run()'s own if/else-if chain gives campState 1/2/3 total
+                // priority over deathState for the tick -- if campState
+                // already had something to do, deathState is never even
+                // examined this tick, regardless of what campState ends up
+                // AFTER TickCampState resolves it (e.g. camp 2 -> 0 on its
+                // own resolving tick).
+                int campStateBeforeTick = player.campState;
                 bool runTick = dawnstar::CampTick::TickCampState(player, levels, world, items, monsters, globalRng,
                                                                   nowMs, campStartTimeMs, nextMonsterSpawnId,
                                                                   messagePopup, suppressMoveThisTick);
+                // GameCanvas.run()'s own `else if (deathState != 1)` --
+                // M50. Only reached when campState found nothing to do
+                // (see campStateBeforeTick's own comment above); overrides
+                // TickCampState's own fallthrough `return true` with
+                // whatever the death state machine actually decides,
+                // exactly matching the original's exclusive elseif shape.
+                if (campStateBeforeTick == 0) {
+                    runTick = dawnstar::DeathTick::TickDeathState(player, levels, world, items, shopState,
+                                                                   messagePopup, deathTimeMs, nowMs,
+                                                                   suppressMoveThisTick);
+                }
 
                 if (runTick) {
                     // GameCanvas.run()'s own `tickNearbyMonsters()` call
@@ -1203,6 +1241,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                            messagePopup, globalRng, nowMs,
                                                                            nextDropSpawnId);
 
+                    // GameCanvas.processIdleTick()'s own `hp <= 0` half --
+                    // M50. Only ever reached while deathState == 1 (this
+                    // whole `if (runTick)` block is itself skipped the
+                    // instant DeathTick::TickDeathState's own `deathState
+                    // != 1` freeze kicks in, above), matching the original,
+                    // which relies on the exact same runTick gating rather
+                    // than an explicit deathState guard here. The other
+                    // half of processIdleTick (tickFatigueRegen, gated on
+                    // `!actionTakenThisTick`) is NOT ported -- no
+                    // `actionTakenThisTick`-equivalent exists in this port
+                    // yet.
+                    if (dawnstar::PlayerCombatStats::EffectiveStat(player, charData, 2) <= 0) {
+                        player.monsterTargeted = false;
+                        player.deathState = 2;
+                        deathTimeMs = nowMs;
+                    }
+
                     // run()'s own `if (player.levelUpPending)`, right after
                     // processIdleTick and before tickVisibleObjects -- M49.
                     // The flag is consumed even if there is nothing to pick
@@ -1277,6 +1332,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         gameOverExiting = false;
                     }
                 }
+            }
+
+            // GameCanvas.paint()'s own top-level branch: `deathState == 3`
+            // (paintDeathScreen) outranks the campState check below it,
+            // exactly like the original's own else-if chain -- M50. A
+            // black screen plus "You're Dead!" centered in BIG_MESSAGE_FONT,
+            // same invented-font reasoning as paintCampingScreen's own
+            // "CAMPING" just below (see that block's doc comment).
+            if (player.deathState == 3) {
+                backbuffer.Fill(dawnstar::PackRGB565(0, 0, 0));
+                const std::string deathText = "You're Dead!";
+                int textX = (dawnstar::Backbuffer::kWidth - dawnstar::BitmapFont::StringWidth(deathText)) / 2;
+                int textY = (dawnstar::Backbuffer::kHeight - dawnstar::BitmapFont::kGlyphHeight) / 2;
+                dawnstar::BitmapFont::DrawString(backbuffer, textX, textY, deathText,
+                                                  dawnstar::PackRGB565(255, 255, 255));
+                window.Present(backbuffer);
+                return;
             }
 
             // GameCanvas.paint()'s own top-level branch: paintCampingScreen()

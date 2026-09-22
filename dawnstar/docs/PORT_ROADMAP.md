@@ -3146,14 +3146,63 @@ milestone rather than just read-through.
       after, and an end-to-end run from the real `GainSkillExp`. The
       main.cpp hand-off was only checked as "launches and stays up".
 
+- [x] **M50 -- death and respawn.** Until now HP hitting 0 did nothing at
+      all: `GameCanvas.processIdleTick()`'s own `hp <= 0` check (now inline
+      in `main.cpp`'s tick, right after `RefreshAndResolveTargetMonster`,
+      its original spot) and `run()`'s own `deathState` 1/2/3 state machine
+      (the new `death/death_tick.h`/`.cpp`, `DeathTick::TickDeathState`,
+      the sibling of `camp/camp_tick.h`'s `TickCampState` sitting right
+      after it in `main.cpp`'s own campState/deathState priority chain --
+      `main.cpp` captures `campState` BEFORE calling `TickCampState` so
+      `TickDeathState` is only ever consulted the tick campState found
+      nothing to do, matching the original's exclusive if/else-if) were
+      both unported. The chain: HP <= 0 sets `deathState = 2`; next tick
+      flips it to 3 and clears the message popup outright (`paint()` now
+      shows "You're Dead!" on black, `main.cpp`'s own new top-level branch,
+      outranking the camping screen exactly like the original); once 5
+      real seconds have passed, it resolves -- `normalizeForSummary`
+      applied straight to the live stats (full heal, `coreStats[8]`
+      zeroed), every UNEQUIPPED item dropped, `starFrostBonusActive`
+      cleared, the new `PlayerMovement::ResetState(true, ...)` (a full
+      transcription of `Player.resetState(respawning)`: ailment mask/3
+      timers/`unconfirmedZ` cleared, repositioned to the hub's ALT spawn
+      point via `ResetToHubPosition`, `effectDurations` zeroed, combat
+      target + harm/armor/safe-camping buffs cleared), `Shop.
+      showDeathGreeting = true`, `minimapDirty`, and the (now-current, i.e.
+      hub) level's name shown as a popup -- `resetState(true)` already
+      repositioned to the hub by the time `displayName()` is read, so this
+      always says "Dawnstar", matching the original's own statement order,
+      not the level actually died on. `PlayerMovement::ResetState`
+      intentionally does not reproduce the `respawning == false` branch's
+      `grantStartingItems()` call: no real caller here ever passes false
+      (`PlayerCreation::CreateCharacter` already has its own inline
+      equivalent). Also: `Player.commitMove()`'s own `Shop.
+      showDeathGreeting = false` reset on every forward/backward step,
+      left as a "Shop not ported yet" skip since M18 -- `PlayerMovement::
+      Move` now raises the new one-shot `PlayerState::
+      clearDeathGreetingPending` (the same reason/shape as M47's
+      `sightRefreshPending`: `dawnstar_player` cannot reach `ShopState`
+      without cycling back through `dawnstar_npc`), consumed by
+      `main.cpp` next tick. One new small port-only addition along the
+      way: `Dungeon.NAMES`/`displayName()` (all 37 level names) was
+      never ported before this needed it -- now `DungeonRuntime::
+      DisplayName(levelNumber)`.
+      Verified by the new `death_respawn_smoke`: the alive/just-died/
+      counting-down/resolved timeline: the resolve step's stat healing,
+      inventory drop (equipped gear survives, unequipped doesn't), every
+      `resetState` field, the alt-spawn position, `Shop.showDeathGreeting`/
+      `minimapDirty`/the popup text, all against a real generated world and
+      a real created character; `clearDeathGreetingPending` raised by a
+      committed forward step and NOT by a turn. Full rebuild zero warnings;
+      all 48 smoke tests pass (`launcher_smoke` too -- the prior session's
+      failure there was a stale/path artifact, not a real regression, now
+      confirmed passing clean); `dawnstar_port.exe` launches and stays up
+      (not driven through an actual in-game death by hand this session).
+
 ## Milestones next
 
-- [ ] **M50: death and respawn.** `GameCanvas.run()`'s `deathState` 2/3
-      chain (5s after death: `normalizeForSummary`, drop unequipped items,
-      `resetState(true)`, `Shop.showDeathGreeting = true`, level-name
-      message), plus the `Shop.showDeathGreeting = false` reset on every
-      forward step (`Player.java` commitMove; `player_movement.cpp` still
-      carries a "Shop not ported yet" skip). Check first what the port does
-      today when HP reaches 0.
 - [ ] The `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46 -- internal
       plumbing with no visible effect.
+- [ ] `GameCanvas.processIdleTick()`'s other half, `tickFatigueRegen`
+      (gated on `!actionTakenThisTick`) -- noticed while porting M50;
+      no `actionTakenThisTick`-equivalent exists in this port yet.
