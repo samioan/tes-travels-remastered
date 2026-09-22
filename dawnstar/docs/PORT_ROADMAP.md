@@ -3630,6 +3630,63 @@ milestone rather than just read-through.
       auto-confirmed. Full rebuild zero new warnings; all 52 smoke
       tests pass.
 
+- [x] **M60 -- modernized default keybinds (WASD + strafe).** User-
+      requested: "change the default controls so that they're matching
+      a modern dungeon crawler you'd play today." The port's own
+      controls until now were the original phone's real D-pad/numeric-
+      keypad scheme remapped onto letter keys one-to-one (Up/Down/Left/
+      Right turn-only movement, A=attack, S=cast, I=interact, Z=camp,
+      C=cycle, O=options, M=map) -- faithful to the original input
+      device, but not how a PC dungeon crawler plays today.
+
+      New default layout: `W`/`S` (alongside Up/Down, unchanged) walk
+      forward/backward; `A`/`D` strafe left/right; Left/Right still
+      turn in place exactly as before; `Space` attacks; `F` casts the
+      selected spell; `C` still cycles it; `E` interacts; `R` rests/
+      camps; `O`/`M` (options/map) unchanged. This is the WASD-plus-
+      strafe-and-turn-keys shape most grid-based first-person dungeon
+      crawlers played today use (Legend of Grimrock and its own genre-
+      mates), and `E`-to-interact is the near-universal modern PC
+      convention (Half-Life 2, Skyrim, and most first-person games
+      since).
+
+      **A real, previously-missing capability, not just a remap:**
+      strafing was never actually reachable in this port before this
+      milestone. `PlayerMovement::Move`'s own `strafe` parameter
+      (direction 3/4 sidestep instead of turn-in-place -- the
+      original's real numeric-keypad '6'/'4' action) has existed since
+      M13/M23 and is fully covered by their own test suites, but
+      `main.cpp`'s movement-key chain only ever called it with
+      `strafe=false` -- no key anywhere in the port ever passed `true`.
+      `A`/`D` are the first real callers.
+
+      Also fixed a same-physical-key-leak bug this uncovered while
+      redesigning the scheme: `attackActive` moved off `'A'` (now
+      strafe-left) to `Space`, `castActive` moved off `'S'` (now move-
+      backward) to `'F'`, `interactKeyDown` from `'I'` to `'E'`, and
+      `campKeyDown` from `'Z'` to `'R'` -- all straightforward, non-
+      conflicting reassignments, since none of the old letters were
+      ever reused by anything else during gameplay.
+
+      `port/dist_readme.txt` (the real, tracked source `build_dist.bat`
+      copies into `dist/README.txt` at package time -- not the
+      gitignored `dist/README.txt` itself) updated with the new control
+      list.
+
+      Verified by scripting the real `dawnstar_port.exe` through actual
+      character creation into gameplay and holding `W` via a real
+      `keybd_event` key-hold (not `SendKeys`'s instant tap, too brief to
+      reliably land on a 250ms tick boundary) -- confirmed the minimap's
+      own explored-tile trail advances, proving the new key reaches
+      `PlayerMovement::Move` for real. `A`/`D` strafing wasn't separately
+      re-proven beyond confirming it compiles and dispatches to the same
+      already-tested `Move(..., strafe=true, ...)` call `D`/`A` invoke
+      (the spawn corridor sampled is a straight 1-wide passage with no
+      room to actually step sideways, so a strafe attempt there
+      correctly no-ops as wall-blocked -- consistent with, not contrary
+      to, correct wiring). Full rebuild zero new warnings; all 52 smoke
+      tests pass.
+
 ## Milestones next
 
 Nothing queued. A second fresh full sweep of `../src/` against `port/src/`

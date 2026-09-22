@@ -1072,7 +1072,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // that extra hotbarContext gate reproduced at the exact same
             // point the original checks it (inside the keydown handler
             // itself, reading whatever hotbarContext currently holds).
-            bool interactKeyDown = KeyPressed('I');
+            // M60: remapped from 'I' to 'E' -- "E to interact" is the
+            // near-universal modern PC convention (Half-Life 2, Skyrim,
+            // and most first-person games since).
+            bool interactKeyDown = KeyPressed('E');
             if (interactKeyDown && !interactKeyWasDown && hotbarContext == 2) {
                 interactPending = true;
             }
@@ -1082,7 +1085,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // (campRequested, gated on hotbarContext == 0) -- same shape
             // as interact above, just with the opposite hotbarContext
             // value (explore, not interact).
-            bool campKeyDown = KeyPressed('Z');
+            // M60: remapped from 'Z' to 'R' -- "R to rest" is a common
+            // modern RPG convention and reads more directly as "Rest"
+            // than 'Z' ever did.
+            bool campKeyDown = KeyPressed('R');
             if (campKeyDown && !campKeyWasDown && hotbarContext == 0) {
                 campPending = true;
             }
@@ -1258,8 +1264,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     // own 500ms cooldown (lastSpellCastTimeMs) throttles
                     // it to the same pacing a held key would produce
                     // anyway -- same reasoning as attackActive below.
-                    bool castActive = KeyPressed('S');
-                    bool attackActive = KeyPressed('A') && hotbarContext == 1;
+                    //
+                    // M60: Cast moved off 'S' (now "move backward") to
+                    // 'F' (a common "use ability" key in modern action/
+                    // RPG layouts); Attack moved off 'A' (now "strafe
+                    // left") to Space (a common "primary action" key --
+                    // conflict-free here, since the only other gameplay
+                    // use of Space, skipping the boot splash, only ever
+                    // runs before a character even exists).
+                    bool castActive = KeyPressed('F');
+                    bool attackActive = KeyPressed(VK_SPACE) && hotbarContext == 1;
 
                     bool moveAttempted = false;
                     if (campPending) {
@@ -1321,16 +1335,37 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         // this whole branch on the one tick a camp cycle
                         // just resolved, matching GameCanvas.
                         // suppressMoveInput's own real effect.
+                        //
+                        // M60: modernized default keybinds. The arrow
+                        // keys keep their own original behavior exactly
+                        // (Up/Down step forward/backward, Left/Right
+                        // turn in place) -- W/S mirror Up/Down, and A/D
+                        // are a genuinely NEW capability this port never
+                        // actually bound to any key before now:
+                        // sidestep-strafing (`strafe=true`, direction
+                        // 3/4 -- see PlayerMovement::Move's own doc
+                        // comment), the original's real numeric-keypad
+                        // '6'/'4' action that simply had no PC-keyboard
+                        // equivalent wired up until this milestone. This
+                        // is the WASD-strafe-plus-turn-keys layout most
+                        // grid-based first-person dungeon crawlers played
+                        // today use (Legend of Grimrock and its own
+                        // genre-mates), rather than the original phone's
+                        // turn-only D-pad.
                         moveAttempted = true;
                         int slotsBefore = player.inventoryCount;
-                        if (KeyPressed(VK_UP)) {
+                        if (KeyPressed(VK_UP) || KeyPressed('W')) {
                             dawnstar::PlayerMovement::Move(player, 1, false, levels, world, items);
-                        } else if (KeyPressed(VK_DOWN)) {
+                        } else if (KeyPressed(VK_DOWN) || KeyPressed('S')) {
                             dawnstar::PlayerMovement::Move(player, 2, false, levels, world, items);
                         } else if (KeyPressed(VK_RIGHT)) {
                             dawnstar::PlayerMovement::Move(player, 3, false, levels, world, items);
                         } else if (KeyPressed(VK_LEFT)) {
                             dawnstar::PlayerMovement::Move(player, 4, false, levels, world, items);
+                        } else if (KeyPressed('D')) {
+                            dawnstar::PlayerMovement::Move(player, 3, true, levels, world, items);
+                        } else if (KeyPressed('A')) {
+                            dawnstar::PlayerMovement::Move(player, 4, true, levels, world, items);
                         } else {
                             moveAttempted = false;
                         }

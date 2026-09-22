@@ -28,22 +28,25 @@ your original download afterwards and nothing breaks.
 CONTROLS
 --------
 
-  Up / Down            walk forward / backward
-  Left / Right          turn left / right
-  Enter                 confirm / select
-  Escape                back / cancel
-  0-9                   hotbar (spells, items, actions -- depends on context)
-  A                      attack
+  W / S / Up / Down     walk forward / backward
+  A / D                 strafe left / right
+  Left / Right           turn left / right
+  Space                  attack
+  F                      cast selected spell
   C                      cycle selected spell
-  I                      interact -- doors, people, chests, anything nearby
-  Z                      camp / rest
+  E                      interact -- doors, people, chests, anything nearby
+  R                      rest / camp
   O                      options menu (inventory, skills, spells, save/load)
   M                      toggle the zoomed-out minimap
+  Enter                  confirm / select
+  Escape                 back / cancel
 
-These are the original's own D-pad/numeric-keypad controls mapped onto a
-keyboard: the J2ME phone this shipped on had a D-pad and a 0-9 keypad, so
-the arrow keys stand in for the D-pad and the letter keys stand in for
-whichever numeric keys the original used for each action.
+A WASD + strafe layout, the same shape most first-person dungeon crawlers
+use today (Legend of Grimrock and its own genre-mates), not the original
+phone's own D-pad-and-numeric-keypad scheme. The arrow keys still turn
+in place exactly like they always did; strafing (A/D) is genuinely new --
+the original had it too (its own numeric '4'/'6' keys), it just never had
+a PC-keyboard binding here until now.
 
 The window size (2x, 3x or 4x) is set in the launcher, not in the game.
 
