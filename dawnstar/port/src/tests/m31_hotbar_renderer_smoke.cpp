@@ -18,6 +18,7 @@
 #include "assets/decoded_image.h"
 #include "assets/img_archive.h"
 #include "graphics/backbuffer.h"
+#include "graphics/bitmap_font.h"
 #include "render/hotbar_renderer.h"
 
 namespace {
@@ -38,6 +39,22 @@ void Check(bool cond, const char* what) {
 }
 
 uint16_t PixelAt(const Backbuffer& bb, int x, int y) { return bb.Data()[static_cast<size_t>(y) * Backbuffer::kWidth + x]; }
+
+// True if any pixel in the [x0,x0+w) x [y0,y0+h) box differs from the
+// (black-filled) background -- used for the digit glyphs below instead
+// of a hand-picked exact pixel, since BitmapFont now (M58) renders
+// through real (anti-aliased, proportional) GDI text rather than a
+// fixed 4x7 pixel table with one exact bit pattern per character to
+// predict by hand (same "check the glyph drew somewhere in its own
+// box" approach M55's own compass-glyph test already established).
+bool AnyNonBlackInBox(const Backbuffer& bb, int x0, int y0, int w, int h) {
+    for (int y = y0; y < y0 + h; y++) {
+        for (int x = x0; x < x0 + w; x++) {
+            if (PixelAt(bb, x, y) != 0) return true;
+        }
+    }
+    return false;
+}
 
 // Finds the first opaque pixel within icon frame `iconIdx`'s own 30-wide
 // column range of `sheet` (icons.png is 9 such frames, tiled
@@ -130,12 +147,13 @@ int main(int argc, char** argv) {
             CheckIconAt(bb, textures.icons, 5, 133, 164, "context 0 icon slot 4 (idx 5) at (133,164)");
 
             // Context 0's own digit chars: '3','5','7','0' (HOTBAR_DIGIT_CHARS
-            // indices 1,2,3,5) -- '3' row0 "1111" -> all 4 cols lit, so its
-            // white fill's top-left pixel (25,190) itself should be lit.
-            constexpr uint16_t kWhite = PackRGB565(255, 255, 255);
-            constexpr uint16_t kBlack = PackRGB565(0, 0, 0);
-            Check(PixelAt(bb, 25, 190) == kWhite, "context 0's first digit ('3') white fill at (25,190)");
-            Check(PixelAt(bb, 26, 191) == kBlack, "context 0's first digit ('3') black shadow at (26,191)");
+            // indices 1,2,3,5), drawn at (25,190) white / (26,191) black
+            // shadow. Checked as "something non-background drew somewhere
+            // in the glyph's own box" rather than one exact hand-picked
+            // pixel -- see AnyNonBlackInBox's own doc comment.
+            Check(AnyNonBlackInBox(bb, 25, 190, dawnstar::BitmapFont::kGlyphWidth + 1,
+                                   dawnstar::BitmapFont::kGlyphHeight + 1),
+                  "context 0's first digit ('3') should draw somewhere in its own glyph box");
         }
 
         // --- C: Paint(context=1) -- combat hotbar ---
@@ -146,11 +164,11 @@ int main(int argc, char** argv) {
             // Context 1's own 4 icons: idx 0,1,2,3 at the same 4 x-positions.
             CheckIconAt(bb, textures.icons, 0, 13, 164, "context 1 icon slot 1 (idx 0) at (13,164)");
             CheckIconAt(bb, textures.icons, 3, 133, 164, "context 1 icon slot 4 (idx 3) at (133,164)");
-            // First digit is '1' (HOTBAR_DIGIT_CHARS[0]): row0 "0010" ->
-            // only col2 lit, so (25,190) itself is NOT part of the glyph,
-            // but (25+2,190) = (27,190) is.
-            constexpr uint16_t kWhite = PackRGB565(255, 255, 255);
-            Check(PixelAt(bb, 27, 190) == kWhite, "context 1's first digit ('1') white fill row0 col2 at (27,190)");
+            // First digit is '1' (HOTBAR_DIGIT_CHARS[0]), same (25,190)
+            // position and same box-presence check as context 0's above.
+            Check(AnyNonBlackInBox(bb, 25, 190, dawnstar::BitmapFont::kGlyphWidth + 1,
+                                   dawnstar::BitmapFont::kGlyphHeight + 1),
+                  "context 1's first digit ('1') should draw somewhere in its own glyph box");
         }
 
         // --- D: Paint(context=2) -- interact hotbar ---

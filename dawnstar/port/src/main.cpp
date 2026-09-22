@@ -30,6 +30,7 @@
 // "Game Over" -> "Exiting" -> exit chain its EndOfGame result plays.
 #include <windows.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -554,7 +555,37 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     menuSelectKeyWasDown = KeyPressed(VK_RETURN);
                     menuCancelKeyWasDown = KeyPressed(VK_ESCAPE);
                 } else {
-                    bootSplash.Render(backbuffer, now - splashStartMs);
+                    // M57: ESGame.runAppload()/allocateESGame() are what
+                    // actually mutate `splashUI.percent` on the original
+                    // (0 -> 5 -> 10 -> 15 -> ... -> 100, driven by real
+                    // loading work on a real device) -- LoadingScreen
+                    // itself just repaints whatever it currently reads.
+                    // This port does every bit of that loading upfront,
+                    // before the splash is ever shown (see this file's
+                    // own asset-loading block above), so there is no
+                    // real progress left to report by the time this
+                    // callback ever runs -- `bootSplash.SetPercent`
+                    // previously was simply never called at all, which
+                    // left `percent_` frozen at its own default-
+                    // constructed 100 for the splash's entire run: the
+                    // bar rendered essentially full from its very first
+                    // visible frame instead of visibly filling. Since
+                    // the original's own real timing (dominated by
+                    // `allocAllDungeons()`'s cost on 2003-era hardware)
+                    // has no faithful modern equivalent to replay, this
+                    // drives a plain linear fill across the bar's own
+                    // visible window instead -- 0% at kBarStartMs, 100%
+                    // at kCopyrightStartMs -- so the bar actually
+                    // animates rather than sitting static-full.
+                    const int64_t splashElapsed = now - splashStartMs;
+                    if (splashElapsed >= dawnstar::BootSplash::kBarStartMs) {
+                        const int64_t span =
+                            dawnstar::BootSplash::kCopyrightStartMs - dawnstar::BootSplash::kBarStartMs;
+                        const int64_t into = splashElapsed - dawnstar::BootSplash::kBarStartMs;
+                        const int percent = static_cast<int>(std::min<int64_t>(100, into * 100 / span));
+                        bootSplash.SetPercent(percent);
+                    }
+                    bootSplash.Render(backbuffer, splashElapsed);
                     window.Present(backbuffer);
                     return;
                 }

@@ -5,63 +5,73 @@
 
 namespace dawnstar {
 
-// A hand-authored monospace 5x7 pixel font -- NOT decompiled/recovered
-// data. GameCanvas.SMALL_FONT (`Font.getFont(64, 0, 8)`: FACE_MONOSPACE,
-// STYLE_PLAIN, SIZE_SMALL) is a MIDP built-in system font whose exact
-// glyph bitmaps and per-character pixel metrics were always platform/
-// device-dependent -- unlike every other visual in this project, there
-// is no real original glyph shape to recover here, so this is a
-// deliberate invention rather than a simplification of something
-// recoverable. Monospace is kept (matching SMALL_FONT's own
-// FACE_MONOSPACE) since render/message_popup.h's WordWrap is
-// transcribed straight from GameCanvas.wordWrap()'s own arithmetic,
-// which only behaves the way it does (every `font.charWidth()` call
-// interchangeable) for a monospace font.
+// Renamed-source counterpart of Screen.java/GameCanvas.java's several
+// distinct MIDP system fonts (SMALL_FONT/DEFAULT_TEXT_FONT/
+// LARGE_TEXT_FONT/SOFT_KEY_FONT/TITLE_FONT/BIG_MESSAGE_FONT/
+// COMPASS_FONT_ZOOMED -- every one of them a `Font.getFont(...)` MIDP
+// built-in with no recoverable glyph data), collapsed onto ONE real
+// font here.
 //
-// SIMPLIFIED character set: only space, ' - ! and A-Z (30 glyphs) are
-// defined. Every real string this port actually displays through this
-// font (Shop.NAMES, Item/Monster names, the message-popup MSG_*
-// constants) is case-folded to uppercase before being drawn, rather
-// than separately hand-authoring a full lowercase glyph set purely for
-// cosmetic case-fidelity on a font that's already invented. This is a
-// real, visible (but harmless) simplification -- displayed text reads
-// in caps ("WEAPON PEDDLER" instead of "Weapon Peddler") -- not a
-// functional gap: every character actually present in the real
-// extracted item/monster names and Shop.NAMES (confirmed by a
-// temporary diagnostic dump, not assumed) is one of space/'/-/! or a
-// letter.
+// M30 through M55 drew every one of these with a hand-authored,
+// INVENTED 4x7 monospace, uppercase-only pixel glyph table -- a
+// deliberate stand-in, chosen because there was no way to see what a
+// real device actually rendered. M58 changed that: a real KEmulator (a
+// genuine MIDP emulator) screenshot of the actual original MIDlet
+// shows a bold, wide, mixed-case sans-serif look nothing like those
+// invented glyphs. Rather than hand-author a SECOND invented pixel
+// font chasing that screenshot by eye, this renders real text through
+// Win32 GDI (a bold system font) instead -- mixed case, every ASCII
+// character, and a real typeface come for free.
 //
-// M31 adds 0-9 (10 more glyphs, 40 total) for GameCanvas.
-// HOTBAR_DIGIT_CHARS, the hotbar panel's own numeric prompts -- same
-// hand-authored, invented-shape status as every other glyph here.
+// That's a real architectural swap, not just new glyph art: this is
+// the one place in the whole port's rendering pipeline that does real
+// ALPHA-BLENDED compositing rather than Backbuffer::Blit()/FillRect's
+// binary on/off convention. Deliberate -- GDI's own anti-aliased
+// rendering is what makes a real font legible at this port's small
+// 176x208 scale, and unlike Blit's binary transparency (a real MIDP
+// hardware constraint worth preserving), there is no MIDP hardware
+// precedent to preserve here: this whole subsystem is already an
+// invention, hand-drawn or GDI-rendered.
+//
+// Kept the same public surface (`DrawString`/`StringWidth`) so almost
+// every existing call site (Screen, MessagePopup, HotbarRenderer,
+// BootSplash, LoadingScreen, NameEntry, MinimapRenderer) needed no
+// changes -- except the two spots that genuinely depended on the OLD
+// monospace assumption (render/message_popup.cpp's WordWrap inner
+// per-character loop, now using the new CharWidth; ui/name_entry.cpp's
+// cursor position, now using a real cumulative StringWidth). Text is
+// no longer case-folded to uppercase -- every real string this port
+// displays (item/monster names, Shop.NAMES, etc.) now renders in its
+// own real case, matching the KEmulator screenshot's own Title Case
+// menu labels.
 namespace BitmapFont {
 
-constexpr int kGlyphWidth = 4;
-constexpr int kGlyphHeight = 7;
-// The advance from one character's left edge to the next's (4px glyph
-// + 1px gap) -- invented (see this namespace's own doc comment), not a
-// recovered SMALL_FONT metric. Deliberately chosen narrow enough that
-// render/message_popup.h's WrapToTwoLines still fits real shop-greeting
-// content (e.g. Shop.NAMES' own "Heavy Armor Peddler", the longest real
-// string wrapped through this port's fixed 69px popup width) into
-// exactly 2 lines rather than needlessly overflowing a 3rd (silently
-// discarded by WrapToTwoLines) that a real device's own unrecoverable
-// font metric probably wouldn't have needed either -- verified in
-// m30_message_popup_smoke.cpp, not just assumed.
-constexpr int kAdvance = 5;
+// A representative "typical" glyph cell, still used by the handful of
+// call sites that need a single scalar for coarse layout (vertical
+// centering math, the name-entry cursor block's own size) rather than
+// a real per-string measurement -- NOT the true per-character width
+// anymore now that the font is genuinely proportional; see CharWidth/
+// StringWidth for that.
+constexpr int kGlyphWidth = 8;
+constexpr int kGlyphHeight = 10;
+constexpr int kAdvance = 8;
 
-// Draws `text` (case-folded to uppercase) at (x, y) as its own TOP-LEFT
-// corner -- the only MIDP anchor (TOP|LEFT = 20) any real call site in
-// this port ever passes to drawChar/drawString. A character outside the
-// supported set (see this namespace's own class comment -- none appear
-// in any real string this port displays) draws nothing but still
-// advances by kAdvance, matching a real Font's per-character advance
-// semantics.
-void DrawString(Backbuffer& bb, int x, int y, const std::string& text, uint16_t rgb565);
+// The real (GDI-measured) width of a single character in this font --
+// GameCanvas.wordWrap()'s own `font.charWidth(...)` call, honored
+// properly now that there's a real, non-monospace font to measure
+// instead of the old flat kAdvance stand-in. render/message_popup.cpp's
+// WordWrap is this function's one real caller.
+int CharWidth(char c);
 
-// Font.stringWidth(text)'s counterpart: text.length() * kAdvance,
-// exact for a monospace font.
+// Font.stringWidth(text)'s counterpart -- a real GDI text-extent
+// measurement (not text.length()*kAdvance anymore).
 int StringWidth(const std::string& text);
+
+// Draws `text` at (x, y) as its own TOP-LEFT corner (the only MIDP
+// anchor any real call site in this port ever passes to drawChar/
+// drawString), alpha-blended against whatever `bb` already holds --
+// see this namespace's own doc comment for why.
+void DrawString(Backbuffer& bb, int x, int y, const std::string& text, uint16_t rgb565);
 
 }  // namespace BitmapFont
 

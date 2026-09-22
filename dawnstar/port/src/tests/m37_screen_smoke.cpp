@@ -73,15 +73,32 @@ constexpr uint16_t kSoftKeyTextColor = RgbColor(0);
 // every "on" pixel it produces appears at the same offset from (x0,y0)
 // in `bb`, in `color` -- and that at least one "on" pixel exists at all,
 // so this can't pass vacuously on an empty string.
+//
+// M58: BitmapFont is now a real, proportional, ALPHA-BLENDED GDI font
+// (see its own class comment), not the old fixed-advance binary on/off
+// one -- two real consequences here: (1) `spanW`, the real rendered
+// width, is BitmapFont::StringWidth(text) now, not text.size()*kAdvance
+// (no longer meaningful for a proportional font); (2) only a pixel the
+// scratch render is FULLY confident is part of a glyph stroke (exact
+// white -- coverage==255 takes DrawString's own unblended fast path) is
+// compared 1:1 against `bb`. A partially-covered (anti-aliased) EDGE
+// pixel's exact blended color depends on whatever background it was
+// composited against, which differs between this scratch (always
+// black) and `bb` (whatever the real screen background is) -- so
+// unlike a real MIDP binary on/off font, an edge pixel can't be
+// compared this way; only checking full-coverage pixels sidesteps that
+// without weakening what's actually being verified (the glyph's own
+// solid interior still has to land in the right place, in the right
+// color).
 bool TextRenderedAt(const Backbuffer& bb, int x0, int y0, const std::string& text, uint16_t color) {
     Backbuffer scratch;
     scratch.Fill(0);
     BitmapFont::DrawString(scratch, 0, 0, text, 0xFFFF);
     bool sawOnPixel = false;
-    int spanW = static_cast<int>(text.size()) * BitmapFont::kAdvance;
+    int spanW = BitmapFont::StringWidth(text);
     for (int dy = 0; dy < BitmapFont::kGlyphHeight; dy++) {
         for (int dx = 0; dx < spanW; dx++) {
-            if (PixelAt(scratch, dx, dy) == 0) continue;
+            if (PixelAt(scratch, dx, dy) != 0xFFFF) continue;
             sawOnPixel = true;
             int px = x0 + dx;
             int py = y0 + dy;

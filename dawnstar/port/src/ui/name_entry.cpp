@@ -65,7 +65,11 @@ void NameEntry::Render(Backbuffer& bb) const {
     int fieldWidth = Backbuffer::kWidth - 20;
     bb.FillRect(10, cursorY, fieldWidth, kLineHeight + 2, kFieldBoxColor);
     BitmapFont::DrawString(bb, 12, cursorY + 1, text_, kPromptTextColor);
-    int cursorX = 12 + static_cast<int>(text_.size()) * BitmapFont::kAdvance;
+    // M58: real cumulative StringWidth, not text_.size()*kAdvance --
+    // BitmapFont is a genuinely proportional font now (see its own
+    // class comment), so a flat per-character advance would land the
+    // cursor short/long of the real typed text's own right edge.
+    int cursorX = 12 + BitmapFont::StringWidth(text_);
     bb.FillRect(cursorX, cursorY + 1, BitmapFont::kGlyphWidth, BitmapFont::kGlyphHeight, kPromptTextColor);
 
     bb.FillRect(0, 190, Backbuffer::kWidth, 20, kSoftKeyBarColor);

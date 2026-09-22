@@ -67,10 +67,11 @@ public:
     }
 
     // GameCanvas.wordWrap(text, maxWidth, font): ported using
-    // BitmapFont::kAdvance in place of the original's real (device-
-    // dependent, unrecoverable) SMALL_FONT metrics -- see
-    // graphics/bitmap_font.h's own doc comment. `\n` is honored as a
-    // hard break exactly like the original's own recursive structure.
+    // BitmapFont::StringWidth/CharWidth's real GDI-measured metrics
+    // (M58) in place of the original's own real (but device-dependent)
+    // SMALL_FONT ones -- see graphics/bitmap_font.h's own doc comment. `\n` is
+    // honored as a hard break exactly like the original's own recursive
+    // structure.
     // SIMPLIFIED: the hard-break inner loop additionally bounds-checks
     // against the string's own length (the original has no equivalent
     // guard and would throw if it were ever exercised) -- same
@@ -82,8 +83,9 @@ public:
     // behavior change.
     static std::vector<std::string> WordWrap(const std::string& text, int maxWidthPx);
 
-    // GameCanvas.wrapToTwoLines(text): WordWrap at the fixed 69px popup
-    // width, padded/truncated to exactly 2 lines. SIMPLIFIED: the
+    // GameCanvas.wrapToTwoLines(text): WordWrap at a fixed popup width
+    // (see this method's own .cpp comment for the exact value and why),
+    // padded/truncated to exactly 2 lines. SIMPLIFIED: the
     // original's `System.arraycopy(wrapped, 0, result, 0, 2)` assumes
     // `wrapped` has at least 2 elements whenever it doesn't have
     // exactly 1 (true for every real string this port displays); this

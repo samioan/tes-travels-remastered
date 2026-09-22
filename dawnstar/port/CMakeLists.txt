@@ -128,7 +128,12 @@ add_library(dawnstar_render STATIC
 target_include_directories(dawnstar_render PUBLIC src)
 # M46: ui/npc_menu.cpp drives ShopInteraction::Dialogue (dawnstar_npc, which
 # depends only on dawnstar_player/dawnstar_assets -- no cycle back to render).
-target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon dawnstar_npc)
+# M58: gdi32 PUBLIC (not PRIVATE): src/graphics/bitmap_font.cpp's own real-font
+# text rendering needs it directly, and PUBLIC here makes every executable
+# that links dawnstar_render -- transitively including every smoke test
+# below, not just dawnstar_port itself -- automatically link it too,
+# without each one needing its own explicit gdi32 entry.
+target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon dawnstar_npc gdi32)
 
 # M11/M12/M13/M14/M16/M17/M23/M25/M28: player character creation + full
 # save format + movement (now also touching the live world registry for

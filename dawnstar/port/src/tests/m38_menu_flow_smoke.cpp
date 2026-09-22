@@ -49,16 +49,21 @@ uint16_t PixelAt(const Backbuffer& bb, int x, int y) {
 // Same oracle technique m37_screen_smoke.cpp established: render `text`
 // via the already-verified BitmapFont::DrawString onto a blank scratch
 // buffer, then confirm every "on" pixel it produces appears at the same
-// offset from (x0,y0) in `bb`, in `color`.
+// offset from (x0,y0) in `bb`, in `color`. M58: spanW/the pixel-select
+// condition below are the same real-font fix m37's own copy of this
+// helper documents in full (StringWidth, not the old text.size()*
+// kAdvance; only exact-full-coverage pixels, not any non-background
+// one, since a partially-covered edge pixel's blended color depends on
+// a background this scratch and the real `bb` don't share).
 bool TextRenderedAt(const Backbuffer& bb, int x0, int y0, const std::string& text, uint16_t color) {
     Backbuffer scratch;
     scratch.Fill(0);
     BitmapFont::DrawString(scratch, 0, 0, text, 0xFFFF);
     bool sawOnPixel = false;
-    int spanW = static_cast<int>(text.size()) * BitmapFont::kAdvance;
+    int spanW = BitmapFont::StringWidth(text);
     for (int dy = 0; dy < BitmapFont::kGlyphHeight; dy++) {
         for (int dx = 0; dx < spanW; dx++) {
-            if (PixelAt(scratch, dx, dy) == 0) continue;
+            if (PixelAt(scratch, dx, dy) != 0xFFFF) continue;
             sawOnPixel = true;
             int px = x0 + dx;
             int py = y0 + dy;

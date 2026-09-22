@@ -68,9 +68,15 @@ std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int m
             if (lineStart == 0) {
                 int w = 0;
                 // Defensive bounds check not in the original -- see
-                // this method's own header doc comment.
+                // this method's own header doc comment. M58: `CharWidth`
+                // (not a flat kAdvance) matches the original's own
+                // `w += font.charWidth(text.charAt(lineStart));` here --
+                // now that BitmapFont is a real proportional font (see
+                // its own class comment), there's no reason to keep
+                // approximating this one spot with a flat advance when
+                // the real per-character width is available.
                 while (w < maxWidthPx && lineStart < static_cast<int>(text.size())) {
-                    w += BitmapFont::kAdvance;
+                    w += BitmapFont::CharWidth(text[static_cast<size_t>(lineStart)]);
                     lineStart++;
                 }
                 lines.push_back(text.substr(0, static_cast<size_t>(lineStart)));
@@ -91,7 +97,21 @@ std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int m
 }
 
 std::array<std::string, 2> MessagePopup::WrapToTwoLines(const std::string& text) {
-    std::vector<std::string> wrapped = WordWrap(text, 69);
+    // M58: 80, not the original's own real (unrecoverable) SMALL_FONT-based
+    // threshold: paintMessagePopup() draws unclipped at a fixed (100,
+    // y) -- see this method's own header doc comment on why that exact
+    // position is real, decompiled data this port keeps as-is -- so the
+    // real constraint is "no wrapped line should ever run past the
+    // 176px-wide screen's own right edge from x=100" (a 76px budget),
+    // not the rounded background box's own narrower 75px width (which
+    // the original never clips text to either -- confirmed directly:
+    // paintMessagePopup() has no g.setClip call). 80 keeps every
+    // wrapped line comfortably under that 76px budget for this port's
+    // own real (GDI, proportional, wider-than-the-old-invented-font)
+    // BitmapFont -- verified against the two longest real strings this
+    // path ever wraps (Shop.NAMES' "Heavy Armor Peddler"/"Weapon
+    // Peddler") in message_popup_smoke.cpp.
+    std::vector<std::string> wrapped = WordWrap(text, 80);
     std::array<std::string, 2> result{"", ""};
     if (!wrapped.empty()) result[0] = wrapped[0];
     if (wrapped.size() >= 2) result[1] = wrapped[1];

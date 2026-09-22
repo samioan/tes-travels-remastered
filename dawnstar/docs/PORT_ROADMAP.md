@@ -3466,6 +3466,128 @@ milestone rather than just read-through.
       already established for an equally awkward-to-manually-trigger
       real event).
 
+- [x] **M57 -- the boot-splash progress bar actually fills.** User-
+      reported: "The loading bar at the first splash screen when the
+      game boots doesn't fill." Root cause: `BootSplash`'s own
+      `percent_` field is caller-driven (`SetPercent`), matching
+      `LoadingScreen.renderSplash()`'s own `splashUI.percent` read --
+      but nothing in `main.cpp` ever called `SetPercent` for the boot
+      splash specifically, so it sat frozen at its own default-
+      constructed 100 for the splash's entire run: the bar rendered
+      essentially full (150 of its own 152px) from its very first
+      visible frame, instead of visibly filling like the original's own
+      `splashUI.percent` climbing 0->5->10->15->...->100 as
+      `allocateESGame()`/`allocAllDungeons()` did real loading work.
+      That real timing has no faithful modern equivalent to replay --
+      this port does every bit of that loading upfront, before the
+      splash is ever shown at all, so there is no real progress left to
+      report by the time `BootSplash::Render` ever runs. `main.cpp`
+      now drives a plain linear fill across the bar's own real visible
+      window instead (0% at `kBarStartMs`, 100% at
+      `kCopyrightStartMs`), so the bar actually animates rather than
+      sitting static-full -- matching the spirit of the original's own
+      visible behavior without pretending to fake its specific
+      (hardware-dependent, no-longer-meaningful) timing milestones.
+
+      Verified by screen-capturing the real `dawnstar_port.exe` window
+      at several points through the bar's 3-second window (confirmed
+      near-empty shortly after it appears, roughly half-filled at the
+      midpoint, full by the end) and by the existing
+      `boot_splash_smoke.exe` (unaffected -- it exercises `Render`/
+      `SetPercent` directly, not main.cpp's new driving logic). Full
+      rebuild zero new warnings; all 52 smoke tests pass.
+
+- [x] **M58 -- a real font, via GDI, replacing the invented pixel one.**
+      User-reported, alongside M57's loading-bar bug: "investigate the
+      game's font because it's not the same as the original game's
+      font", with a KEmulator (a genuine MIDP emulator) screenshot of
+      the real original MIDlet as evidence -- bold, wide, mixed-case,
+      nothing like this port's own hand-invented 4x7 monospace
+      uppercase-only `BitmapFont` (M30/M31), which was explicitly
+      documented as a deliberate invention specifically because there
+      was no way to see what a real device rendered. That KEmulator
+      screenshot changed the premise: real (if emulator-approximated)
+      visual ground truth existed after all.
+
+      `graphics/bitmap_font.cpp` is now a genuine Win32 GDI text
+      renderer (a bold "Arial Black"-family font, GDI's own font-mapper
+      fallback if a system lacks it) instead of a fixed bit-table --
+      real mixed case, every ASCII character, and a real typeface, at
+      the cost of a real architectural swap: this is the one place in
+      the whole rendering pipeline that does real ALPHA-BLENDED
+      compositing (coverage-weighted lerp against whatever `Backbuffer`
+      already holds) rather than `Blit`/`FillRect`'s binary on/off
+      convention -- deliberate, since anti-aliasing is what makes a
+      real font legible at this port's small 176x208 scale, and unlike
+      `Blit`'s binary transparency (a real MIDP hardware constraint
+      worth preserving), there's no MIDP hardware precedent to preserve
+      here: this whole subsystem was already an invention, hand-drawn
+      or GDI-rendered. `DrawString`/`StringWidth` kept the same public
+      signatures, so nearly every call site (Screen, MessagePopup,
+      HotbarRenderer, BootSplash, LoadingScreen, NameEntry,
+      MinimapRenderer) needed no changes; text is no longer case-folded
+      to uppercase, so every real string this port displays (item/
+      monster names, Shop.NAMES) now renders in its own real case.
+
+      Two call sites genuinely depended on the old monospace
+      assumption and needed real fixes: `render/message_popup.cpp`'s
+      `WordWrap` hard-break inner loop now sums the new `CharWidth`
+      per character (matching the original's own `w += font.charWidth(
+      text.charAt(lineStart));` more honestly than the old flat
+      `kAdvance` stand-in ever did), and `ui/name_entry.cpp`'s cursor
+      position now uses a real cumulative `StringWidth` instead of
+      `text.size()*kAdvance`. `WrapToTwoLines`'s own fixed wrap width
+      grew from 69 to 80px -- the real content this path wraps (Shop.
+      NAMES' longest entries) needs more room with a wider, more
+      realistically-proportioned font, and 80 was chosen specifically
+      to keep every wrapped line within the real 76px budget the
+      popup's own fixed, real, unclipped `(100, y)` text position and
+      176px screen width impose (confirmed directly: the original's
+      own `paintMessagePopup()` has no `g.setClip` call either, so
+      overflow past the background box was never actually prevented on
+      a real device, just never exercised by this port's own old,
+      narrower invented font).
+
+      `dawnstar_render` gained a PUBLIC `gdi32` link dependency
+      (propagating automatically to every executable that links it,
+      including every smoke test, not just `dawnstar_port` itself).
+
+      **A real, systemic test-infrastructure fix, not just new
+      expectations:** 7 test files (m37 through m43) each kept their
+      own copy of a `TextRenderedAt` oracle helper (render `text` onto
+      a scratch buffer, then require every "on" pixel to match `bb`
+      exactly at the expected offset). Two things about it assumed the
+      old font: `spanW` computed from `text.size()*kAdvance` (no longer
+      meaningful for a proportional font -- fixed to `StringWidth`),
+      and treating any non-background scratch pixel as "on" to compare
+      -- with real anti-aliased edges, a partially-covered pixel's
+      exact blended color depends on whatever background it was
+      composited against, which differs between the scratch (always
+      black) and the real `bb` (whatever the actual screen shows), so
+      it can never reliably match across the two even when the glyph
+      genuinely landed in the right place. Fixed by only comparing
+      pixels the scratch is fully confident about (exact white --
+      `DrawString`'s own coverage==255 fast path, background-
+      independent by construction), leaving the check just as
+      meaningful (the glyph's own solid interior still has to land in
+      the right spot, in the right color) without the false failures.
+      `m30`/`m31`'s own more direct exact-pixel/exact-bit-pattern
+      checks (predicting the OLD font's specific glyph shapes by hand)
+      were similarly rebuilt around structural properties instead --
+      something draws somewhere in a glyph's own box, mixed case
+      genuinely differs, `StringWidth` is monotonic -- the same
+      "checked as presence, not exact shape" approach M55's own
+      compass-glyph test had already established for exactly this
+      reason.
+
+      Verified by screen-capturing the real `dawnstar_port.exe` window
+      at the main menu and through character creation and comparing
+      directly against the KEmulator screenshot: bold, mixed-case,
+      legible text throughout, a dramatic visual improvement matching
+      the original's own real look far more closely than the invented
+      font ever did. Full rebuild zero new warnings; all 52 smoke tests
+      pass.
+
 ## Milestones next
 
 Nothing queued. A second fresh full sweep of `../src/` against `port/src/`
