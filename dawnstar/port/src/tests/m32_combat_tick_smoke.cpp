@@ -163,33 +163,39 @@ int main(int argc, char** argv) {
             Check(recordBefore != nullptr, "setup: monster should still be in front for the attack test");
             MonsterState before = MonsterRuntime::FromBytes(*recordBefore);
 
+            bool actionTaken = false;
             bool hit = CombatTick::ProcessAttack(player, levels, world, monsterDb, items, charData, globalRng, 1000,
-                                                  lastAttackTimeMs);
+                                                  lastAttackTimeMs, actionTaken);
             auto* recordAfter = PlayerMovement::MonsterInFront(player, levels, world);
             MonsterState after = MonsterRuntime::FromBytes(*recordAfter);
             Check(hit == (after.hp < before.hp),
                   "ProcessAttack's return value should exactly match whether hp actually decreased");
             Check(lastAttackTimeMs == 1000, "a successful (non-cooldown-blocked) attempt should advance lastAttackTimeMs");
+            Check(actionTaken, "a non-cooldown-blocked attempt with a target should set actionTaken, hit or miss");
 
             // Immediately again, well within the 500ms cooldown --
             // should be a hard no-op regardless of the roll.
             MonsterState beforeSecond = after;
+            bool actionTakenSecond = false;
             bool hitSecond = CombatTick::ProcessAttack(player, levels, world, monsterDb, items, charData, globalRng,
-                                                        1100, lastAttackTimeMs);
+                                                        1100, lastAttackTimeMs, actionTakenSecond);
             auto* recordThird = PlayerMovement::MonsterInFront(player, levels, world);
             MonsterState afterSecond = MonsterRuntime::FromBytes(*recordThird);
             Check(!hitSecond, "an attempt within the 500ms cooldown should never land a hit");
             Check(afterSecond.hp == beforeSecond.hp, "an attempt within the cooldown should leave hp untouched");
             Check(lastAttackTimeMs == 1000, "a cooldown-blocked attempt should NOT advance lastAttackTimeMs");
+            Check(!actionTakenSecond, "a cooldown-blocked attempt should NOT set actionTaken");
 
             // No monster in front at all -- should also just return
             // false without touching the cooldown timer.
             PlayerState hubPlayer = PlayerCreation::CreateCharacter(0, "Tester3", charData, items, globalRng);
             int64_t hubLastAttack = -10000;
+            bool hubActionTaken = false;
             Check(!CombatTick::ProcessAttack(hubPlayer, levels, world, monsterDb, items, charData, globalRng, 2000,
-                                              hubLastAttack),
+                                              hubLastAttack, hubActionTaken),
                   "ProcessAttack with no monster in front should return false");
             Check(hubLastAttack == -10000, "ProcessAttack with no monster in front should not touch the cooldown timer");
+            Check(!hubActionTaken, "ProcessAttack with no monster in front should NOT set actionTaken");
         }
 
         // --- C: RefreshAndResolveTargetMonster -- alive monster (no

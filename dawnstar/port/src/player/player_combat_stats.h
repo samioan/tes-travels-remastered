@@ -90,6 +90,18 @@ public:
     // MonsterTypeForTierBucket doc comment discusses.
     static int FatigueCostMultiplier(const PlayerState& p) { return (p.ailmentMask & 1) == 1 ? 3 : 1; }
 
+    // Player.java's tickFatigueRegen(elapsedMs): passive Fatigue regen
+    // over the elapsed time, scaled by the average of attributes[10]/[11]
+    // (Endurance-ish), capped at max. GameCanvas.processIdleTick() calls
+    // this only `if (!actionTakenThisTick)` -- main.cpp's own call site
+    // carries that gate (see docs/PORT_ROADMAP.md's M51 entry for why
+    // this was left for a follow-up milestone).
+    static void TickFatigueRegen(PlayerState& p, int64_t elapsedMs) {
+        int gain = static_cast<int>(elapsedMs * (p.attributes[10] + p.attributes[11]) / 2000);
+        p.coreStats[6] = static_cast<int16_t>(p.coreStats[6] + gain);
+        if (p.coreStats[6] > p.coreStats[7]) p.coreStats[6] = p.coreStats[7];
+    }
+
     // Adds `amount` skill exp, rolling every full 10 points into +1 skill
     // rank (each rank-up also flags the governing attribute for its next
     // level-up increase, via attributeIncreaseFlags) and +1 "level exp"

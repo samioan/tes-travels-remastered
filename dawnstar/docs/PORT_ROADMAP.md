@@ -3199,10 +3199,46 @@ milestone rather than just read-through.
       confirmed passing clean); `dawnstar_port.exe` launches and stays up
       (not driven through an actual in-game death by hand this session).
 
+- [x] **M51 -- passive Fatigue regen (`tickFatigueRegen`).**
+      `GameCanvas.processIdleTick()`'s other half, left out of M50: `if
+      (!actionTakenThisTick) tickFatigueRegen(elapsed);` -- Fatigue creeps
+      back up on a tick where the player did nothing, scaled by the
+      average of attributes[10]/[11] (Endurance-ish), capped at max. The
+      new `PlayerCombatStats::TickFatigueRegen(p, elapsedMs)` is the pure
+      formula; `main.cpp` now has an `actionTakenThisTick`-equivalent
+      local, reset every tick and set true at exactly GameCanvas's own 3
+      call sites: a non-cooldown-blocked attack attempt (hit OR miss --
+      `CombatTick::ProcessAttack` gained an `actionTaken` out-parameter,
+      since a miss still counts as an action but doesn't land a hit, so
+      the existing hit-landed return value alone couldn't signal it), a
+      resolved spell-cast attempt (`CombatTick::ProcessSpellCast` gained
+      the same out-parameter -- including the "No monster here!" case,
+      which still consumes the cooldown and counts as an action, a real
+      preserved quirk that combat_tick.h's own doc comment already
+      flagged for the cooldown timer and now applies to this too), and an
+      attempted move (regardless of whether it actually committed a
+      position change). Camp/interact/options/spell-cycle do NOT set it,
+      matching the original -- only attack/cast/move do. `elapsedMs`
+      (GameCanvas's own `elapsed`) is now computed once at the top of
+      each tick and reused both here and by the existing
+      `TickStatusCountdowns` call at the tick's tail (previously computed
+      only there); NOT reproduced: the original actually recomputes
+      `elapsed` at the very END of each iteration, so `tickFatigueRegen`
+      there reads the PREVIOUS iteration's stale value, one iteration
+      behind `tickStatusCountdowns`' own fresh one that same iteration --
+      an obscure quirk not worth chasing, same reasoning as `nowMs` itself
+      not reproducing the original's stale-`now` quirk for the
+      campState/deathState checks.
+      Verified by the new `fatigue_regen_smoke` (TickFatigueRegen's own
+      formula: gain, integer truncation, the max-Fatigue cap, a zero-
+      elapsed no-op) plus updated `combat_tick_smoke`/
+      `spellcast_tick_smoke` (every `actionTaken` case: hit, miss,
+      cooldown-blocked, no-target, no-monster-in-front, self-cast,
+      invalid-id, not-enough-magicka). Full rebuild zero new warnings; all
+      49 smoke tests pass; `dawnstar_port.exe` launches and stays up (not
+      hand-driven through an idle-regen tick this session).
+
 ## Milestones next
 
 - [ ] The `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46 -- internal
       plumbing with no visible effect.
-- [ ] `GameCanvas.processIdleTick()`'s other half, `tickFatigueRegen`
-      (gated on `!actionTakenThisTick`) -- noticed while porting M50;
-      no `actionTakenThisTick`-equivalent exists in this port yet.

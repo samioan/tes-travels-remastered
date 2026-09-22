@@ -50,10 +50,19 @@ public:
     // (dispatchTickActions' own if/else chain, mirrored by main.cpp's
     // own `attackActive` gate), so the player's front tile can't have
     // changed since the last refresh whenever this runs.
+    //
+    // M51: `actionTaken` is set true whenever the same cooldown+target
+    // gate that decides whether to attack at all passes (matching
+    // GameCanvas.processAttack()'s own `actionTakenThisTick = true;`,
+    // which sits BEFORE the hit roll) -- deliberately NOT the same as
+    // this method's own `hit landed` return value: CombatResolution::
+    // PlayerAttack's own `if (roll.outcome == 0) return;` means a missed
+    // swing still counts as an action (suppresses passive fatigue regen
+    // this tick) even though no damage landed.
     static bool ProcessAttack(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
                               const MonsterDatabase& monsterDb, const ItemDatabase& items,
                               const CharacterData& charData, JavaRandom& globalRng, int64_t nowMs,
-                              int64_t& lastAttackTimeMs);
+                              int64_t& lastAttackTimeMs, bool& actionTaken);
 
     // GameCanvas.refreshTargetMonster() + resolveMonsterDeath(), always
     // called back-to-back at the very end of dispatchTickActions --
@@ -94,11 +103,20 @@ public:
     // no monster -- the original's own `this.lastSpellCastTime = now;`
     // sits OUTSIDE the monsterTargeted check, at the end of the same
     // branch that guards it.
+    //
+    // M51: `actionTaken` is set true at exactly the point
+    // GameCanvas.processSpellCast() sets `actionTakenThisTick = true;`
+    // -- after the invalid-id/not-enough-magicka/cooldown gates have all
+    // passed, regardless of whether an offensive cast then finds no
+    // monster (that "No monster here!" case still consumes the cooldown
+    // and counts as an action in the original, matching ProcessAttack's
+    // own miss-still-counts reasoning above).
     static void ProcessSpellCast(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
                                   const MonsterDatabase& monsterDb, const ItemDatabase& items,
                                   const CharacterData& charData, const SpellDatabase& spells,
                                   MessagePopupState& messagePopup, JavaRandom& globalRng, int64_t nowMs,
-                                  int64_t& lastSpellCastTimeMs, bool& spellHitFlash, bool& selfSpellFlash);
+                                  int64_t& lastSpellCastTimeMs, bool& spellHitFlash, bool& selfSpellFlash,
+                                  bool& actionTaken);
 
     // GameCanvas.cycleSelectedSpell(): unlike ProcessAttack/
     // ProcessSpellCast above, the original has no internal cooldown

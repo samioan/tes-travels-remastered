@@ -157,12 +157,13 @@ int main(int argc, char** argv) {
             player.selectedSpellId = 0;
             int64_t last = -10000;
             MessagePopupState popup;
-            bool spellHit = false, selfHit = false;
+            bool spellHit = false, selfHit = false, actionTaken = false;
             CombatTick::ProcessSpellCast(player, levels, world, monsterDb, items, charData, spells, popup, globalRng,
-                                          1000, last, spellHit, selfHit);
+                                          1000, last, spellHit, selfHit, actionTaken);
             Check(last == -10000, "an invalid spell id should not touch the cooldown timer");
             Check(!popup.visible, "an invalid spell id should show no message");
             Check(!spellHit && !selfHit, "an invalid spell id should not set either flash flag");
+            Check(!actionTaken, "an invalid spell id should NOT set actionTaken");
         }
 
         // --- B: not enough Magicka -> the message fires, but (checked
@@ -174,14 +175,15 @@ int main(int argc, char** argv) {
             player.coreStats[4] = 0;
             int64_t last = -10000;
             MessagePopupState popup;
-            bool spellHit = false, selfHit = false;
+            bool spellHit = false, selfHit = false, actionTaken = false;
             CombatTick::ProcessSpellCast(player, levels, world, monsterDb, items, charData, spells, popup, globalRng,
-                                          2000, last, spellHit, selfHit);
+                                          2000, last, spellHit, selfHit, actionTaken);
             Check(popup.visible && popup.lines[0] == "Not enough" && popup.lines[1] == "magicka!" &&
                       popup.priority == 3,
                   "not enough Magicka should show \"Not enough/magicka!\" at priority 3");
             Check(last == -10000, "not enough Magicka should NOT advance the cooldown timer");
             Check(!spellHit && !selfHit, "not enough Magicka should not set either flash flag");
+            Check(!actionTaken, "not enough Magicka should NOT set actionTaken");
             player.coreStats[4] = savedMagicka;
         }
 
@@ -193,14 +195,15 @@ int main(int argc, char** argv) {
             player.monsterTargeted = false;
             int64_t last = -10000;
             MessagePopupState popup;
-            bool spellHit = false, selfHit = false;
+            bool spellHit = false, selfHit = false, actionTaken = false;
             CombatTick::ProcessSpellCast(player, levels, world, monsterDb, items, charData, spells, popup, globalRng,
-                                          3000, last, spellHit, selfHit);
+                                          3000, last, spellHit, selfHit, actionTaken);
             Check(popup.visible && popup.lines[0] == "No monster" && popup.lines[1] == "here!" &&
                       popup.priority == 1,
                   "an offensive cast with no target should show \"No monster/here!\" at priority 1");
             Check(last == 3000, "the cooldown SHOULD advance even when no monster is targeted (preserved quirk)");
             Check(!spellHit && !selfHit, "an offensive cast with no target should not set either flash flag");
+            Check(actionTaken, "an offensive cast with no target still counts as an action (the same preserved quirk)");
         }
 
         // --- D: an offensive spell WITH a real monster in front ---
@@ -213,14 +216,15 @@ int main(int argc, char** argv) {
             player.monsterTargeted = true;
             int64_t last = -10000;
             MessagePopupState popup;
-            bool spellHit = false, selfHit = false;
+            bool spellHit = false, selfHit = false, actionTaken = false;
             CombatTick::ProcessSpellCast(player, levels, world, monsterDb, items, charData, spells, popup, globalRng,
-                                          4000, last, spellHit, selfHit);
+                                          4000, last, spellHit, selfHit, actionTaken);
 
             Check(!popup.visible, "a resolved offensive cast shows no message of its own (CastOnMonster's own damage isn't a popup)");
             Check(spellHit && !selfHit, "an offensive cast against a real target should set spellHitFlash only");
             Check(last == 4000, "a resolved offensive cast should advance the cooldown");
             Check(player.coreStats[4] < 999, "casting an offensive spell should spend some Magicka");
+            Check(actionTaken, "a resolved offensive cast should set actionTaken");
 
             auto* recordAfter = PlayerMovement::MonsterInFront(player, levels, world);
             Check(recordAfter != nullptr, "the target should still be in the registry (a spell cast alone doesn't remove it)");
@@ -236,13 +240,14 @@ int main(int argc, char** argv) {
             player.selectedSpellId = static_cast<int8_t>(selfId);
             int64_t last = -10000;
             MessagePopupState popup;
-            bool spellHit = false, selfHit = false;
+            bool spellHit = false, selfHit = false, actionTaken = false;
             CombatTick::ProcessSpellCast(player, levels, world, monsterDb, items, charData, spells, popup, globalRng,
-                                          5000, last, spellHit, selfHit);
+                                          5000, last, spellHit, selfHit, actionTaken);
 
             Check(!spellHit && selfHit, "a self-targeted cast should set selfSpellFlash only");
             Check(last == 5000, "a resolved self-targeted cast should advance the cooldown");
             Check(player.coreStats[4] < 999, "casting a self-targeted spell should spend some Magicka");
+            Check(actionTaken, "a resolved self-targeted cast should set actionTaken");
         }
 
         // --- F: cooldown gating -- a second attempt well within 500ms
@@ -254,13 +259,14 @@ int main(int argc, char** argv) {
             int64_t last = 6000;
             int16_t magickaBefore = player.coreStats[4];
             MessagePopupState popup;
-            bool spellHit = false, selfHit = false;
+            bool spellHit = false, selfHit = false, actionTaken = false;
             CombatTick::ProcessSpellCast(player, levels, world, monsterDb, items, charData, spells, popup, globalRng,
-                                          6100, last, spellHit, selfHit);
+                                          6100, last, spellHit, selfHit, actionTaken);
             Check(!popup.visible, "a cooldown-blocked attempt should show no message");
             Check(!spellHit && !selfHit, "a cooldown-blocked attempt should not set either flash flag");
             Check(last == 6000, "a cooldown-blocked attempt should NOT advance the cooldown timer");
             Check(player.coreStats[4] == magickaBefore, "a cooldown-blocked attempt should not spend Magicka");
+            Check(!actionTaken, "a cooldown-blocked attempt should NOT set actionTaken");
         }
 
         // --- G: CycleSpell -- no known spells ---

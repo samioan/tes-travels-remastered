@@ -14,10 +14,11 @@ namespace dawnstar {
 bool CombatTick::ProcessAttack(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
                                 const MonsterDatabase& monsterDb, const ItemDatabase& items,
                                 const CharacterData& charData, JavaRandom& globalRng, int64_t nowMs,
-                                int64_t& lastAttackTimeMs) {
+                                int64_t& lastAttackTimeMs, bool& actionTaken) {
     auto* record = PlayerMovement::MonsterInFront(player, levels, world);
     if (record == nullptr || nowMs - lastAttackTimeMs < 500) return false;
 
+    actionTaken = true;
     MonsterState target = MonsterRuntime::FromBytes(*record);
     int8_t hpBefore = target.hp;
     CombatResolution::PlayerAttack(player, target, charData, items, monsterDb, globalRng);
@@ -89,7 +90,8 @@ void CombatTick::ProcessSpellCast(PlayerState& player, std::vector<GeneratedLeve
                                    const MonsterDatabase& monsterDb, const ItemDatabase& items,
                                    const CharacterData& charData, const SpellDatabase& spells,
                                    MessagePopupState& messagePopup, JavaRandom& globalRng, int64_t nowMs,
-                                   int64_t& lastSpellCastTimeMs, bool& spellHitFlash, bool& selfSpellFlash) {
+                                   int64_t& lastSpellCastTimeMs, bool& spellHitFlash, bool& selfSpellFlash,
+                                   bool& actionTaken) {
     int spellId = player.selectedSpellId;
     if (!spells.IsValidId(spellId)) return;
 
@@ -100,6 +102,7 @@ void CombatTick::ProcessSpellCast(PlayerState& player, std::vector<GeneratedLeve
 
     if (nowMs - lastSpellCastTimeMs < 500) return;
 
+    actionTaken = true;
     if (spells.IsOffensive(spellId)) {
         if (!player.monsterTargeted) {
             MessagePopup::Show(messagePopup, {"No monster", "here!"}, 1, nowMs);

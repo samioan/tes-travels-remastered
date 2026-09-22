@@ -265,10 +265,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // milestone's CampTick::TryEnterCamp call passed a hardcoded false.
     bool monsterAttacking = false;
     // M44: GameCanvas.run()'s own tail bookkeeping -- run()'s own `long
-    // now` / `long secondAccum` locals (lines ~1251-1252), consumed by the
-    // tick tail below. lastTickNowMs mirrors the original's `prevNow`
-    // (the previous iteration's `now`, which the tail computes this
-    // iteration's `elapsed` against); initialized from the same
+    // now` / `long secondAccum` locals (lines ~1251-1252), consumed at
+    // the top of each tick (M51 moved this up from the tick's own tail --
+    // see `elapsedMs`'s own doc comment there). lastTickNowMs mirrors the
+    // original's `prevNow` (the previous iteration's `now`, which
+    // `elapsed` is computed against); initialized from the same
     // GetTickCount64() source the tick itself samples from, at the point
     // run() itself samples its pre-loop `now`.
     int64_t lastTickNowMs = static_cast<int64_t>(GetTickCount64());
@@ -998,6 +999,30 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // for every showMessage/timeout check below -- M30.
                 int64_t nowMs = static_cast<int64_t>(GetTickCount64());
 
+                // GameCanvas.run()'s own `elapsed = now - prevNow`, moved
+                // up to be computed once per tick here (a further
+                // simplification on the same "sampled once, reused
+                // everywhere" precedent nowMs itself set above) and reused
+                // both by the fatigue-regen call below (M51, inside
+                // runTick) and by the tail's own TickStatusCountdowns
+                // further down. NOT reproduced: the original actually
+                // recomputes this at the very END of each iteration, so
+                // processIdleTick's own tickFatigueRegen call reads the
+                // PREVIOUS iteration's stale value there, one iteration
+                // behind tickStatusCountdowns' fresh one that same
+                // iteration -- an obscure quirk this port doesn't bother
+                // reproducing, same reasoning as nowMs not reproducing
+                // the original's own stale-`now` quirk for the
+                // campState/deathState checks below.
+                int64_t elapsedMs = nowMs - lastTickNowMs;
+                lastTickNowMs = nowMs;
+
+                // GameCanvas.run()'s own `actionTakenThisTick = false;`,
+                // reset unconditionally every tick (M51) -- set true by
+                // attack/spell-cast/move below, gating processIdleTick's
+                // own tickFatigueRegen call further down.
+                bool actionTakenThisTick = false;
+
                 // refreshChestInSight() + refreshNpcInSight(), as one
                 // step: the query halves live in PlayerMovement (see
                 // ChestInFront's doc comment for why); the showMessage
@@ -1150,13 +1175,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     } else if (castActive) {
                         dawnstar::CombatTick::ProcessSpellCast(player, levels, world, monsters, items, charData,
                                                                 spells, messagePopup, globalRng, nowMs,
-                                                                lastSpellCastTimeMs, spellHitFlash, selfSpellFlash);
+                                                                lastSpellCastTimeMs, spellHitFlash, selfSpellFlash,
+                                                                actionTakenThisTick);
                     } else if (spellCyclePending) {
                         dawnstar::CombatTick::CycleSpell(player, spells, messagePopup, nowMs);
                         spellCyclePending = false;
                     } else if (attackActive) {
                         if (dawnstar::CombatTick::ProcessAttack(player, levels, world, monsters, items, charData,
-                                                                  globalRng, nowMs, lastAttackTimeMs)) {
+                                                                  globalRng, nowMs, lastAttackTimeMs,
+                                                                  actionTakenThisTick)) {
                             monsterHitFlash = true;
                         }
                     } else if (optionsPending) {
@@ -1203,6 +1230,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         // all of this right after player.move() with no
                         // success check).
                         if (moveAttempted) {
+                            // GameCanvas.commitMove()'s own
+                            // `actionTakenThisTick = true;`, set
+                            // unconditionally right here (whenever a move
+                            // was actually requested this tick), BEFORE
+                            // player.move() itself even runs -- so this
+                            // is set regardless of whether the move goes
+                            // on to actually commit a position change --
+                            // M51.
+                            actionTakenThisTick = true;
                             // commitMove()'s own `int pickedUp = player.
                             // inventoryCount - slotsBefore;` -- diffed
                             // the same way here as there, rather than
@@ -1241,21 +1277,31 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                            messagePopup, globalRng, nowMs,
                                                                            nextDropSpawnId);
 
-                    // GameCanvas.processIdleTick()'s own `hp <= 0` half --
-                    // M50. Only ever reached while deathState == 1 (this
-                    // whole `if (runTick)` block is itself skipped the
-                    // instant DeathTick::TickDeathState's own `deathState
-                    // != 1` freeze kicks in, above), matching the original,
-                    // which relies on the exact same runTick gating rather
-                    // than an explicit deathState guard here. The other
-                    // half of processIdleTick (tickFatigueRegen, gated on
-                    // `!actionTakenThisTick`) is NOT ported -- no
-                    // `actionTakenThisTick`-equivalent exists in this port
-                    // yet.
+                    // GameCanvas.processIdleTick(): the `hp <= 0` half
+                    // (M50) -- only ever reached while deathState == 1
+                    // (this whole `if (runTick)` block is itself skipped
+                    // the instant DeathTick::TickDeathState's own
+                    // `deathState != 1` freeze kicks in, above), matching
+                    // the original, which relies on the exact same
+                    // runTick gating rather than an explicit deathState
+                    // guard here.
                     if (dawnstar::PlayerCombatStats::EffectiveStat(player, charData, 2) <= 0) {
                         player.monsterTargeted = false;
                         player.deathState = 2;
                         deathTimeMs = nowMs;
+                    }
+
+                    // processIdleTick()'s other half -- `if
+                    // (!actionTakenThisTick) tickFatigueRegen(elapsed);`
+                    // -- M51. `actionTakenThisTick` (reset at the top of
+                    // this tick) was set true above by a landed-or-missed
+                    // attack, a resolved-or-not spell cast, or an
+                    // attempted move; `elapsedMs` is this tick's own
+                    // elapsed-time local (see its own doc comment on why
+                    // this port doesn't reproduce the original's stale-
+                    // by-one-iteration version of it here).
+                    if (!actionTakenThisTick) {
+                        dawnstar::PlayerCombatStats::TickFatigueRegen(player, elapsedMs);
                     }
 
                     // run()'s own `if (player.levelUpPending)`, right after
@@ -1300,9 +1346,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // step's paintVisibleObjects()-equivalent computed, the
                 // same one-tick lag the campRequested dispatch above has
                 // -- and the same lag the original's own repaint-then-
-                // countdown ordering produces.
-                int64_t elapsedMs = nowMs - lastTickNowMs;
-                lastTickNowMs = nowMs;
+                // countdown ordering produces. `elapsedMs` itself is now
+                // computed once at the top of the tick (M51) -- see that
+                // declaration's own doc comment.
                 dawnstar::PassiveTick::TickStatusCountdowns(player, elapsedMs, monsterAttacking);
                 secondAccumMs += elapsedMs;
                 if (secondAccumMs > 1000) {
