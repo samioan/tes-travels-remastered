@@ -3238,7 +3238,36 @@ milestone rather than just read-through.
       49 smoke tests pass; `dawnstar_port.exe` launches and stays up (not
       hand-driven through an idle-regen tick this session).
 
+- [x] **The `Shop.SHOP_X/Y[5..8]` write-through, noted in M6/M13/M46 --
+      re-investigated and closed, no code change needed.** Traced every
+      real READ of `Shop.SHOP_X/Y[5..8]` in `../../../src/`, not just the
+      ones M46 already knew about: `Player.placeVisibleObject`'s kind-6
+      NPC case (`player/visible_objects.cpp`'s own NPC-tagging, confirmed
+      using `GeneratedLevel::specialShopX/Y`), `Player.npcInFront()`
+      (`PlayerMovement::NpcInFront`, same), `ESGame`'s secondaryParam-29
+      NPCWarp dispatch (`ui/npc_menu.cpp`'s Warp action, same, plus the
+      `+1` on Y matching `Shop.SHOP_Y[5+i] + 1` exactly), and `Dungeon`'s
+      own hub-constructor bit-32 marking loop (`for (i=0; i<5;...)`,
+      indices 0-4 only -- never touches 5..8 at all, so irrelevant here).
+      Every one of them already reads `GeneratedLevel::specialShopX/Y`
+      (set at generation time in `world/dungeon_generator.cpp`, M6/M13),
+      not a `Shop.SHOP_X/Y[5..8]` stand-in -- so there is no reader left
+      ungated by this port's existing substitution.
+      One more thing checked along the way: `npc/shop_interaction.cpp`'s
+      `ShopInteraction::kShopX/kShopY` (a compile-time `const` array
+      covering all 9 shop ids, Shop.java's own literal defaults) carries
+      inert placeholder values (`1, 1, 1, 1`) at indices 5-8 that
+      generation never updates -- but nothing reads that array past index
+      4 either (confirmed by grep: only `HubShopAt`/the M45 smoke test
+      touch it, both hub-only). Leaving those 4 entries as dead
+      placeholders is correct, not a gap: turning that array mutable just
+      to write values nothing reads would remove a `const` guarantee for
+      zero behavioral gain.
+      Conclusion: this item was already fully closed by M46's own
+      substitution; nothing here needed new code.
+
 ## Milestones next
 
-- [ ] The `Shop.SHOP_X/Y[5..8]` write-through noted in M6/M13/M46 -- internal
-      plumbing with no visible effect.
+None currently queued -- every item tracked here has been closed. See
+"Known remaining gaps" (if a future session adds one) or re-audit
+`../src/` for anything newly noticed.
