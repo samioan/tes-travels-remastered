@@ -204,8 +204,9 @@ int main(int argc, char** argv) {
             player.monsterTargeted = false;
             MessagePopupState popup;
             int16_t nextSpawnId = 1;
-            CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsterDb, items, popup, globalRng,
-                                                        3000, nextSpawnId);
+            Check(!CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsterDb, items, popup,
+                                                                globalRng, 3000, nextSpawnId),
+                  "an alive monster should never return true (M56's Victory signal)");
             Check(player.monsterTargeted, "monsterTargeted should be set true while a (still-alive) monster is in front");
             Check(!popup.visible, "no death popup should show while the monster is still alive");
             auto* stillThere = PlayerMovement::MonsterInFront(player, levels, world);
@@ -231,8 +232,9 @@ int main(int argc, char** argv) {
             size_t dropsBefore = world.droppedItems[static_cast<size_t>(levelIdx)].size();
             MessagePopupState popup;
             int16_t nextSpawnId = 1;
-            CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsterDb, items, popup, globalRng,
-                                                        4000, nextSpawnId);
+            Check(!CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsterDb, items, popup,
+                                                                globalRng, 4000, nextSpawnId),
+                  "an ordinary type's death should return false");
 
             Check(!player.monsterTargeted, "monsterTargeted should be cleared once the target is resolved dead");
             Check(player.minimapDirty, "resolving a death should mark the minimap dirty");
@@ -276,8 +278,9 @@ int main(int argc, char** argv) {
 
             MessagePopupState popup;
             int16_t nextSpawnId = 1;
-            CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsterDb, items, popup, globalRng,
-                                                        5000, nextSpawnId);
+            Check(!CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsterDb, items, popup,
+                                                                globalRng, 5000, nextSpawnId),
+                  "type 41's death should NOT return true -- only type 42 signals Victory");
 
             Check(player.specialEncounterResolved, "type 41's death should set specialEncounterResolved");
             Check(!player.roamingSpecialMonsterPresent, "type 41's death should clear roamingSpecialMonsterPresent");
@@ -286,7 +289,8 @@ int main(int argc, char** argv) {
         }
 
         // --- F: monsterType 42 skips the loot roll entirely, but still
-        // runs the rest of resolveMonsterDeath's cleanup ---
+        // runs the rest of resolveMonsterDeath's cleanup, and (M56)
+        // signals the Victory transition via its return value ---
         {
             MonsterState endBoss = MonsterRuntime::Spawn(100, 42, levelNumber, monsterDb);
             endBoss.x = static_cast<int8_t>(spawn.x);
@@ -299,14 +303,27 @@ int main(int argc, char** argv) {
             size_t dropsBefore = world.droppedItems[static_cast<size_t>(levelIdx)].size();
             MessagePopupState popup;
             int16_t nextSpawnId = 1;
-            CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsterDb, items, popup, globalRng,
-                                                        6000, nextSpawnId);
+            bool victoryTriggered = CombatTick::RefreshAndResolveTargetMonster(
+                player, levels, world, monsterDb, items, popup, globalRng, 6000, nextSpawnId);
 
+            Check(victoryTriggered, "monsterType 42's death should return true (M56's Victory signal)");
             size_t dropsAfter = world.droppedItems[static_cast<size_t>(levelIdx)].size();
             Check(dropsAfter == dropsBefore, "monsterType 42 should never roll a death-drop (onDeath is skipped)");
             Check(popup.visible, "monsterType 42 should still show the death popup (same fallthrough as any other type)");
             Check(PlayerMovement::MonsterInFront(player, levels, world) == nullptr,
                   "monsterType 42 should still be removed from the registry");
+        }
+
+        // --- G: every other resolved death (alive-monster no-op, an
+        // ordinary type, and type 41) should return false -- only the
+        // literal type-42 end-game monster ever signals Victory ---
+        {
+            player.monsterTargeted = false;
+            MessagePopupState popup;
+            int16_t nextSpawnId = 1;
+            Check(!CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsterDb, items, popup,
+                                                                globalRng, 7000, nextSpawnId),
+                  "no monster in front should return false, not just no-op");
         }
 
         if (g_ok) {

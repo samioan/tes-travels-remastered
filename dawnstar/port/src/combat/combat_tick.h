@@ -78,7 +78,17 @@ public:
     // `nextDropSpawnId` substitutes for Item.nextSpawnId()'s global
     // counter, the same simplification player/player_creation.cpp's
     // GrantStartingItems already uses.
-    static void RefreshAndResolveTargetMonster(PlayerState& player, std::vector<GeneratedLevel>& levels,
+    //
+    // Returns true exactly once, the call that resolves the death of the
+    // literal type-42 end-game monster (resolveMonsterDeath()'s
+    // `targetMonster.monsterType == 42` branch, which skips the loot
+    // roll entirely and instead triggers `this.game.endOfGameUI =
+    // this.game.newEndOfGameUI()`) -- M56: the caller is expected to
+    // play that "Victory!" transition itself, the same "return a signal,
+    // let main.cpp perform the real-world effect" split
+    // passive/passive_tick.h's own PerSecondResult::EndOfGame already
+    // established for the sibling Game Over trigger.
+    static bool RefreshAndResolveTargetMonster(PlayerState& player, std::vector<GeneratedLevel>& levels,
                                                 WorldRegistry& world, const MonsterDatabase& monsterDb,
                                                 const ItemDatabase& items, MessagePopupState& messagePopup,
                                                 JavaRandom& globalRng, int64_t nowMs, int16_t& nextDropSpawnId);

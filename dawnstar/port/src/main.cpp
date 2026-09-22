@@ -275,15 +275,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // run() itself samples its pre-loop `now`.
     int64_t lastTickNowMs = static_cast<int64_t>(GetTickCount64());
     int64_t secondAccumMs = 0;
-    // M44: the ambush Game Over chain -- ESGame's own `endOfGameUI =
-    // newGameOverUI()` plus the secondaryParam==200/201 -> "Exiting"
-    // (399) -> exit() dispatch, played by main.cpp here (this port's
-    // ESGame stand-in), exactly like the Options menu's own
-    // main.cpp-performed actions. The inGameOver early-return below also
-    // genuinely PAUSES the whole tick loop, the same way inMenu/
-    // inOptionsMenu do -- matching the original's own `activeScreen !=
-    // null` branch, which stops tickPerSecond itself (the ambush clock
-    // freezes while the Game Over screen shows).
+    // M44 (Game Over) + M56 (Victory): ESGame's own `endOfGameUI =
+    // newGameOverUI()`/`newEndOfGameUI()` plus the shared
+    // secondaryParam==200/201 -> "Exiting" (399) -> exit() dispatch,
+    // played by main.cpp here (this port's ESGame stand-in), exactly
+    // like the Options menu's own main.cpp-performed actions. Both
+    // triggers (the ambush-spawner checkpoint pushing a level past 5
+    // monsters, and killing the literal type-42 end-game monster) reuse
+    // this same state -- the original's own dispatch never distinguishes
+    // 200 from 201 past the initial screen. The inGameOver early-return
+    // below also genuinely PAUSES the whole tick loop, the same way
+    // inMenu/inOptionsMenu do -- matching the original's own
+    // `activeScreen != null` branch, which stops tickPerSecond itself
+    // (the ambush clock freezes while the Game Over/Victory screen
+    // shows).
     bool inGameOver = false;
     bool gameOverExiting = false;
     bool gameOverSelectKeyWasDown = false;
@@ -723,23 +728,24 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 return;
             }
 
-            // M44: the ambush Game Over chain (reachable only from the
-            // tick tail's EndOfGame result below, i.e. only once
-            // `playerSlot` holds a live, playing character). The whole
-            // early-return shape mirrors inMenu/inOptionsMenu above --
-            // and, like those, it also genuinely PAUSES the whole tick
-            // loop, matching the original's own `activeScreen != null`
-            // branch (tickPerSecond stops, so the ambush clock freezes
-            // while the screen shows).
+            // M44 (Game Over) + M56 (Victory): reachable either from the
+            // tick tail's EndOfGame result below, or from a type-42 kill
+            // in the same tail (i.e. only once `playerSlot` holds a
+            // live, playing character). The whole early-return shape
+            // mirrors inMenu/inOptionsMenu above -- and, like those, it
+            // also genuinely PAUSES the whole tick loop, matching the
+            // original's own `activeScreen != null` branch
+            // (tickPerSecond stops, so the ambush clock freezes while
+            // the screen shows).
             if (inGameOver) {
                 // secondaryParam==200/201's own dispatch has NO command
                 // check (`else if (uic.secondaryParam == 200 ||
                 // uic.secondaryParam == 201) { GenericInfoUI.
                 // setSecondaryParam(399); ... }`) -- Ok is the only
-                // command attached to the mode-4 Game Over screen, but
-                // ANY command that ever arrives advances the chain;
-                // 399's own `this.exit()` has no check either. The full
-                // chain: Game Over -> "Exiting" (GenericInfoUI 399, the
+                // command attached to the mode-4 Game Over/Victory
+                // screen, but ANY command that ever arrives advances the
+                // chain; 399's own `this.exit()` has no check either.
+                // The full chain: Game Over/Victory -> "Exiting" (GenericInfoUI 399, the
                 // concatenated ESGame.copyString notice, its own only
                 // command swapped from Ok to Exit) -> exit.
                 bool selectDown = KeyPressed(VK_RETURN);
@@ -1327,10 +1333,31 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     // dispatchTickActions()'s own tail:
                     // refreshTargetMonster() + resolveMonsterDeath(),
                     // unconditional every tick regardless of which
-                    // action (if any) fired above -- M32.
-                    dawnstar::CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsters, items,
-                                                                           messagePopup, globalRng, nowMs,
-                                                                           nextDropSpawnId);
+                    // action (if any) fired above -- M32. M56: a true
+                    // return means this call just resolved the literal
+                    // type-42 end-game monster's death --
+                    // resolveMonsterDeath()'s own `this.game.endOfGameUI
+                    // = this.game.newEndOfGameUI(); this.game.
+                    // setCurrentDisplay(...)`. `newEndOfGameUI()`:
+                    // Screen(4, 200) + setupMessage("Victory!",
+                    // dialogue[9][74]+"\n"+[75]+"\n"+[76]) -- no <TAG>
+                    // substitution needed here, unlike Game Over's
+                    // traitor name. secondaryParam 200 and 201 share the
+                    // EXACT SAME next dispatch branch in the original
+                    // (`uic.secondaryParam == 200 || uic.secondaryParam
+                    // == 201`), so this reuses the very same
+                    // gameOverScreen/gameOverExiting state machine M44
+                    // already built for the Game Over chain -- only the
+                    // initial screen's title/text differ.
+                    if (dawnstar::CombatTick::RefreshAndResolveTargetMonster(player, levels, world, monsters, items,
+                                                                              messagePopup, globalRng, nowMs,
+                                                                              nextDropSpawnId)) {
+                        gameOverScreen.SetupMessage("Victory!", shopDialogue.groups[9][74] + "\n" +
+                                                                     shopDialogue.groups[9][75] + "\n" +
+                                                                     shopDialogue.groups[9][76]);
+                        inGameOver = true;
+                        gameOverExiting = false;
+                    }
 
                     // GameCanvas.processIdleTick(): the `hp <= 0` half
                     // (M50) -- only ever reached while deathState == 1

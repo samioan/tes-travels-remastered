@@ -3408,6 +3408,64 @@ milestone rather than just read-through.
       a regression -- confirmed passing 80/80 when run from its own
       expected cwd); `dawnstar_port.exe` launches and stays up.
 
+- [x] **M56 -- the "Victory!" end-of-game screen.** Found by a fresh
+      sweep of `../src/ESGame.java`'s Screen-factory methods against
+      the port: `newEndOfGameUI()` (Screen mode 4, secondaryParam 200,
+      `setupMessage("Victory!", dialogue[9][74]+"\n"+[75]+"\n"+[76])`),
+      triggered from `GameCanvas.resolveMonsterDeath()`'s
+      `targetMonster.monsterType == 42` branch -- killing the literal
+      end-game monster the ambush spawner (M44) already plants at
+      elapsed second 140. Unlike its sibling Game Over trigger (M44,
+      secondaryParam 201), this one had been explicitly, repeatedly
+      deferred since M32 ("type 42's own end-of-game-UI transition isn't
+      ported -- no menu/end-of-game screen exists yet") pending "the
+      real end-of-game-UI milestone" -- stale by this point, since M38-
+      M50 built out exactly that menu machinery, just never closed the
+      loop back to it.
+      `CombatTick::RefreshAndResolveTargetMonster` (`combat/
+      combat_tick.h`/`.cpp`) now returns `true` exactly once, the call
+      that resolves a type-42 death (previously void) -- the same
+      "return a signal, let main.cpp perform the real-world effect"
+      split `passive/passive_tick.h`'s `PerSecondResult::EndOfGame`
+      already established for the sibling Game Over trigger.
+      `main.cpp` reuses that EXACT SAME state machine (`inGameOver`/
+      `gameOverExiting`/`gameOverScreen`/`gameOverExitingScreen`) rather
+      than building a parallel one: the original's own dispatch never
+      distinguishes secondaryParam 200 from 201 past the initial
+      screen's title/text (both funnel into the identical "Exiting"
+      (399) -> `exit()` chain), so the only new code is building the
+      Victory screen's own text and setting `inGameOver = true` from the
+      new trigger site.
+
+      Verified via the new `victory_smoke.exe` (no JVM ground truth,
+      same reason as every prior milestone): the real 3-line Victory
+      text built against the real `npcstrings.dat` and printed for a
+      by-hand look (sensible, in-character "Congratulations! You have
+      won!..." content, not garbage); an end-to-end check building the
+      real 37-level world, spawning a real type-42 monster via
+      `MonsterRuntime::Spawn`, and confirming `RefreshAndResolveTargetMonster`
+      returns `true` for it specifically (re-derived independently of
+      M32's own combat_tick_smoke coverage, so a future refactor
+      decoupling the two wouldn't silently pass). `combat_tick_smoke`
+      (M32) extended alongside it: every non-type-42 case (no monster,
+      an ordinary type, type 41) now explicitly asserts `false`, not
+      just left unchecked. One real test bug caught and fixed along the
+      way: the new test's first draft built a single-level `levels`
+      vector while setting `player.currentLevel = 2`, which crashed
+      (`std::vector::operator[]` out of range, MSVC's checked-iterator
+      abort) the instant `PlayerMovement::ComputeMoveTarget` indexed
+      `levels[player.currentLevel - 1]` -- fixed by building the real
+      full 37-level world like every other combat-tick test already
+      does, rather than a synthetic one-level stand-in. Full rebuild
+      zero new warnings; all 52 smoke tests pass (`launcher_smoke`'s
+      lone failure from `port/` is the same pre-existing cwd-sensitivity
+      noted at M55, confirmed passing 80/80 from `port/build/`);
+      `dawnstar_port.exe` launches and stays up (actually killing a live
+      type-42 monster in the running exe and watching the screen appear
+      isn't performed by hand this session -- same acceptance M53
+      already established for an equally awkward-to-manually-trigger
+      real event).
+
 ## Milestones next
 
 Nothing queued. The previous list (found by a fresh full sweep of `../src/`

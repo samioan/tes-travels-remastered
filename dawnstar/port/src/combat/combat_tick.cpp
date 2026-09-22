@@ -27,17 +27,17 @@ bool CombatTick::ProcessAttack(PlayerState& player, std::vector<GeneratedLevel>&
     return hpBefore > target.hp;
 }
 
-void CombatTick::RefreshAndResolveTargetMonster(PlayerState& player, std::vector<GeneratedLevel>& levels,
+bool CombatTick::RefreshAndResolveTargetMonster(PlayerState& player, std::vector<GeneratedLevel>& levels,
                                                  WorldRegistry& world, const MonsterDatabase& monsterDb,
                                                  const ItemDatabase& items, MessagePopupState& messagePopup,
                                                  JavaRandom& globalRng, int64_t nowMs, int16_t& nextDropSpawnId) {
     // refreshTargetMonster()
     auto* record = PlayerMovement::MonsterInFront(player, levels, world);
     player.monsterTargeted = record != nullptr;
-    if (record == nullptr) return;
+    if (record == nullptr) return false;
 
     MonsterState target = MonsterRuntime::FromBytes(*record);
-    if (target.hp > 0) return;
+    if (target.hp > 0) return false;
 
     // resolveMonsterDeath()
     if (target.monsterType == 41) {
@@ -45,7 +45,8 @@ void CombatTick::RefreshAndResolveTargetMonster(PlayerState& player, std::vector
         player.roamingSpecialMonsterPresent = false;
     }
 
-    if (target.monsterType != 42) {
+    bool victoryTriggered = target.monsterType == 42;
+    if (!victoryTriggered) {
         GeneratedLevel& monsterLevel = levels[static_cast<size_t>(target.dungeonLevel - 1)];
         MonsterRuntime::DeathDrop drop =
             MonsterRuntime::OnDeath(target, monsterDb, items, monsterLevel.tier, false, nextDropSpawnId++, globalRng);
@@ -53,9 +54,9 @@ void CombatTick::RefreshAndResolveTargetMonster(PlayerState& player, std::vector
             DungeonRuntime::AddDroppedItem(monsterLevel, world, drop.record);
         }
     }
-    // type 42's own end-of-game-UI transition isn't ported (no menu/
-    // end-of-game screen exists yet) -- the rest of this cleanup still
-    // runs unconditionally either way, matching the original's own
+    // type 42's own end-of-game-UI transition (M56) is signaled via this
+    // method's return value -- the rest of this cleanup still runs
+    // unconditionally either way, matching the original's own
     // fallthrough (both branches reach the same removeMonster/heal/
     // message/reset code below).
 
@@ -84,6 +85,7 @@ void CombatTick::RefreshAndResolveTargetMonster(PlayerState& player, std::vector
 
     player.monsterTargeted = false;
     player.minimapDirty = true;
+    return victoryTriggered;
 }
 
 void CombatTick::ProcessSpellCast(PlayerState& player, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
