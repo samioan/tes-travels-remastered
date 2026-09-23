@@ -240,6 +240,7 @@
 #include "render/visible_object_renderer.h"
 #include "ui/inventory_ui.h"
 #include "ui/menu_flow.h"
+#include "ui/npc_choices_menu.h"
 #include "ui/npc_dialogue.h"
 #include "ui/pause_menu.h"
 #include "util/java_random.h"
@@ -485,6 +486,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // (npcHelloUI) -- see ui/npc_dialogue.h's own class comment for what's
     // deliberately not modeled (the deeper interactive choices menu).
     stormhold::NpcDialogueState npcDialogue;
+    // M64: ui/npc_choices_menu.h's own Train/Give/Befriend/Threaten/Kill
+    // follow-up menu, shops 0-3 only -- see that file's own class comment.
+    stormhold::NpcChoicesMenuState npcChoicesMenu;
     // M62: GameCanvas.openInventory()'s own port-only dispatch -- see
     // ui/inventory_ui.h's own class comment for the real "openInventory
     // shows a screen that's only ever populated by the not-yet-built
@@ -657,8 +661,35 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // Checked here, OUTSIDE the shouldRunTick gate below, since the
             // whole point is dismissing the screen that gate is blocking
             // gameplay behind.
+            // M64: shops 0-3 transition into ui/npc_choices_menu.h's own
+            // follow-up menu instead of closing straight back to gameplay
+            // -- see ui/npc_dialogue.h's own class comment for why that's
+            // now the port-only behavior (the real npcHelloUI ->
+            // npcChoicesUI[npcId] transition is a confirmed softlock for
+            // every NPC). Shops 4/5/6 still just dismiss (their own
+            // choices menus aren't built by any milestone yet).
             if (npcDialogue.active && KeyEdge(VK_RETURN)) {
+                int dialogueShopId = npcDialogue.shopId;
                 stormhold::NpcDialogue::Dismiss(npcDialogue);
+                if (dialogueShopId >= 0 && dialogueShopId <= 3) {
+                    stormhold::NpcChoicesMenu::Open(npcChoicesMenu, dialogueShopId);
+                }
+            }
+
+            // M64: while the NPC choices menu is open, Up/Down/Enter/Escape
+            // drive it exactly the way every other live-gameplay modal
+            // above already does. `levelLookup(1)` is the hub level
+            // (`ESGame.dungeons[0]`), needed only by the "Kill" action's
+            // own tile-bit clear (ShopInteraction::QuestShopDialogue's own
+            // `hub` parameter).
+            if (npcChoicesMenu.active) {
+                if (KeyEdge(VK_UP)) stormhold::NpcChoicesMenu::MoveSelection(npcChoicesMenu, -1, player);
+                if (KeyEdge(VK_DOWN)) stormhold::NpcChoicesMenu::MoveSelection(npcChoicesMenu, 1, player);
+                if (KeyEdge(VK_RETURN)) {
+                    stormhold::NpcChoicesMenu::Confirm(npcChoicesMenu, player, shop, dialogue, charData, items,
+                                                        levelLookup(1), combatRng);
+                }
+                if (KeyEdge(VK_ESCAPE)) stormhold::NpcChoicesMenu::Cancel(npcChoicesMenu);
             }
 
             gameTimeMs += stormhold::GameClock::kTickInterval.count();
@@ -770,7 +801,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // different UIScreen is the active displayable).
             bool shouldRunTick = campResult != stormhold::CampTickResult::StillWaiting &&
                                   deathResult != stormhold::DeathTickResult::Waiting && !npcDialogue.active &&
-                                  !inventoryUi.active && !pauseMenu.active;
+                                  !inventoryUi.active && !pauseMenu.active && !npcChoicesMenu.active;
             if (shouldRunTick) {
                 // M62: GameCanvas.openInventory() -- see ui/inventory_ui.h's
                 // own class comment for the real bug (openInventory shows a
@@ -877,7 +908,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     }
                     if (line.has_value()) {
                         stormhold::NpcDialogue::Show(npcDialogue, stormhold::Shop::kNames[static_cast<size_t>(shopAhead)],
-                                                       *line);
+                                                       *line, shopAhead);
                     }
                 } else if (interactKeyEdge && chestAhead.has_value()) {
                     int result = stormhold::PlayerInventory::CollectChestItem(player, *chestAhead, items,
@@ -1110,6 +1141,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // `optionsUI` and everything it opens onto taking over
                 // `Display.setCurrent()` in the original.
                 stormhold::PauseMenu::Render(backbuffer, pauseMenu, player, charData, spells);
+            } else if (npcChoicesMenu.active) {
+                // M64: fully replaces the normal game view, matching
+                // `npcChoicesUI[shopId]` and everything it opens onto
+                // taking over `Display.setCurrent()` in the original.
+                stormhold::NpcChoicesMenu::Render(backbuffer, npcChoicesMenu, player, charData, items, shop);
             } else {
                 stormhold::GameRenderer::RenderCorridorView(
                     backbuffer, corridorAssets, player.corridorView,

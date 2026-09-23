@@ -4247,28 +4247,148 @@ starts and stays up.
       a real file-system Save/Load round trip, just not the live
       rendering/input itself.
 
+- [x] **M64 -- the NPC choices menu, wired live (shops 0-3: Train/Give/
+      Befriend/Threaten/Kill)** (this session). Part 1 of the multi-part
+      treatment M60's own "what's next" note predicted this would need:
+      new `ui/npc_choices_menu.h`/`.cpp` (`NpcChoicesMenuState`/
+      `NpcChoicesMenu`, `stormhold_render`) covers `dispatchNpcChoice`'s
+      own `case 0/1/2/3` group (`ESGame.java`'s screenGroups 9-12/20/22) --
+      the 4 quest shops' shared Choices/TrainWhat/GiveWhat/Result state
+      machine, built entirely on M56's already-ported
+      `ShopInteraction::QuestShopDialogue`/`IsValidShopAction`/
+      `ShopActionCode`. Beneca (shop 4)/Helga (shop 5) are their own
+      bespoke menus, deliberately deferred to a follow-up milestone, same
+      "one coherent slice at a time" split M56-M59's own quartet already
+      used for the dialogue TEXT side of this exact gap.
+
+      **The big finding this milestone turned up, and this project's
+      THIRD deliberate, clearly-labeled port-only exception in the same
+      category M62's `openInventory` softlock and M63's whole-pause-menu
+      findings both established:** the real path from the M60 greeting
+      screen into ANY NPC's choices menu is completely broken.
+      `talkToNpc()` sets `npcHelloUI.nextScreen = npcChoicesUI[npcId]`,
+      but `npcHelloUI`'s own screenGroup (8) is explicitly carved out of
+      `commandAction()`'s big dispatch chain, landing in the outermost
+      catch-all instead: `else if (cmd == UIScreen.cmdOk) {
+      showScreen(activeScreen.backTarget); }` -- `backTarget`, a
+      genuinely SEPARATE `UIScreen` field from `nextScreen` (confirmed by
+      reading both field declarations directly), which defaults to `null`
+      and is never once set for `npcHelloUI` anywhere in `ESGame.java`.
+      So pressing "Ok" on ANY NPC's greeting prints "ERROR: next is
+      null!" and calls `showScreen(null)` -- a confirmed softlock (pauses
+      the game thread, shows nothing, no path back), per the same
+      `showScreen(Object)` body `ui/inventory_ui.h`'s own class comment
+      already documented for M62's finding. **In the real shipped game,
+      the entire `npcChoicesUI` system -- for every one of the 7 NPCs,
+      not just this milestone's own shops 0-3 -- is unreachable.** Rather
+      than reproduce that, `main.cpp`'s own Enter-key dismiss handling for
+      the M60 greeting screen now opens `NpcChoicesMenu` directly for
+      shops 0-3 (honoring `nextScreen`'s own clearly-intended target
+      instead of the broken `backTarget` read); shops 4/5/6 still just
+      dismiss to gameplay, since their own menus aren't built by any
+      milestone yet.
+
+      **A second, real, separate crash bug, confirmed while reading the
+      very same array, NOT applicable to this milestone's shops-0-3 scope
+      and not something any future milestone needs to build against
+      either:** `npcChoicesUI = new UIScreen[6]` (valid indices 0-5 only)
+      -- but Varus is shopId 6, and `Shop.dialogue(player, 6, 1, 0)`
+      returns a real non-null greeting once `wardenVisitCount >= 1`
+      (`ShopInteraction::VarusDialogue`'s own state machine, M59), so
+      `talkToNpc(6)` would throw `ArrayIndexOutOfBoundsException` the
+      first time a player talks to Varus after any real Warden visit.
+      Varus has no real choices-menu CONTENT to reproduce even if this
+      port built a 7th slot (his own dialogue ignores `action`/`extra`
+      entirely), so this is pure documentation, not a "what's next" item.
+
+      **Two more minor, real, cheap-to-preserve findings, both confirmed
+      by reading `UIScreen.setItemText`/`setTitle`/`setupMessage`/
+      `setupPromptList` directly:** every per-action RESULT popup writes
+      `Shop.NAMES[shopId]` into the same single `StringItem`
+      `setMessageBody(result)` immediately overwrites right after --
+      dead, invisible -- while the screen's real TITLE (a separate
+      Form-level property, untouched after construction) stays whatever
+      `npcResponsePopup`'s own `setupMessage("NPC name here", ...)`
+      call set it to; reproduced exactly (Train/Befriend/Threaten/Kill/
+      successful-Give results are titled the literal placeholder "NPC
+      name here", and the one early-exit "nothing to give" case --
+      reusing the pre-built `npcResponseUI` rather than a fresh screen --
+      is titled ITS OWN leftover placeholder, "Oracle"). Separately, the
+      Choices menu itself is built ONCE at startup with the literal
+      placeholder title "Name" (`npcChoicesUI[i].setupPromptList("Name",
+      ...)`), never patched afterward -- unlike `trainWhatMenu`/
+      `giveWhatMenu`, which correctly pass the real `Shop.NAMES[shopId]`
+      since they're rebuilt fresh on every open. Also reproduced exactly:
+      `giveWhatMenu`'s own equipped-item prefix is `"E:"` (no space),
+      confirmed to genuinely differ from `newInventoryUI`'s own `"E: "`
+      (M62, WITH a space) by reading both methods side by side -- not
+      normalized to match.
+
+      **Noted, not modeled, an input-layer question this port has never
+      attempted to answer for ANY screen:** `setupList`/`setupPromptList`
+      add `cmdSelect`/`cmdCancel` (confirmed distinct `Command` objects
+      from `cmdOk`/`cmdBack`), while most of `commandAction()`'s own
+      screenGroup branches check `cmdOk`/`cmdBack` specifically -- whether
+      that's a real bug or resolves through MIDP's own `List`/
+      `ChoiceGroup` implicit-command semantics isn't something this
+      project's transcribed Java source alone can settle. Doesn't change
+      anything here either way: this port has never modeled literal
+      `Command`-object identity for any menu, back to `ui/menu_flow.cpp`'s
+      own M40 debut (every screen already collapses down to this port's
+      own uniform Enter="confirm"/Escape="cancel" convention).
+
+      Verified by a new `npc_choices_menu_smoke.exe`: `Open`/`Cancel` from
+      Choices (closes the whole menu, matching the real, UN-broken
+      `npcChoicesUI[shopId].nextScreen = gameCanvas`); `MoveSelection`
+      clamping on the 5-item Choices list and no-op on an inactive state;
+      a full Train round trip for all 4 quest shops (confirming each
+      shop allows exactly 3 skills, matching `ShopActionCode`'s own
+      `kCodes` table, and that a real, non-empty rumor line comes back);
+      Give with a real starting inventory (list length matches
+      `inventoryCount`, a real response line comes back) AND with an
+      empty inventory (the exact literal "You have nothing to give me!"
+      message, titled "Oracle"); Befriend/Threaten/Kill each producing
+      real non-empty lines, plus Kill's own tile-bit-32 clear verified
+      directly against a synthetic hub level; Cancel's own real-vs-port-
+      only split (TrainWhat/GiveWhat close the whole menu, matching
+      `nextScreen=gameCanvas`; Result returns to Choices, the deliberate
+      port-only mapping); and `Render` running all 4 screens at least once
+      without crashing against real asset data. 54 smoke tests pass; full
+      clean rebuild stayed at zero `/W4` warnings. Manually launched the
+      real windowed exe and confirmed it starts and stays up. **Not
+      independently re-verified this session** (same disclosed gap M60's/
+      M62's/M63's own entries already have): actually walking up to a
+      real quest-shop NPC in a live play session and navigating
+      Train/Give/Befriend/Threaten/Kill via real keyboard input wasn't
+      attempted; every state-mutating code path IS exercised against real
+      asset data by the smoke test above, just not the live rendering/
+      input itself.
+
 ## What's next
 
-`talkToNpc()`'s own "greeting" action is wired end to end as of M60, but
-the real `npcChoicesUI[npcId]` interactive follow-up menu (Train/Give/
-Befriend/Threaten/Kill for shops 0-3, Beneca/Helga's own item-donation/
-point-spending choices) is NOT -- see M60's own entry for why that's a
-substantially bigger, separate lift (its own item-selection sub-screens
-and result popups, `ESGame.java`'s own screenGroups 9-14/20/22/27/350),
-likely worth its own dawnstar-M46-sized multi-part treatment rather than
-one milestone. `IsValidShopAction`/`ShopActionCode` (M56) only cover
-shops 0-3's own menu-choice mapping either way -- shops 4/5's own action/
-extra choices have no equivalent confirmed selection UI ported anywhere
-in `../src/`, an open question for whoever eventually builds that screen.
-No bug-preservation dilemma blocks any of it -- see M53's own entry for
-the corrected `Shop.reset()` finding (it genuinely runs in the real game,
-via a static initializer); the one real surviving caveat is that
-`reset()` only ever runs ONCE per app launch there, not once per New
-Game, so quest-economy state carries over across a same-session
-death-restart -- not modeled by `ShopState` either way (this port has no
-live app-lifetime `Shop` instance to carry state between a death-restart
-and the next), just worth keeping in mind for whoever eventually adds
-one.
+Beneca (shop 4) and Helga (shop 5) still need their own bespoke choices
+menus -- M64's own entry above only covers the 4 quest shops' shared
+Train/Give/Befriend/Threaten/Kill shape. Beneca's own menu (Give Item/Take
+Crystal, `ESGame.java`'s screenGroups 13/27, `ShopInteraction::
+BenecaDialogue`'s actions 4/7 already ported at M57) is the smaller of the
+two -- likely comparable in size to this milestone. Helga's own menu
+(Rumors/Give Crystal/Enchant/Bless/Cure/Warp/Recovery, screenGroups
+14/350/352/353/41/355, `ShopInteraction::HelgaDialogue`'s 8 actions
+already ported at M58) is bigger, with its own Enchant-item sub-screen on
+top of the shared Give-item one. `IsValidShopAction`/`ShopActionCode`
+(M56) only cover shops 0-3's own menu-choice mapping either way -- shops
+4/5 have no equivalent confirmed selection-cost UI anywhere in `../src/`,
+an open question for whoever eventually builds Helga's own Enchant-item
+picker specifically (Beneca's Take-Crystal list is already confirmed:
+`Item.specialItemNames()`, ids 87-99). No bug-preservation dilemma blocks
+either -- see M53's own entry for the corrected `Shop.reset()` finding (it
+genuinely runs in the real game, via a static initializer); the one real
+surviving caveat is that `reset()` only ever runs ONCE per app launch
+there, not once per New Game, so quest-economy state carries over across a
+same-session death-restart -- not modeled by `ShopState` either way (this
+port has no live app-lifetime `Shop` instance to carry state between a
+death-restart and the next), just worth keeping in mind for whoever
+eventually adds one.
 
 Beyond that, M41's dispatch web is now FULLY wired -- M62 closed the last
 branch (`openInventory`), and M63 built and wired the in-game pause/
@@ -4293,10 +4413,17 @@ the M52 Continue-Game-softlock note below (which IS newly reachable as of
 M63's real Save/Load wiring). "Help" (pause-menu item 6) is confirmed
 wired-but-inert -- see M63's own entry for why (the Java transcription
 itself stops short of full topic text past index 4) -- and remains the
-next thing to finish once that transcription gap is closed. Following
-dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63
+next thing to finish once that transcription gap is closed. **Also note
+for whoever builds Beneca/Helga's own choices menus next (M64's own "what's
+next" note above):** M64's own big finding -- the real `npcHelloUI` ->
+`npcChoicesUI[npcId]` transition being a confirmed softlock for every NPC,
+not just shops 0-3 -- already covers shops 4/5 too; `main.cpp`'s own
+dismiss handling will need its `shopId >= 0 && shopId <= 3` range widened
+once their menus exist, same "honor `nextScreen`'s intended target"
+exception M64's own entry already established, not a new decision to
+make. Following dawnstar's own later milestones roughly but expecting
+further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63/M64
 already found.
 
 **Resolved by M63 (was: "heads up for whoever eventually wires a real Save

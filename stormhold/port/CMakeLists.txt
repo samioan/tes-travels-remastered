@@ -161,7 +161,10 @@ target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster
 # library to need stormhold_combat (SpellCasting::KnownSpellsSummary/
 # NthKnownSpellId/SpellTooltip, the Spells screen's own view-model
 # builders), no cycle since stormhold_combat never depends back on
-# stormhold_render.
+# stormhold_render. M64: ui/npc_choices_menu.cpp, the interactive
+# Train/Give/Befriend/Threaten/Kill follow-up menu for shops 0-3
+# (player/shop_interaction.h's own ShopInteraction::QuestShopDialogue,
+# already in stormhold_player -- no new library dependency).
 add_library(stormhold_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -172,6 +175,7 @@ add_library(stormhold_render STATIC
   src/render/visible_object_renderer.cpp
   src/ui/inventory_ui.cpp
   src/ui/menu_flow.cpp
+  src/ui/npc_choices_menu.cpp
   src/ui/npc_dialogue.cpp
   src/ui/pause_menu.cpp
 )
@@ -485,5 +489,9 @@ target_link_libraries(inventory_ui_smoke PRIVATE stormhold_render stormhold_play
 # M63 milestone smoke test -- see src/tests/m63_pause_menu_smoke.cpp.
 add_executable(pause_menu_smoke src/tests/m63_pause_menu_smoke.cpp)
 target_link_libraries(pause_menu_smoke PRIVATE stormhold_render stormhold_player stormhold_combat)
+
+# M64 milestone smoke test -- see src/tests/m64_npc_choices_menu_smoke.cpp.
+add_executable(npc_choices_menu_smoke src/tests/m64_npc_choices_menu_smoke.cpp)
+target_link_libraries(npc_choices_menu_smoke PRIVATE stormhold_render stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST

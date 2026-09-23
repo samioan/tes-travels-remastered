@@ -7,21 +7,29 @@ namespace stormhold {
 
 // A port-only blocking screen standing in for `../../../src/ESGame.java`'s
 // `npcHelloUI` (`new UIScreen(this, 4, 8)`, `talkToNpc()`'s own real
-// target) -- title (Shop.NAMES[npcId]) + word-wrapped dialogue body text,
-// dismissed back into live gameplay on Ok. **Deliberately NOT** the real
-// `npcChoicesUI[npcId]` follow-up screen (the interactive Train/Give/
-// Befriend/Threaten/Kill -- or Beneca/Helga's own item-donation/point-
-// spending -- menu, `ESGame.java`'s own screenGroups 9-14/20/22/27/350):
-// that's a substantially bigger lift (its own item-selection sub-screens,
-// result popups, and per-shop action dispatch) than this milestone's own
-// scope, matching the "one coherent slice at a time" discipline
-// `player/shop_interaction.h`'s own M56-M59 quartet already used for the
-// dialogue TEXT side of this same gap. See docs/PORT_ROADMAP.md's own
-// "what's next" note for the deferred follow-up screen.
+// target) -- title (Shop.NAMES[npcId]) + word-wrapped dialogue body text.
+//
+// **M64 update:** dismissing this (Enter) now transitions into
+// `ui/npc_choices_menu.h`'s own interactive follow-up menu for shops 0-3
+// (`main.cpp`'s own dismiss handling, keyed on `shopId` below) rather than
+// closing straight back to gameplay -- see that file's own class comment
+// for the real, confirmed softlock this deliberately does NOT reproduce
+// (the original's own `npcHelloUI` -> `npcChoicesUI[npcId]` transition is
+// broken for every NPC, not just these 4). Shops 4/5/6 still just close
+// back to gameplay on dismiss, same as before M64 -- their own choices
+// menus (Beneca/Helga's bespoke ones, and Varus's own confirmed-crashing
+// array-bounds issue) remain deliberately unbuilt, per that same class
+// comment's own "what's next" scoping.
 struct NpcDialogueState {
     bool active = false;
     std::string title;
     std::string body;
+    // M64: which NPC this greeting was for -- `main.cpp`'s own Enter-key
+    // dismiss handling reads this to decide whether to transition into
+    // `ui/npc_choices_menu.h`'s own follow-up menu (shops 0-3) or just
+    // close back to gameplay (shops 4/5/6, not built by any milestone
+    // yet -- see that file's own class comment).
+    int shopId = -1;
 };
 
 class NpcDialogue {
@@ -32,7 +40,7 @@ public:
     // greeting/Varus's lore reveal), which `Render` below treats as a
     // real paragraph break the same way `ui/menu_flow.cpp`'s own
     // `WordWrap` does for its message screens.
-    static void Show(NpcDialogueState& state, const std::string& title, const std::string& body);
+    static void Show(NpcDialogueState& state, const std::string& title, const std::string& body, int shopId);
 
     // Closes the screen, returning control to live gameplay.
     static void Dismiss(NpcDialogueState& state);

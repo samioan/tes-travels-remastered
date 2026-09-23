@@ -119,10 +119,11 @@ void TestNpcDialogueState() {
     NpcDialogueState state;
     Expect(!state.active, "a fresh NpcDialogueState should start inactive");
 
-    NpcDialogue::Show(state, "Arantamo", "Greetings, traveler.");
+    NpcDialogue::Show(state, "Arantamo", "Greetings, traveler.", 0);
     Expect(state.active, "Show should set active");
     Expect(state.title == "Arantamo", "Show should store the title");
     Expect(state.body == "Greetings, traveler.", "Show should store the body");
+    Expect(state.shopId == 0, "Show should store the shopId");
 
     NpcDialogue::Dismiss(state);
     Expect(!state.active, "Dismiss should clear active");
@@ -178,7 +179,7 @@ void TestEndToEndGreeting(const DungeonGeometry& geometry, const CharacterData& 
 
         NpcDialogueState dialogueState;
         if (line.has_value()) {
-            NpcDialogue::Show(dialogueState, Shop::kNames[shopId], *line);
+            NpcDialogue::Show(dialogueState, Shop::kNames[shopId], *line, shopId);
             Expect(dialogueState.active, "a real greeting line should open the dialogue screen");
             Expect(dialogueState.title == Shop::kNames[shopId], "the screen's title should be this NPC's own name");
             Expect(!dialogueState.body.empty(), "the screen's body should be the real dialogue line");

@@ -72,10 +72,11 @@ std::vector<std::string> WordWrap(const std::string& text, int maxWidthPx) {
 
 }  // namespace
 
-void NpcDialogue::Show(NpcDialogueState& state, const std::string& title, const std::string& body) {
+void NpcDialogue::Show(NpcDialogueState& state, const std::string& title, const std::string& body, int shopId) {
     state.active = true;
     state.title = title;
     state.body = body;
+    state.shopId = shopId;
 }
 
 void NpcDialogue::Dismiss(NpcDialogueState& state) {
