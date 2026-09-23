@@ -2061,25 +2061,28 @@ public class Player {
       }
    }
 
-   // LOW CONFIDENCE, feeds only a still-stubbed GameCanvas paint method
-   // (paintUnknown_b) -- was `r()`. The original body is `this.g(1); if
-   // (this.ab<=0) return -1; return this.ab!=1 ? -1 : k.a(this.z,this.w);`
-   // -- `this.g(1)` (a 1-arg void method, not independently traced here)
-   // and the state byte `ab`/tile bytes `z`,`w` are NOT confirmed against
-   // this file's other fields; `stateByteAb` below is a fresh, dedicated
-   // field rather than an assumed alias of anything else, and `z`/`w` are
-   // approximated as pendingTileX/pendingTileY (same declaration cluster,
-   // not independently proven). Revisit once GameCanvas's real pixel-
-   // rendering methods are ported and this call site's on-screen effect
-   // can be observed.
-   byte stateByteAb;
-
+   // RESOLVED (was LOW CONFIDENCE, see git history for the earlier
+   // `stateByteAb` version): was `r()` -- `this.g(1); if (this.ab<=0)
+   // return -1; return this.ab!=1 ? -1 : k.a(this.z,this.w);`. `g(1)` is
+   // this same file's own computePendingPosition() (the two sibling
+   // methods immediately above `r()` in decompiled/j.java, `n()`/`h()`,
+   // open with the identical `this.g(1); if (this.ab<=0) ...` guard and
+   // are already ported above as `currentDungeonMonsterAtPendingTile()`-
+   // /chest-lookup code using `pendingLevel`/`pendingTileX`/`pendingTileY`
+   // -- so `ab`/`z`/`w` are the same three fields here too, not a fresh
+   // unconfirmed alias). Independently corroborated by dawnstar's own
+   // `Player.java`, which names the identical shared-engine mechanic
+   // `pendingLevel`/`pendingTileX`/`pendingTileY` with full confidence
+   // (see its own `computePendingPosition()`-equivalent doc comment).
+   // `k.a(int,int)` (decompiled/k.java:124) is `Shop.questShopAt`,
+   // confirmed by direct read: it scans the 7 shop tiles for a position
+   // match with an active per-shop flag, exactly what's called below.
    int questShopAtPendingTile() {
-      if (this.stateByteAb <= 0) {
+      if (this.pendingLevel <= 0) {
          return -1;
       }
 
-      return this.stateByteAb != 1 ? -1 : Shop.questShopAt(this.pendingTileX, this.pendingTileY);
+      return this.pendingLevel != 1 ? -1 : Shop.questShopAt(this.pendingTileX, this.pendingTileY);
    }
 
    // Applies camp-rest recovery (was `e(boolean)`): restores a fraction of

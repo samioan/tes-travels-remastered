@@ -174,7 +174,11 @@ struct PlayerState {
 
     // --- Deferred to a later milestone, none touched by character
     // creation, core movement, or inventory: UI/rendering-only scratch
-    // state (endOfGameTriggered, stateByteAb).
+    // state (endOfGameTriggered). `questShopAtPendingTile()`'s own gap
+    // is closed now -- it needs no dedicated field beyond
+    // pendingLevel/pendingTileX/Y above, already present here; see
+    // ../../src/Player.java's doc comment for the resolved evidence
+    // trail once this struct's paint-side milestone gets built.
 };
 
 }  // namespace stormhold

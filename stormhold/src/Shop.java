@@ -257,9 +257,16 @@ public class Shop {
       }
    }
 
-   // Whether `player` is standing adjacent to Varus (shop 6) while in
-   // some confirmed-required state (`player.j == 1` in the original --
-   // name TODO, not the same as Monster's own unrelated field letters).
+   // Whether `player` is standing adjacent to Varus (shop 6), and on
+   // level 1. RESOLVED (was flagged "player.j == 1, name TODO"): found
+   // the actual original method, decompiled/k.java:450 `static boolean
+   // a(j var0) { if (var0.j != 1) return false; ... }` -- `var0.j` is
+   // Player's own field `j` (not Monster's unrelated field letters, just
+   // a same-letter coincidence), confirmed elsewhere to be currentLevel
+   // (decompiled/j.java's `g(int)`, the pendingLevel-computing method,
+   // defaults `this.ab = this.j` when no level boundary is crossed).
+   // What's below is a byte-for-byte-complete match of that method, not
+   // an approximation missing a condition.
    static boolean isAdjacentToVarus(Player player) {
       if (player.currentLevel != 1) {
          return false;

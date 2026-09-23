@@ -4560,14 +4560,34 @@ eventually adds one.
 Beyond that, M41's dispatch web is now FULLY wired -- M62 closed the last
 branch (`openInventory`), and M63 built and wired the in-game pause/
 Options menu (Stats/Inventory/Skills/Spells/Save Game/Load Game) plus a
-real Save/Load trigger against M50's `GameSave`. `paintUnknown_b()` (the
-one remaining unported-PIXEL paint method, the NPC/shop-portrait and
-Warden-compass icon painter -- gated on `unconfirmed_W`/`Player.
-questShopAtPendingTile()`, itself downstream of the Shop-economy gap
-above, AND itself flagged LOW CONFIDENCE by the original transcription
-pass -- `questShopAtPendingTile()`'s own field mapping,
-`stateByteAb`/pendingTileX/Y, is unconfirmed, not just unported) is now
-the only item left in that bucket. **Note for whoever eventually revisits
+real Save/Load trigger against M50's `GameSave`.
+
+**RESOLVED this session (no milestone -- confidence-only fix, no new
+player-visible behavior yet):** the confidence gate that's kept
+`paintUnknown_b()`/its C++ wiring deferred is closed. `Player.
+questShopAtPendingTile()` (was `r()`), the value `paintUnknown_b()`
+switches on, was flagged LOW CONFIDENCE because `this.ab`/`this.z`/
+`this.w` weren't cross-checked against this file's other fields. They
+now are: `r()`'s two sibling methods in `decompiled/j.java` (`n()`/`h()`,
+the monster-at/chest-at-pending-tile lookups, sitting immediately above
+it) open with the exact same `this.g(1); if (this.ab<=0) ...` guard and
+are already ported using `pendingLevel`/`pendingTileX`/`pendingTileY` --
+confirming `r()` uses the same three fields, not an unconfirmed alias.
+dawnstar's own `Player.java` independently corroborates: it names the
+identical shared-engine mechanic `pendingLevel`/`pendingTileX`/
+`pendingTileY` with full confidence. `src/Player.java`/`src/Shop.java`
+(the Java reference tree) updated accordingly (dropped the placeholder
+`stateByteAb` field, reused `pendingLevel` directly, both already exist
+on the C++ `PlayerState` too -- `port/src/player/player_state.h`'s own
+comment updated to match). **The C++ side is not wired yet** --
+`paintUnknown_b()`'s own render building blocks (`RenderMonsterOrIcon
+Sprite`/`RenderWardenCompassIcon`) already exist in `port/src/render/
+visible_object_renderer.cpp`, but the dispatcher itself and its
+`main.cpp` call site are still the concrete next step (along with
+`paintFlashOverlays()`, bundled in the same "gated on live tick-loop
+state" note at `main.cpp`'s own header comment -- that other half is
+untouched by this session's fix and still needs its own look). **Note
+for whoever eventually revisits
 M62's own `ui/inventory_ui.h` class comment:** the real `openInventory()`
 softlock it deliberately didn't reproduce is STILL not reproduced now
 that the pause menu exists -- `PauseMenu`'s own "Inventory" entry
@@ -4622,13 +4642,16 @@ reasons:**
    interactive greeting already "caught up," returning a repeat instead
    of fresh lore) but not one with any screen worth building, since the
    original itself never shows one.
-2. **The gating condition itself carries a confirmed, unresolved
-   transcription gap.** `Shop.isAdjacentToVarus(player)` (one of
-   `isNpcDialogueDue()`'s two triggers) has its own header comment flagging
-   an unconfirmed extra condition from the original bytecode (`player.j
-   == 1`, "name TODO") that the transcribed body does NOT include --
-   meaning the CURRENTLY transcribed `currentLevel==1 && adjacent-to-Varus`
-   check is known to be incomplete, not just unported. The OTHER trigger
+2. ~~**The gating condition itself carries a confirmed, unresolved
+   transcription gap.**~~ **RESOLVED this session:** found the actual
+   original method (`decompiled/k.java:450`, `static boolean a(j var0)`)
+   -- `Shop.isAdjacentToVarus(player)`'s transcribed `currentLevel==1
+   && adjacent-to-Varus` body is a byte-for-byte-complete match, not an
+   approximation; `player.j` is just `currentLevel` under another name
+   (confirmed via `decompiled/j.java`'s `g(int)`), already covered by the
+   `currentLevel==1` check. See `Shop.java`'s updated doc comment. Reason
+   1 above (confirmed dead code, no player-visible screen) still stands
+   on its own regardless. The OTHER trigger
    (`isNpcDialogueDue()`'s own level-37/monster-typeIndex-41 branch,
    presumably the final boss, given `newEndOfGameUI`'s own `Shop.
    dialogue[7][4]` "Victory!" text) is completely unexplored by this
@@ -4640,14 +4663,10 @@ reasons:**
    independent confirmation before treating as faithful rather than a
    transcription artifact.
 
-Building this now would mean either reproducing confirmed dead code with
-no player-visible behavior (not worth a milestone on its own) or guessing
-past a documented, unresolved bytecode-level gap -- exactly the
-"revisit once more can be confirmed" situation `Player.java`'s own
-`stateByteAb`/`questShopAtPendingTile()` comment (see `paintUnknown_b()`'s
-own note above) already models the right posture for. Left here as a
-confirmed, thoroughly-researched finding for whenever more of the original
-bytecode can be independently checked, not a "what's next" action item.
+Building this now would still mean reproducing confirmed dead code with no
+player-visible behavior -- not worth a milestone on its own, even with
+reason 2 above now resolved rather than an open gap. Left here as a
+confirmed, thoroughly-researched finding, not a "what's next" action item.
 
 **Resolved by M63 (was: "heads up for whoever eventually wires a real Save
 trigger", M52's own finding):** `savegame.dat` now actually gets written,
