@@ -1,6 +1,7 @@
 // M15 smoke test: PlayerLeveling against a real created character, plus
 // an integration check that combat/combat_resolution.h's PlayerAttack/
 // MonsterTick now actually award the skill exp M13/M14 both had to defer.
+#include <array>
 #include <cstdio>
 #include <string>
 
@@ -12,6 +13,7 @@
 #include "monster/monster_runtime.h"
 #include "player/player_creation.h"
 #include "player/player_leveling.h"
+#include "world/shop_state.h"
 
 namespace {
 
@@ -80,8 +82,20 @@ void TestConsumeLevelExpAndPendingNames(const stormhold::CharacterData& charData
     std::printf("-- ConsumeLevelExp + PendingLevelUpAttributeNames --\n");
     stormhold::PlayerState p = stormhold::PlayerCreation::CreateCharacter(0, "Leveler2", 1, charData, items);
     p.coreStats[1] = 12;
-    stormhold::PlayerLeveling::ConsumeLevelExp(p);
+
+    // M54: ConsumeLevelExp now calls Shop::ClearQuestTurnInState for
+    // real -- give it dirty questState1/2 first so the call is actually
+    // observable, not just "still zero from a fresh ShopState".
+    stormhold::ShopState shop;
+    shop.questState1 = {1, 2, 3, 4};
+    shop.questState2 = {5, 6, 7, 8};
+
+    stormhold::PlayerLeveling::ConsumeLevelExp(p, shop);
     Expect(p.coreStats[1] == 2, "ConsumeLevelExp should subtract exactly 10");
+    Expect(shop.questState1 == std::array<int8_t, 4>{0, 0, 0, 0},
+           "ConsumeLevelExp should clear questState1 for shops 0-3 via Shop::ClearQuestTurnInState");
+    Expect(shop.questState2 == std::array<int8_t, 4>{0, 0, 0, 0},
+           "ConsumeLevelExp should clear questState2 for shops 0-3 via Shop::ClearQuestTurnInState");
 
     p.levelUpAttributeFlags = 0;
     Expect(stormhold::PlayerLeveling::PendingLevelUpAttributeNames(p, charData).empty(),
@@ -109,7 +123,9 @@ void TestApplyLevelUpAttributeChoices(const stormhold::CharacterData& charData, 
     // coreStats[5]/maxMagicka), and 10 (feeds coreStats[3] too) as
     // first/second/third picks -- deliberately overlapping so the +3/+2
     // weighting is independently checkable per attribute.
-    stormhold::PlayerLeveling::ApplyLevelUpAttributeChoices(p, 0, 2, 10);
+    stormhold::ShopState shop;
+    shop.questState1[0] = 9;  // M54: dirtied so ConsumeLevelExp's own clear is observable below.
+    stormhold::PlayerLeveling::ApplyLevelUpAttributeChoices(p, 0, 2, 10, shop);
 
     Expect(p.attributes[0] == a0Before + 3, "the FIRST choice should get +3");
     Expect(p.attributes[2] == a2Before + 2, "the SECOND choice should get +2");
@@ -125,6 +141,8 @@ void TestApplyLevelUpAttributeChoices(const stormhold::CharacterData& charData, 
            "maxMagicka should change given attributes[2] moved (unless this class has 0 magicka factor)");
 
     Expect(p.coreStats[1] == 0, "ApplyLevelUpAttributeChoices should consume the 10 level-exp");
+    Expect(shop.questState1[0] == 0,
+           "ApplyLevelUpAttributeChoices's own ConsumeLevelExp call should clear questState1 too (M54)");
 }
 
 void TestCombatAwardsSkillExp(const stormhold::CharacterData& charData, const stormhold::ItemDatabase& items,

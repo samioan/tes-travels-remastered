@@ -4,6 +4,7 @@
 
 #include "assets/character_data.h"
 #include "player/player_state.h"
+#include "world/shop_state.h"
 
 namespace stormhold {
 
@@ -19,18 +20,20 @@ namespace stormhold {
 // the missing decision" pattern as M9's traitor-index roll/M13's
 // interactionCount.
 //
-// NOT ported here: `Shop.clearQuestTurnInState()`, a confirmed real
-// cross-system coupling `consumeLevelExp()` triggers on every rank-up
-// (see ../../../src/Player.java's own header comment, and M13/M14's
-// "what's next" notes flagging this exact gap) -- `ConsumeLevelExp`
-// below still skips it, flagged at the skip site rather than silently
-// dropped. **M53 update:** a live `ShopState` now exists
-// (world/shop_state.h, see its own class comment -- including a
-// correction of an earlier `Shop.reset()` finding this comment itself
-// used to cite), so wiring a real `clearQuestTurnInState()`-equivalent
-// call here is now just an ordinary, not-yet-done port completeness gap
-// (needs `ConsumeLevelExp` to take a `ShopState&`), left for a later
-// milestone rather than done as part of correcting that finding.
+// **M54: `Shop.clearQuestTurnInState()`** -- a confirmed real cross-system
+// coupling `consumeLevelExp()` triggers on every rank-up (see
+// ../../../src/Player.java's own header comment, and M13/M14's "what's
+// next" notes that first flagged this exact gap) -- is now wired for
+// real via `world/shop_state.h`'s `Shop::ClearQuestTurnInState` (M53's
+// own `ShopState`, with its corrected, faithful `Shop.reset()` defaults).
+// `ConsumeLevelExp`/`ApplyLevelUpAttributeChoices` below both take a new
+// `ShopState&` to do it. Currently inert in the live port either way --
+// neither this class nor `ApplyLevelUpAttributeChoices` has a call site
+// in `main.cpp`'s own tick loop yet (the real level-up-confirm flow needs
+// a 3-step attribute-choice UI screen this port doesn't have, same gap
+// this class's own header comment already notes for the UI itself) --
+// same "wire the primitive correctly, live UI wiring is later" shape
+// M53 itself used for `ShopState`.
 class PlayerLeveling {
 public:
     // Player.gainSkillExp(skillIndex, amount): adds to skills[i][2] (exp
@@ -58,9 +61,13 @@ public:
     // to spend that level-exp on.
     static bool TryRankUpSkills(PlayerState& p, const CharacterData& charData);
 
-    // Player.consumeLevelExp(): spends 10 level-exp (coreStats[1] -= 10).
-    // SIMPLIFIED: skips Shop.clearQuestTurnInState() -- see class comment.
-    static void ConsumeLevelExp(PlayerState& p) { p.coreStats[1] = static_cast<int16_t>(p.coreStats[1] - 10); }
+    // Player.consumeLevelExp(): calls Shop.clearQuestTurnInState() (M54,
+    // see class comment) then spends 10 level-exp (coreStats[1] -= 10),
+    // matching the original's own statement order exactly.
+    static void ConsumeLevelExp(PlayerState& p, ShopState& shop) {
+        Shop::ClearQuestTurnInState(shop);
+        p.coreStats[1] = static_cast<int16_t>(p.coreStats[1] - 10);
+    }
 
     // Player.pendingLevelUpAttributeNames(): the names of every attribute
     // pair (attributeNames[2*i]) whose bit is set in levelUpAttributeFlags
@@ -78,7 +85,8 @@ public:
     // game doesn't either; flags accumulate across rank-ups and are only
     // ever read by PendingLevelUpAttributeNames, never reset by this
     // method or any other confirmed call site in Player.java.
-    static void ApplyLevelUpAttributeChoices(PlayerState& p, int firstChoice, int secondChoice, int thirdChoice);
+    static void ApplyLevelUpAttributeChoices(PlayerState& p, int firstChoice, int secondChoice, int thirdChoice,
+                                              ShopState& shop);
 };
 
 }  // namespace stormhold

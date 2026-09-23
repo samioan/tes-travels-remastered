@@ -35,8 +35,8 @@ std::vector<std::string> PlayerLeveling::PendingLevelUpAttributeNames(const Play
     return out;
 }
 
-void PlayerLeveling::ApplyLevelUpAttributeChoices(PlayerState& p, int firstChoice, int secondChoice,
-                                                   int thirdChoice) {
+void PlayerLeveling::ApplyLevelUpAttributeChoices(PlayerState& p, int firstChoice, int secondChoice, int thirdChoice,
+                                                   ShopState& shop) {
     p.attributes[static_cast<size_t>(firstChoice)] =
         static_cast<int16_t>(p.attributes[static_cast<size_t>(firstChoice)] + 3);
     p.attributes[static_cast<size_t>(secondChoice)] =
@@ -44,7 +44,7 @@ void PlayerLeveling::ApplyLevelUpAttributeChoices(PlayerState& p, int firstChoic
     p.attributes[static_cast<size_t>(thirdChoice)]++;
 
     PlayerCreation::ComputeDerivedStats(p);
-    ConsumeLevelExp(p);
+    ConsumeLevelExp(p, shop);
 }
 
 }  // namespace stormhold

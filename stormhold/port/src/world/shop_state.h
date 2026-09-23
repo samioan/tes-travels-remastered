@@ -93,6 +93,17 @@ public:
     // Shop.isQuestShop(shopId): SHOP_CATEGORY[shopId] == 1.
     static bool IsQuestShop(int shopId) { return kShopCategory[shopId] == 1; }
 
+    // Shop.clearQuestTurnInState(): clears per-level-up quest-turn-in
+    // state for shops 0-3 (questState1[i]/questState2[i] = 0). Confirmed
+    // sole caller in the original: Player.consumeLevelExp() (M54, see
+    // player/player_leveling.h's own ConsumeLevelExp).
+    static void ClearQuestTurnInState(ShopState& state) {
+        for (int i = 0; i < 4; i++) {
+            state.questState1[static_cast<size_t>(i)] = 0;
+            state.questState2[static_cast<size_t>(i)] = 0;
+        }
+    }
+
     // Shop.questShopAt(x, y): which of shops 0-6 sits at (x, y) AND still
     // has its own one-shot `questRewardClaimable` flag set -- a
     // flag-gated position lookup, not a plain one. Returns -1 when none

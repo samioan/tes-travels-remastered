@@ -3536,39 +3536,53 @@ this milestone's own); full clean rebuild stayed at zero `/W4` warnings.
 Manually launched the real windowed exe and confirmed it starts and
 stays up.
 
+## M54: `Shop.clearQuestTurnInState()` wired into `ConsumeLevelExp`
+
+**Scope.** New `Shop::ClearQuestTurnInState(ShopState&)` (`world/
+shop_state.h`): clears `questState1[i]`/`questState2[i]` for shops 0-3,
+the real per-level-up quest-turn-in reset. `PlayerLeveling::
+ConsumeLevelExp`/`ApplyLevelUpAttributeChoices` (`player/player_leveling.h`
+/`.cpp`) both now take a `ShopState&` and call it, matching
+`Player.consumeLevelExp()`'s own real statement order exactly (clear
+first, then spend the 10 level-exp). Closes the gap M13/M14's own "what's
+next" notes first flagged and M53 built `ShopState` specifically to be
+able to close. Currently inert in the live port either way -- neither
+`ConsumeLevelExp` nor `ApplyLevelUpAttributeChoices` has a call site in
+`main.cpp`'s own tick loop yet (the real level-up-confirm flow needs a
+3-step attribute-choice UI screen this port doesn't have) -- same "wire
+the primitive correctly, live UI wiring is a later milestone" shape M53
+itself used for `ShopState` as a whole.
+
+**Verification.** `m15_player_leveling_smoke.cpp`'s existing
+`TestConsumeLevelExpAndPendingNames`/`TestApplyLevelUpAttributeChoices`
+both updated: a `ShopState` with deliberately dirtied `questState1`/
+`questState2` is passed through, and both tests now assert those fields
+land back at all-zero after the call, confirming the wiring actually
+fires (not just "still zero from a fresh `ShopState`"). 50 smoke tests
+pass; full clean rebuild stayed at zero `/W4` warnings. Manually launched
+the real windowed exe and confirmed it starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
 port -- doing so needs the REST of a real `Shop`-economy C++ model
-(M53 built the data struct and pure lookup helpers; still missing:
-porting `Shop.dialogue()`'s own large per-action switch and deciding the
-conscious question M53's own finding raises, below), which would also
-finally unblock the NPC-talk half of `resolveInteractInput()` and the
-NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's own
-"what's next" note) in the live port, AND `writeMasterLists()`/
-`readMasterLists()`'s own missing half of the save format (M49's own
-"what's next" note, still open post-M53). That's a substantially bigger
+(M53 built the data struct and pure lookup helpers, M54 wired
+`clearQuestTurnInState()`; still missing: porting `Shop.dialogue()`'s own
+large per-action switch), which would also finally unblock the NPC-talk
+half of `resolveInteractInput()` and the NPC-nameplate half of
+`refreshNpcNameplateAndWardenLeave()` (M43's own "what's next" note) in
+the live port, AND `writeMasterLists()`/`readMasterLists()`'s own missing
+half of the save format (M49's own "what's next" note, still open post-
+M54 -- `Item::nextSpawnId`/`Monster::nextSpawnIdCounter` plus the rest of
+`ShopState` all still need serializing). That's a substantially bigger
 lift than camp/rest or chest interaction were, likely worth its own
-multi-part treatment rather than one milestone.
-
-**Correction note for whoever picks this up:** M51's original heads-up
-here (and M53's own first draft) claimed `Shop.reset()` has zero callers
-in the real game, making Save/Load and completing a level-up
-unconditionally crash there. That was WRONG -- both greps missed `Shop.
-java`'s own trailing `static { reset(); }` initializer, a real call site
-the JVM runs automatically on class load. `Shop.reset()` DOES run in the
-real game (see M53's own entry above for the full correction). There is
-NO bug to preserve or avoid here: wiring `ShopState` into
-`PlayerLeveling::ConsumeLevelExp` (a real `Shop.clearQuestTurnInState()`
-call) and into the save format (`writeMasterLists()`/`readMasterLists()`'s
-still-missing half, M49's own note) are both just ordinary, not-yet-done
-completeness work now that a correctly-defaulted `ShopState` exists to
-wire them to -- no conscious "preserve the bug vs. deliberate exception"
-decision needed. The one real caveat that survives the correction:
-`Shop.reset()`, via a static initializer, only ever runs ONCE per app
-launch in the real game, not once per New Game, so quest-economy state
-carries over across a same-session death-restart -- worth keeping in mind
-whichever milestone actually wires this, not urgent on its own.
+multi-part treatment rather than one milestone. No bug-preservation
+dilemma blocks it either way -- see M53's own entry for the corrected
+`Shop.reset()` finding (it genuinely runs in the real game, via a static
+initializer); the one real surviving caveat is that `reset()` only ever
+runs ONCE per app launch there, not once per New Game, so quest-economy
+state carries over across a same-session death-restart, worth keeping in
+mind whichever milestone actually wires the save format.
 
 Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
@@ -3590,7 +3604,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own
