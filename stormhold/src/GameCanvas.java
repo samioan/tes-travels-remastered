@@ -2197,35 +2197,105 @@ public class GameCanvas extends FullCanvas implements Runnable {
       return lines;
    }
 
-   // NOT transcribed this session -- was decompiled/e.java's `void d(int)`
-   // (distinct from the already-ported d(long) = resolveAttackInput()).
-   // Confirmed caller: resolveInteractInput() (below) when
-   // Player.shopAheadOfPlayer() finds an NPC/shop tile directly ahead.
-   // Real body confirmed by reading decompiled/e.java directly: calls
-   // Shop.dialogue(player, npcId, 1, 0) (already fully ported), then wires
-   // the result into ESGame.npcHelloUI (decompiled `aq`, position-confirmed
-   // against ESGame.java's own field order this session) --
-   // setTitle(Shop.NAMES[npcId]), setMessageBody(dialogueText),
-   // nextScreen=ESGame.npcChoicesUI[npcId] (decompiled `R[]`, also
-   // position-confirmed) -- plus a "<TAG>" template substitution
-   // (UIScreen.tagTemplate, Util's own substitution helper) using one of
-   // Shop's per-NPC point totals depending on which NPC. A null dialogue()
-   // result falls back to a hardcoded "has nothing more to say" message for
-   // Beneca(4)/Helga(5) specifically. NOT finished this session: the exact
-   // UIScreen field this reads for the substitution VALUE (decompiled
-   // `.N`, an int) hasn't been cross-referenced against UIScreen.java's own
-   // field list with confidence yet -- needs one more pass before this can
-   // be transcribed responsibly rather than guessed.
+   // Confirmed (phase-3 port M44): byte-for-byte from decompiled/e.java's
+   // `void d(int)` (distinct from the already-ported d(long) =
+   // resolveAttackInput()). Confirmed caller: resolveInteractInput()
+   // (below) when Player.shopAheadOfPlayer() finds an NPC/shop tile
+   // directly ahead.
+   //
+   // Calls Shop.dialogue(player, npcId, 1, 0) (already fully ported) --
+   // action=1 is the "greeting" branch for quest shops 0-3, and Beneca/
+   // Helga/Varus's own branches further down dialogue()'s switch. A
+   // non-null result wires it into ESGame.npcHelloUI (decompiled `aq`,
+   // position-confirmed against ESGame.java's own field order, and
+   // CONFIRMED behaviorally too -- both are constructed identically via
+   // `new UIScreen(this, 4, 8)` / `setupMessage("NPC name here", "NPC
+   // text here", true)`): setTitle(Shop.NAMES[npcId]),
+   // setMessageBody(dialogueLine), nextScreen=ESGame.npcChoicesUI[npcId]
+   // (decompiled `R[]`, also position-confirmed).
+   //
+   // The last piece this method needed (closing out decompiled/e.java
+   // completely): decompiled `.N`, an int field on UIScreen, position-
+   // and type-confirmed this session as UIScreen.contextIndex -- the
+   // SAME reusable per-screen scratch slot ESGame.java's dispatcher
+   // already uses for shopId/level-up-attribute-index. This is a SECOND
+   // confirmed write site for it, npcId this time; UIScreen.java's own
+   // "declared, never seen read/written again" comment on that field
+   // predates this finding (and was already stale even without it --
+   // see UIScreen.contextIndex's own updated comment) and is corrected
+   // alongside this method.
+   //
+   // Immediately re-reads THAT next screen (npcChoicesUI[npcId], via the
+   // very nextScreen reference just assigned, same indirection the
+   // original uses rather than re-indexing the array) and substitutes
+   // its own tagTemplate's "<TAG>" placeholder (Util.replace) with one of
+   // Shop's per-NPC point totals: rewardsGiven[npcId] for quest shops 0-3
+   // (Shop.isQuestShop), benecaPoints for npc 4, helgaPoints for npc 5 --
+   // Varus (6) hits none of these branches, so the substituted value
+   // stays 0 for him.
+   //
+   // **A real, confirmed dead read, preserved rather than cleaned up:**
+   // the re-read screen's own messageBody() is called and its result
+   // immediately discarded -- overwritten by the very next statement
+   // without ever being read back. Same "assigned but never used" shape
+   // as M43's `record[2] = 2` dead byte, just at method-call granularity.
+   //
+   // A null dialogue() result (Beneca(4)/Helga(5) only, per dialogue()'s
+   // own null-returning branches) falls back to re-showing THEIR OWN
+   // existing choices screen with the same substitution and a hardcoded
+   // "has nothing more to say" println, instead of opening a fresh hello
+   // popup.
    private void talkToNpc(int npcId) {
-      throw new UnsupportedOperationException("TODO: not yet transcribed (was e.java's void d(int))");
+      String dialogueLine = Shop.dialogue(this.player, npcId, 1, 0);
+      System.out.println("Just after NPC interaction in game canvas!");
+      if (dialogueLine != null) {
+         this.game.npcHelloUI.setTitle(Shop.NAMES[npcId]);
+         this.game.npcHelloUI.setMessageBody(dialogueLine);
+         this.game.npcHelloUI.nextScreen = this.game.npcChoicesUI[npcId];
+         this.game.npcHelloUI.contextIndex = npcId;
+         UIScreen choicesUI = (UIScreen) this.game.npcHelloUI.nextScreen;
+         String template = choicesUI.tagTemplate;
+         choicesUI.messageBody(); // confirmed dead read -- see this method's own header comment
+         short pointTotal = 0;
+         if (Shop.isQuestShop(npcId)) {
+            pointTotal = Shop.rewardsGiven[npcId];
+         } else if (npcId == 4) {
+            pointTotal = Shop.benecaPoints;
+         } else if (npcId == 5) {
+            pointTotal = Shop.helgaPoints;
+         }
+
+         String substituted = Util.replace(template, "<TAG>", pointTotal);
+         choicesUI.setMessageBody(substituted);
+         this.game.showScreen(this.game.npcHelloUI);
+         autoRepaintEnabled = false;
+      } else if (npcId == 4) {
+         System.out.println("BENECA has nothing more to say!");
+         UIScreen choicesUI = this.game.npcChoicesUI[4];
+         String template = choicesUI.tagTemplate;
+         choicesUI.messageBody(); // confirmed dead read -- see this method's own header comment
+         String substituted = Util.replace(template, "<TAG>", Shop.benecaPoints);
+         choicesUI.setMessageBody(substituted);
+         this.game.showScreen(choicesUI);
+         autoRepaintEnabled = false;
+      } else if (npcId == 5) {
+         System.out.println("HELGA has nothing more to say!");
+         UIScreen choicesUI = this.game.npcChoicesUI[5];
+         String template = choicesUI.tagTemplate;
+         choicesUI.messageBody(); // confirmed dead read -- see this method's own header comment
+         String substituted = Util.replace(template, "<TAG>", Shop.helgaPoints);
+         choicesUI.setMessageBody(substituted);
+         this.game.showScreen(choicesUI);
+         autoRepaintEnabled = false;
+      }
    }
 
    // Confirmed (phase-3 port M41): byte-for-byte from decompiled/e.java's
    // f(long) -- tickPlayerAction/e(long)'s own unconfirmed_ay branch (key
    // '9' when hotbarActionSet==2). Player.shopAheadOfPlayer() (already
    // ported) first: >=0 means an NPC/shop tile is directly ahead ->
-   // delegates to talkToNpc() (above -- NOT transcribed this session, see
-   // its own header comment). Otherwise, when checkChestAhead() (above)
+   // delegates to talkToNpc() (above -- transcribed M44, see its own
+   // header comment). Otherwise, when checkChestAhead() (above)
    // already found a chest on the look-ahead tile this tick
    // (unconfirmed_m), re-reads it and calls Player.collectChestItem()
    // (already ported since M12) -- confirmed 0=auto-dropped (inventory

@@ -74,8 +74,13 @@ public class UIScreen implements Runnable {
    // tag, a screen-group/category id, or something else -- every instance
    // just stores whatever its constructor caller passed.
    int screenGroup;
-   // TODO: constructor sets this to 0 and it's never seen read/written
-   // again in what's been traced.
+   // A reusable per-screen scratch int, repurposed by whichever screen
+   // needs it: ESGame.java's own dispatcher stores a shopId in it for
+   // several shop-result screens and a level-up attribute-choice index
+   // for levelUpUI (confirmed by many read/write sites there), and
+   // GameCanvas.talkToNpc() (M44) stores an npcId in it on npcHelloUI --
+   // this comment used to claim no read/write site had been found, which
+   // was already stale before M44 even added its own.
    int contextIndex;
    private ESGame game;
    // Real MIDP Screen (List or Form), used as a pure data container -- see

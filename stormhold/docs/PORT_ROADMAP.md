@@ -2798,17 +2798,75 @@ read-through.
       starts and stays up -- same lighter-weight verification level M42
       used, not a full interactive walkthrough.
 
+- [x] **M44 -- `talkToNpc()`, closing out `decompiled/e.java` completely
+      (Java only)** (this session). Same bounded "pure Java transcription,
+      no C++" scope M41/M22 already established. Resolved the one piece
+      M41 left unfinished: the decompiled `.N` field on `h`/`UIScreen`,
+      position- AND type-confirmed this session (a 27-field, byte-for-
+      byte type-sequence match against `UIScreen.java`'s own declaration
+      order, from `Q`/`mode` through `A`/`highlightAllLines`) as
+      `UIScreen.contextIndex` -- a SECOND confirmed write site for that
+      reusable per-screen scratch int (ESGame.java's dispatcher already
+      uses it for shopId/level-up-attribute-index), which also means
+      `contextIndex`'s own "declared, never seen read/written again"
+      comment was already stale before this session even found its own
+      site; corrected in `UIScreen.java` alongside this method.
+
+      `talkToNpc()` calls `Shop.dialogue(player, npcId, 1, 0)` (already
+      fully ported since an earlier session) and, on a non-null result,
+      wires it into `ESGame.npcHelloUI` (decompiled `aq`, position-
+      confirmed AND behaviorally confirmed -- both are constructed
+      identically via `new UIScreen(this, 4, 8)` /
+      `setupMessage("NPC name here", "NPC text here", true)`):
+      `setTitle`/`setMessageBody`/`nextScreen = npcChoicesUI[npcId]`
+      (decompiled `R[]`, also position-confirmed)/`contextIndex = npcId`.
+      Then re-reads that same next screen and substitutes its
+      `tagTemplate`'s `<TAG>` placeholder (`Util.replace`) with one of
+      Shop's per-NPC point totals: `rewardsGiven[npcId]` for quest shops
+      0-3 (`Shop.isQuestShop`), `benecaPoints` for npc 4, `helgaPoints`
+      for npc 5 -- Varus (6) hits none of these branches. A null
+      `dialogue()` result (Beneca(4)/Helga(5) only) falls back to
+      re-showing their own existing choices screen with the same
+      substitution and a hardcoded "has nothing more to say" println.
+
+      **A real, confirmed dead read, preserved rather than cleaned up:**
+      the re-read screen's own `messageBody()` is called and its result
+      immediately discarded, overwritten by the very next statement
+      without ever being read back -- same "assigned but never used"
+      shape as M43's `record[2] = 2` dead byte, just at method-call
+      granularity instead of a struct field.
+
+      `GameCanvas.java` now has zero remaining `UnsupportedOperationException`
+      stubs for anything outside the ~15 pixel-paint helper methods the
+      file's own header comment already scopes out (`paintFlashOverlays()`/
+      `paintUnknown_b()` chief among the still-unread ones) -- every
+      non-paint dispatch method is transcribed. Verified via a clean
+      `javac --release 8` recompile against the MIDP stub jars (3
+      warnings, all pre-existing/unrelated, 0 errors).
+
+      **Deliberately NOT wired into the C++ port this session**, same
+      reasoning M43 already gave for deferring this exact method: no
+      Shop-economy C++ model exists at all yet (`ShopDialogue` in
+      `port/src/assets/shop_dialogue.h` is a pure string-table loader, no
+      `questRewardClaimable`/`benecaPoints`/`rewardsGiven`/`questState1`/
+      `questState2` live state), and `Shop.dialogue()`'s own real body is
+      a large per-shopId/per-action switch -- porting it responsibly is a
+      milestone of its own, not a quick follow-on to a Java-only pass.
+
 ## What's next
 
-`talkToNpc()` (`GameCanvas.java`, was decompiled/e.java's `void d(int)`)
-is the one remaining unread corner of `decompiled/e.java` -- see its own
-header comment for exactly what's missing (one `UIScreen` field
-cross-reference), and it's now the single blocker for BOTH the NPC-talk
-half of `resolveInteractInput()` and the NPC-nameplate half of
-`refreshNpcNameplateAndWardenLeave()` (M43's own "what's next" note
-above) -- alongside `Shop.questShopAt()`'s own live
-`questRewardClaimable[7]` state, which has no C++ model at all yet
-either. Beyond that, M41's dispatch web still has spell casting/cycling
+`talkToNpc()` is now fully transcribed (M44), but NOT wired into the C++
+port -- doing so needs a real `Shop`-economy C++ model first
+(`questRewardClaimable[7]`/`questState1`/`questState2`/`benecaPoints`/
+`helgaPoints`/`rewardsGiven`/`interactionCount`, plus porting
+`Shop.dialogue()`'s own large per-action switch), which would also
+finally unblock the NPC-talk half of `resolveInteractInput()` and the
+NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's own
+"what's next" note) in the live port. That's a substantially bigger lift
+than camp/rest or chest interaction were, likely worth its own multi-part
+treatment rather than one milestone.
+
+Beyond that, M41's dispatch web still has spell casting/cycling
 (`resolveSpellCastInput`/`resolveSpellCycleInput` -- both fully confirmed
 Java, `Player.castOnSelf`/`castOnMonster`/`cycleSelectedSpell` already
 exist, but neither has a C++ port yet) and opening the inventory screen
@@ -2826,5 +2884,5 @@ death/respawn sequence (M42's own "what's next" note carried forward);
 Help topics (the Java transcription itself stops at topic index 4).
 Following dawnstar's own later milestones roughly but expecting further
 Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44
 already found.
