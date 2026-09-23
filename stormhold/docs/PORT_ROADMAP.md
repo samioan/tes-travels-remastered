@@ -3607,26 +3607,83 @@ signature. 48 smoke tests pass; full clean rebuild stayed at zero `/W4`
 warnings. Manually launched the real windowed exe and confirmed it
 starts and stays up.
 
+- [x] **M56 -- `ShopInteraction`, shops 0-3's quest-turn-in dialogue
+      dispatch** (this session). New `player/shop_interaction.h`/`.cpp`
+      (`stormhold_player`, not `world/shop_state.h`'s own `Shop` class in
+      `stormhold_world` -- this needs `PlayerState` directly, and
+      `stormhold_world` cannot depend on `stormhold_player`, the
+      dependency runs the other way): `ShopInteraction::QuestShopDialogue`
+      ports `Shop.dialogue()`'s shopId-0-3 case (actions 1-6: greet,
+      first/second quest-ask, quest-item/cooldown-item turn-in, rumor
+      request, reward claim) verbatim, plus `IsValidShopAction`/
+      `ShopActionCode` (confirmed shops-0-3-ONLY by reading `Shop.java`
+      directly -- the original's own switch has no case at all for shopId
+      4-6) and `RumorFor`. First real slice of the dispatcher the roadmap
+      flagged after M55 as "worth its own multi-part treatment" --
+      deliberately split the same "one coherent slice at a time" way
+      M53/M54/M55 already split `ShopState` itself, rather than attempted
+      whole (dawnstar's own equivalent milestone, M45, did theirs in one
+      pass, but that port also has buy/sell and 9 NPCs to Stormhold's
+      none/7 -- a smaller lift here justifies smaller slices instead).
+      Deliberately NOT covered: shops 4 (Beneca)/5 (Helga)/6 (Varus) --
+      each a bespoke single-NPC branch sharing no pattern with this one or
+      each other (`Shop.java`'s own header comment already says so) --
+      left for later milestones.
+
+      **A real, confirmed original quirk, ported exactly rather than given
+      separate storage:** `Shop.rumorFor(player, step)`'s per-step
+      ask-count (`player.skills[step][0]`) is the SAME storage cell that
+      skill's own real combat rank lives in (`PlayerCombatStats::
+      SkillValue`/`GainSkillExp`, M13/M15) -- not a dedicated field. Also
+      confirmed directly from `Shop.java`'s own category-15 branch: the
+      "reduce the greeting cooldown" item's magnitude reuses
+      `itemsin.dat`'s `questFlags` column as a RAW (non-bit-extracted)
+      value, the same "column reuse for an unrelated purpose" shape M13's
+      own `weaponDamage()`/`armorValue()` finding and M53's own
+      `QuestFlagsFor` both already established for that column.
+
+      Verified by a new `shop_interaction_smoke.exe` against real
+      `itemsin.dat`/`npcstrings.dat`/`charin.dat` data and a real created
+      character (M9): `IsValidShopAction`/`ShopActionCode`'s shops-0-3-only
+      matched pair; `RumorFor`'s first-ask vs. repeat-ask template
+      substitution and its shared skill-rank storage; the greet branch's
+      first-visit/cooldown/fatigued/random-line cases (the random line
+      cross-checked against a twin `JavaRandom` predicting
+      `lingoRandomInt(3)`'s own pick); both quest-ask actions' full
+      outcome-dependent state-transition matrix across 10+ seeds each,
+      cross-checked against a twin call into the already-trusted
+      `PlayerCombatStats::RollShopOutcome` (not re-deriving the roll
+      formula, M13 already did that) to predict the exact outcome before
+      asserting on it; the category-15 cooldown-reducer and category-11
+      quest-item turn-ins, both found by scanning real `itemsin.dat` rather
+      than hardcoded ids (same precedent M43's own item-scan approach set);
+      the reward-gated rumor request; the reward-claim action's
+      `questRewardClaimable` clear and hub tile bit-32 clear; and the
+      no-matching-action `std::nullopt` fallthrough. 49 smoke tests pass;
+      full clean rebuild stayed at zero `/W4` warnings. Manually launched
+      the real windowed exe and confirmed it starts and stays up.
+
 ## What's next
 
-`talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
-port -- doing so needs the REST of a real `Shop`-economy C++ model
-(M53 built the data struct and pure lookup helpers, M54 wired
-`clearQuestTurnInState()`, M55 wired the save format; still missing:
-porting `Shop.dialogue()`'s own large per-action switch), which would
-also finally unblock the NPC-talk half of `resolveInteractInput()` and
-the NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's
-own "what's next" note) in the live port. That's a substantially bigger
-lift than camp/rest or chest interaction were, likely worth its own
-multi-part treatment rather than one milestone. No bug-preservation
-dilemma blocks it either way -- see M53's own entry for the corrected
-`Shop.reset()` finding (it genuinely runs in the real game, via a static
-initializer); the one real surviving caveat is that `reset()` only ever
-runs ONCE per app launch there, not once per New Game, so quest-economy
-state carries over across a same-session death-restart -- not modeled by
-`ShopState` either way (this port has no live app-lifetime `Shop`
-instance to carry state between a death-restart and the next), just
-worth keeping in mind for whoever eventually adds one.
+`talkToNpc()` is fully transcribed (M44), but still NOT wired into the
+C++ port -- M56 built the first real slice of `Shop.dialogue()`'s own
+dispatcher (shops 0-3's quest-turn-in pattern), but shops 4 (Beneca)/5
+(Helga)/6 (Varus)'s own bespoke branches are still unported, and even
+once all 7 are covered, wiring `ShopInteraction`/`Shop`'s dispatch into
+`main.cpp`'s own tick loop (unblocking the NPC-talk half of
+`resolveInteractInput()` and the NPC-nameplate half of
+`refreshNpcNameplateAndWardenLeave()`, M43's own "what's next" note) is
+its own separate step on top of that -- this port has no NPC-interaction
+UI at all yet (a blocking dialogue popup, same shape M40's `MenuFlow`
+already established for character creation's own screens). No
+bug-preservation dilemma blocks any of it -- see M53's own entry for the
+corrected `Shop.reset()` finding (it genuinely runs in the real game, via
+a static initializer); the one real surviving caveat is that `reset()`
+only ever runs ONCE per app launch there, not once per New Game, so
+quest-economy state carries over across a same-session death-restart --
+not modeled by `ShopState` either way (this port has no live app-lifetime
+`Shop` instance to carry state between a death-restart and the next),
+just worth keeping in mind for whoever eventually adds one.
 
 Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
@@ -3648,7 +3705,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own

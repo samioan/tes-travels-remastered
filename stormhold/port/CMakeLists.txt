@@ -108,8 +108,11 @@ target_link_libraries(stormhold_dungeon PUBLIC stormhold_monster stormhold_world
 # facing!=1 death-respawn dispatch). M48: movement_messages.cpp
 # (GameCanvas.resolveMovementSideEffects()). M50: game_save.cpp
 # (ESGame.saveGameState()/loadGameState(), the file-I/O framing around
-# PlayerSave (this same library) and WorldSave (stormhold_dungeon)) --
-# see docs/PORT_ROADMAP.md and src/player/.
+# PlayerSave (this same library) and WorldSave (stormhold_dungeon)). M56:
+# shop_interaction.cpp (Shop.dialogue()'s dispatcher, scoped to shops 0-3,
+# the quest-turn-in shopkeepers -- lives here, not stormhold_world, since
+# it needs PlayerState directly) -- see docs/PORT_ROADMAP.md and
+# src/player/.
 add_library(stormhold_player STATIC
   src/player/camp_state.cpp
   src/player/death_sequence.cpp
@@ -121,6 +124,7 @@ add_library(stormhold_player STATIC
   src/player/player_leveling.cpp
   src/player/player_movement.cpp
   src/player/player_save.cpp
+  src/player/shop_interaction.cpp
   src/player/visible_objects.cpp
 )
 target_include_directories(stormhold_player PUBLIC src)
@@ -446,5 +450,9 @@ target_link_libraries(game_advancement_smoke PRIVATE stormhold_player)
 # M53 milestone smoke test -- see src/tests/m53_shop_state_smoke.cpp.
 add_executable(shop_state_smoke src/tests/m53_shop_state_smoke.cpp)
 target_link_libraries(shop_state_smoke PRIVATE stormhold_world)
+
+# M56 milestone smoke test -- see src/tests/m56_shop_interaction_smoke.cpp.
+add_executable(shop_interaction_smoke src/tests/m56_shop_interaction_smoke.cpp)
+target_link_libraries(shop_interaction_smoke PRIVATE stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST
