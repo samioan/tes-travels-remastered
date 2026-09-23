@@ -25,18 +25,12 @@ namespace stormhold {
 // "what's next" notes flagging this exact gap) -- `ConsumeLevelExp`
 // below still skips it, flagged at the skip site rather than silently
 // dropped. **M53 update:** a live `ShopState` now exists
-// (world/shop_state.h), but wiring a real `clearQuestTurnInState()`-
-// equivalent call here anyway is deliberately NOT done -- see that
-// header's own class comment for the confirmed finding that makes doing
-// so a much bigger call than it looks: `Shop.reset()`'s own zero-caller
-// status (M51) means `Shop.questState1`/`questState2` are permanently
-// null in the real game, so the original's own `clearQuestTurnInState()`
-// call HERE throws an uncaught NullPointerException on every completed
-// level-up. Reproducing that would make this port's own leveling system
-// (working since M13/M14) start crashing; NOT reproducing it (the
-// current default) leaves this a confirmed real bug this port doesn't
-// share. Flagged in docs/PORT_ROADMAP.md's own "what's next" as a
-// conscious decision point, not resolved here.
+// (world/shop_state.h, see its own class comment -- including a
+// correction of an earlier `Shop.reset()` finding this comment itself
+// used to cite), so wiring a real `clearQuestTurnInState()`-equivalent
+// call here is now just an ordinary, not-yet-done port completeness gap
+// (needs `ConsumeLevelExp` to take a `ShopState&`), left for a later
+// milestone rather than done as part of correcting that finding.
 class PlayerLeveling {
 public:
     // Player.gainSkillExp(skillIndex, amount): adds to skills[i][2] (exp

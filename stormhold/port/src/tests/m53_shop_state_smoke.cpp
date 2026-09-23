@@ -1,8 +1,10 @@
 // M53 smoke test: ShopState/Shop's pure lookup helpers (world/shop_state.h)
 // -- Shop.isQuestShop/questShopAt/questFlagsFor -- against real itemsin.dat
-// data. Does NOT exercise Shop.reset()/dialogue()/clearQuestTurnInState()
-// at all -- see shop_state.h's own class comment for why those stay
-// deliberately unwired this milestone.
+// data. Does NOT exercise Shop.dialogue()/clearQuestTurnInState() at all
+// -- see shop_state.h's own class comment for why those stay unwired for
+// now (an ordinary port completeness gap, not a bug-preservation
+// question -- see that comment's own correction of an earlier session's
+// mistaken `Shop.reset()` finding).
 #include <cstdio>
 
 #include "assets/asset_root.h"
@@ -37,27 +39,27 @@ int main(int argc, char** argv) {
         ok &= Expect(!stormhold::Shop::IsQuestShop(6), "shop 6 (Varus) is not a quest shop");
 
         // Shop.questShopAt: position lookup gated on questRewardClaimable,
-        // a struct this milestone's ShopState owns and default-constructs
-        // all-false (nothing "supplies" it as claimable without a caller
-        // deliberately doing so -- see shop_state.h's own comment on why
-        // there's no Reset()-equivalent to do that automatically).
+        // a field this milestone's ShopState default-constructs to TRUE
+        // for all 7 -- matching what Shop.reset() itself really sets, via
+        // Shop.java's own trailing `static { reset(); }` initializer (see
+        // shop_state.h's own class comment) -- so a fresh ShopState finds
+        // every real shop position immediately, with no setup needed.
         stormhold::ShopState state;
         ok &= Expect(stormhold::Shop::QuestShopAt(state, stormhold::Shop::kShopX[0], stormhold::Shop::kShopY[0]) ==
-                         -1,
-                     "questShopAt should miss when questRewardClaimable is false, even at a real shop position");
-
-        state.questRewardClaimable[0] = true;
-        ok &= Expect(stormhold::Shop::QuestShopAt(state, stormhold::Shop::kShopX[0], stormhold::Shop::kShopY[0]) ==
                          0,
-                     "questShopAt should find shop 0 once its own questRewardClaimable flag is set");
-        ok &= Expect(stormhold::Shop::QuestShopAt(state, 0, 0) == -1,
-                      "questShopAt should miss at a position no shop occupies");
-
-        state.questRewardClaimable[6] = true;
+                     "questShopAt should find shop 0 at its own real position -- a fresh ShopState starts with "
+                     "questRewardClaimable true for all 7, matching the real Shop.reset()");
         ok &= Expect(stormhold::Shop::QuestShopAt(state, stormhold::Shop::kShopX[6], stormhold::Shop::kShopY[6]) ==
                          6,
                      "questShopAt should find Varus (shop 6) too -- the lookup itself isn't quest-shop-gated, "
                      "only flag-gated, matching the original exactly");
+        ok &= Expect(stormhold::Shop::QuestShopAt(state, 0, 0) == -1,
+                     "questShopAt should miss at a position no shop occupies");
+
+        state.questRewardClaimable[0] = false;
+        ok &= Expect(stormhold::Shop::QuestShopAt(state, stormhold::Shop::kShopX[0], stormhold::Shop::kShopY[0]) ==
+                         -1,
+                     "questShopAt should miss once shop 0's own flag is cleared, even at its real position");
 
         // Shop.questFlagsFor: 2-bit extraction per shop 0-3, real
         // itemsin.dat questFlags bytes. Exercise every real item rather

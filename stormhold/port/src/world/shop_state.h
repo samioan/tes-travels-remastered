@@ -15,77 +15,54 @@ namespace stormhold {
 // separately since Shop.java's own header comment splits shop 6 (Varus/
 // the Warden) out from shops 0-3/4-5 as a genuinely distinct mechanic.
 //
-// **Why this struct exists now but still isn't wired into any live call
-// site this milestone:** tracing `Shop.clearQuestTurnInState()` (the one
-// confirmed real, ALREADY-flagged gap -- see player/player_leveling.h's
-// own class comment, open since M13/M14) all the way to its own field
-// writes surfaced a second, much larger consequence of M51's own
-// `Shop.reset()` finding than M51 itself had connected:
+// **Correction (M53, same session):** an earlier draft of this file, and
+// M51's own note before it, both claimed `Shop.reset()` -- the only place
+// every array field below gets allocated -- has zero callers anywhere in
+// `src/*.java`, based on grepping for textual `Shop.reset()`/`reset()`
+// call sites only. That grep missed `Shop.java`'s OWN trailing `static {
+// reset(); }` initializer block (src/Shop.java:672-674) -- a real call
+// site the JVM guarantees runs automatically the first time the `Shop`
+// class is touched (JLS 12.4.1), which happens for real early in the
+// real game's own startup (`ESGame.runAppload()` calls
+// `Shop.loadDialogue()`, a static method reference that alone forces
+// class init, at the latest). **`Shop.reset()` DOES run in the real
+// game** -- every array field below IS properly allocated with real
+// values before any other code ever touches it, and the "Save/Load and
+// completing a level-up always throw `NullPointerException`" claim this
+// file previously made is WRONG, corrected here rather than left
+// standing. (M52's own `enterCurrentZoneStatic()` caveat, in
+// world/game_advancement.h, already knew to check for exactly this kind
+// of implicit class-load call site -- this file's own earlier draft
+// simply didn't apply that same check to `Shop.reset()`.) One real,
+// smaller consequence survives the correction: `reset()` runs via a
+// static initializer, which JLS semantics guarantee fires at most ONCE
+// per class-load -- i.e. once per app launch, not once per "New Game" --
+// so if a player restarts a character without closing the app (death and
+// respawn `resetState()`s the Player, per src/Player.java, but never
+// re-touches `Shop`), quest-economy state carries over from whatever the
+// previous character left it at. Not modeled by this struct either way
+// (this port has no live app-lifetime Shop instance yet to carry state
+// between a death-restart and the next), just noted for whoever wires
+// this in for real.
 //
-// `Shop.reset()` -- the ONLY place `questRewardClaimable`/`firstVisit`/
-// `questState1`/`questState2`/`interactionCount`/`rewardsGiven`/
-// `unconfirmedCooldownH` (all seven ARRAY fields below) ever get
-// allocated -- has zero callers anywhere in `src/*.java` (confirmed
-// directly, same grep M51 already ran, re-verified here). Every one of
-// those seven fields is therefore a permanently-null Java array for the
-// entire life of the real shipped game. Two confirmed, real, live code
-// paths index into them unconditionally, with no null check:
+// `Shop.clearQuestTurnInState()` (the confirmed real, already-flagged gap
+// -- see player/player_leveling.h's own class comment, open since
+// M13/M14) and `writeMasterLists()`/`readMasterLists()`'s own missing
+// half of the save format (M49's own "what's next" note) are both still
+// simply NOT WIRED into any live call site yet -- an ordinary port
+// completeness gap now that this struct exists to wire them TO, not a
+// bug-preservation question. Left for a later milestone; see
+// docs/PORT_ROADMAP.md's own "what's next".
 //
-//  - `ESGame.writeMasterLists()`/`readMasterLists()` (src/ESGame.java,
-//    the still-unported "missing half" of the save format M49's own
-//    "what's next" note flagged) -- both are reached by `saveGameState()`
-//    /`loadGameState()` (confirmed real: `run()`'s own
-//    `helperThreadState` 5/6 dispatch), so EVERY Save and EVERY Load in
-//    the real shipped game throws a `NullPointerException` on the very
-//    first `Shop.firstVisit[i]` access, caught by `saveGameState()`'s/
-//    `loadGameState()`'s own try/catch (confirmed by reading both:
-//    `saveGameState()` deletes the just-created record store and returns
-//    false; `run()`'s own dispatch then shows the Save-error screen
-//    instead of resuming gameplay). **Save and Load are both completely
-//    non-functional in the real shipped game.**
-//  - `Player.consumeLevelExp()` calls `Shop.clearQuestTurnInState()` as
-//    its own first statement (src/Player.java:2966, `questState1[i] = 0`
-//    unconditionally); its own confirmed sole caller is
-//    `ESGame.commandAction()`'s screenGroup-39 handler, the THIRD (final)
-//    step of the real level-up-attribute-choice flow (src/ESGame.java
-//    line ~1073), called right after the chosen attributes are already
-//    applied and derived stats already recomputed, with the screen
-//    transition back to gameplay (`showScreen(gameCanvas)`) as the very
-//    next statement. **Completing a level-up in the real shipped game
-//    throws an uncaught `NullPointerException` from inside a raw MIDP
-//    `commandAction()` callback with no surrounding try/catch** -- the
-//    attribute boost and `computeDerivedStats()` calls already ran, but
-//    `coreStats[1] -= 10` (consumeLevelExp()'s own very next line after
-//    the crash) and the return to `gameCanvas` never happen.
-//
-// Both are genuine, severe, confirmed bugs in the original -- not
-// guesses. But UNLIKE M52's softlock (whose only "fix" would be adding a
-// call the original never makes), reproducing either one faithfully in
-// this port would mean deliberately BREAKING already-shipped, already-
-// verified port functionality: M49/M50's own save/load system (which
-// already works, and was already, unknowingly, a "behavioral gain" over
-// the original the moment M50 landed) and M13/M14's own leveling system.
-// That is a materially different, much higher-stakes call than M51/M52's
-// own "don't add a call the original never makes" choice, and not one to
-// make silently while just building this struct. So, same as M52's own
-// "heads up for whoever eventually wires a real Save trigger" note: this
-// struct provides no `Reset()`-equivalent method at all (nothing to
-// accidentally wire up the same way `Shop.reset()` should have been but
-// never was), and is not yet referenced from player/player_leveling.h,
-// player/game_save.h, or dungeon/world_save.h. Whether/how to eventually
-// close the M13/M14/M49 gaps this unblocks, given what closing them now
-// provably means relative to the real game, is flagged in
-// docs/PORT_ROADMAP.md's own "what's next" as a conscious decision point
-// for later, not decided here.
-//
-// Every field below simply zero/false-initializes, the same "caller
-// supplies/owns state, nothing here invents a live tracker" precedent
-// dungeon/dungeon_runtime.h's own HubMinimapMarkers already established
-// -- not an attempt at a "faithful default" (there isn't one: the real
-// fields never successfully initialize at all).
+// Every array/field below default-initializes to the REAL state
+// `Shop.reset()` itself produces (questRewardClaimable/firstVisit true
+// for all 7 -- every quest reward starts claimable, every NPC starts on
+// their own first-visit greeting -- everything else 0/false), matching
+// what every other real code path in the original actually observes from
+// the moment the Shop class loads onward.
 struct ShopState {
-    std::array<bool, 7> questRewardClaimable{};
-    std::array<bool, 7> firstVisit{};
+    std::array<bool, 7> questRewardClaimable{true, true, true, true, true, true, true};
+    std::array<bool, 7> firstVisit{true, true, true, true, true, true, true};
     std::array<int8_t, 4> questState1{};
     std::array<int8_t, 4> questState2{};
     std::array<int16_t, 4> interactionCount{};

@@ -3341,33 +3341,28 @@ read-through.
       already-Java-transcribed/already-ported mechanic for real"
       pattern M42/M47/M48 already established.
 
-      **A real, confirmed dead-code finding, turned up while scoping
-      this milestone, that changed its shape:** the original plan was to
-      also build a minimal `ShopState` (`questRewardClaimable[]`) to
-      finally supply `dungeon_runtime.h`'s own `HubMinimapMarkers` (M32,
-      always passed as `nullptr` today, so the hub-town minimap never
-      shows NPC markers) -- but `Shop.questRewardClaimable`'s ONLY
+      **A finding, turned up while scoping this milestone, that changed
+      its shape -- later CORRECTED at M53, see that entry:** the original
+      plan was to also build a minimal `ShopState` (`questRewardClaimable
+      []`) to finally supply `dungeon_runtime.h`'s own `HubMinimapMarkers`
+      (M32, always passed as `nullptr` today, so the hub-town minimap
+      never shows NPC markers) -- but `Shop.questRewardClaimable`'s ONLY
       assignment site in the entire codebase is inside `Shop.reset()`,
-      which itself has ZERO callers anywhere in `../src/` (grepped).
-      That means in the REAL, ORIGINAL game this array is permanently
-      `null`, and `Dungeon.sampleView()`'s hub-town NPC-marker branch
-      (which reads `Shop.questRewardClaimable[i]` unconditionally) would
-      throw a `NullPointerException` the first time either minimap zoom
-      level is drawn while in the hub -- confirmed uncaught, by reading
-      `paintGameView()`/`paint()` directly: only `paintMonsters()` gets
-      its own try/catch; the minimap calls right after it have none.
-      Building a live `ShopState` and populating `HubMinimapMarkers` for
-      real would therefore have made the port's hub minimap show NPC
-      markers the original game's own (starved, presumably
-      platform-swallowed-exception) minimap never did -- a behavioral
-      GAIN, not a reimplementation, so it was dropped from this
-      milestone's scope. `hubMarkers` staying `nullptr` forever (no
-      `ShopState` exists to construct one from) is therefore, by
-      coincidence of two unrelated root causes, already the faithful
-      behavior. `WardenState`'s own `wardenVisitCount`/`wardenPresent`
-      are unaffected -- both are primitives with real inline default
-      values at their Java field declarations, not dependent on the dead
-      `reset()` call at all.
+      which this session's own grep for textual `Shop.reset()`/`reset()`
+      call sites found ZERO of anywhere in `../src/`. **That grep missed
+      `Shop.java`'s own trailing `static { reset(); }` initializer block
+      -- a real call site the JVM runs automatically the first time the
+      `Shop` class loads, which happens for real early in the real game's
+      own startup. `Shop.reset()` DOES run in the real game; this array
+      is NOT permanently null.** (M53's own entry documents the
+      correction and how it was found.) The scope decision this session
+      actually made -- not building a live `ShopState` this milestone,
+      leaving `hubMarkers` at `nullptr` -- turned out to be the right
+      call anyway, just for the ordinary "not built yet" reason, not the
+      dead-code reason originally written here. `WardenState`'s own
+      `wardenVisitCount`/`wardenPresent` were never affected either way --
+      both are primitives with real inline default values at their Java
+      field declarations, not dependent on `reset()` at all.
 
       Verified against the existing suite (no new isolable logic to add
       a smoke test for, same as M41's own pure-wiring milestone -- the
@@ -3483,70 +3478,63 @@ real `itemsin.dat` `questFlags` bytes, already loaded since M4). Same
 "primitive first, wiring later" shape `WardenState` itself used (a
 primitive since M8, wired for real 43 milestones later by M51).
 
-**A major finding, much bigger than the gap this milestone closes.**
-Tracing `Shop.clearQuestTurnInState()` (the confirmed real gap
-`player/player_leveling.h` has flagged unwired since M13/M14) all the way
-to its own field writes reconnected it to M51's own `Shop.reset()`
-finding, with a consequence M51 itself hadn't traced that far: `Shop.
-reset()` is the ONLY place `questRewardClaimable`/`firstVisit`/
-`questState1`/`questState2`/`interactionCount`/`rewardsGiven`/
-`unconfirmedCooldownH` (every ARRAY field above) ever get allocated, and
-it has zero callers anywhere in `src/*.java` (re-confirmed by the same
-grep M51 ran). Every one of those seven fields is therefore a
-permanently-null Java array for the entire life of the real shipped
-game, and two confirmed, real, unconditional-index code paths hit that
-null head-on:
+**A finding this milestone made, then had to CORRECT within the same
+session -- left in as a methodology lesson, not scrubbed.** Tracing
+`Shop.clearQuestTurnInState()` (the confirmed real gap
+`player/player_leveling.h` has flagged unwired since M13/M14) to its own
+field writes reconnected it to M51's own `Shop.reset()` finding, and the
+first draft of this milestone concluded `Shop.reset()` has zero callers
+anywhere (re-running the same grep M51 used), so every one of the seven
+array fields above is a permanently-null Java array, and that
+`writeMasterLists()`/`readMasterLists()` (Save/Load) and
+`Player.consumeLevelExp()`'s own `clearQuestTurnInState()` call (completing
+a level-up) all unconditionally throw `NullPointerException` in the real
+game. **That grep -- like M51's own before it -- was checking for textual
+`Shop.reset()`/`reset()` call sites only, and missed `Shop.java`'s own
+trailing `static { reset(); }` initializer block** (`src/Shop.java:672-
+674`), a real call site the JVM guarantees runs automatically the first
+time the `Shop` class loads, which happens for real early in the game's
+own startup (`ESGame.runAppload()` calls `Shop.loadDialogue()`, a static
+method reference that alone forces class init, at the latest).
+**`Shop.reset()` DOES run in the real game; none of the "always crashes"
+claims above are true.** (M52's own `enterCurrentZoneStatic()` caveat, in
+`world/game_advancement.h`, already knew to check for exactly this kind
+of implicit class-load call site when it shipped earlier this same
+session -- this milestone's own first draft simply didn't apply that same
+check to `Shop.reset()`, and neither had M51 before it.) `world/
+shop_state.h`, `player/player_leveling.h`, `dungeon/world_save.h`, and
+this file's own M51 entry above were all corrected in place once this
+was caught, rather than left standing. One real, smaller fact survives
+the correction: a static initializer fires at most once per class-load
+(once per app launch), so quest-economy state does NOT reset between a
+death-restart and the next character within the same running app
+instance -- noted in `shop_state.h`'s own comment, not modeled (this
+port has no live app-lifetime `Shop` instance yet to carry that state
+between restarts either way).
 
-- `ESGame.writeMasterLists()`/`readMasterLists()` (M49's own flagged
-  "missing half of the save format") are reached by `saveGameState()`/
-  `loadGameState()` (`run()`'s real `helperThreadState` 5/6 dispatch) --
-  so **every Save and every Load in the real shipped game throws a
-  `NullPointerException`** on the first `Shop.firstVisit[i]` access,
-  caught by each method's own try/catch (`saveGameState()` deletes the
-  just-created record store and returns false; the caller then shows a
-  Save-error screen instead of resuming play). **Save and Load are both
-  completely non-functional in the original game.**
-- `Player.consumeLevelExp()` calls `Shop.clearQuestTurnInState()` as its
-  own first statement; its confirmed sole caller is `ESGame.
-  commandAction()`'s screenGroup-39 handler, the 3rd/final step of the
-  real level-up-attribute-choice flow, called right after the chosen
-  attributes are applied and derived stats recomputed, with the
-  transition back to `gameCanvas` as the very next statement. **Completing
-  a level-up in the real shipped game throws an uncaught
-  `NullPointerException`** from inside a raw MIDP `commandAction()`
-  callback with no surrounding try/catch -- the attribute boost already
-  landed, but `coreStats[1] -= 10` and the return to gameplay never run.
-
-Both are genuine, severe, confirmed bugs -- not guesses. But unlike
-M51/M52's own "don't add a call the original never makes" choice, closing
-either gap faithfully here would mean deliberately BREAKING already-
-shipped, already-verified port functionality: M49/M50's own save/load
-system (which already works, and was already, unknowingly, a "behavioral
-gain" over the original the moment M50 landed) and M13/M14's own leveling
-system. That's a materially bigger call than M51/M52's, and not one to
-make silently while just building a data-model primitive. So `ShopState`
-this milestone provides NO `Reset()`-equivalent method (nothing to
-accidentally wire the same way `Shop.reset()` should have been but never
-was) and is NOT referenced from `player/player_leveling.h`,
-`player/game_save.h`, or `dungeon/world_save.h` yet -- flagged below as a
-conscious decision point, not resolved here. `player/player_leveling.h`
-and `dungeon/world_save.h` both got their own comments updated to point
-at this finding directly at their own skip sites.
+With the finding corrected, `ShopState`'s own fields now default-
+construct to the REAL state `Shop.reset()` produces (`questRewardClaimable`
+/`firstVisit` true for all 7, everything else 0/false) -- a genuine
+faithful default, not a placeholder. `Shop.clearQuestTurnInState()` and
+`writeMasterLists()`/`readMasterLists()`'s own missing format half stay
+unwired for now, but as an ordinary, not-yet-done port completeness gap
+(this struct now exists to wire them TO), not a bug-preservation
+question -- left for a later milestone.
 
 **Verification.** New `shop_state_smoke.exe`: `IsQuestShop` against all 7
-shops' real categories; `QuestShopAt` against a hand-set `ShopState`
-(miss when `questRewardClaimable` is false even at a real shop position,
-hit once set, miss at a non-shop position, and confirms the lookup itself
-isn't quest-shop-gated -- Varus, shop 6, is found too once his own flag
-is set, matching the original exactly); `QuestFlagsFor` against every
-real item in `itemsin.dat` (each shop 0-3's own extracted 2-bit field is
-in range, and OR-ing all four back together reconstructs the item's own
-raw `questFlags` byte exactly, confirming the extraction shape without
-needing to guess a specific expected value; shop 4+ falls through to 0,
-matching the original's own final `else` branch). 50 smoke tests now
-pass in total (49 carried over + this milestone's own); full clean
-rebuild stayed at zero `/W4` warnings. Manually launched the real
-windowed exe and confirmed it starts and stays up.
+shops' real categories; `QuestShopAt` against a fresh, default-constructed
+`ShopState` (finds every real shop position immediately, including Varus
+at shop 6, confirming the lookup itself isn't quest-shop-gated, only
+flag-gated; misses a non-shop position; misses once a flag is explicitly
+cleared); `QuestFlagsFor` against every real item in `itemsin.dat` (each
+shop 0-3's own extracted 2-bit field is in range, and OR-ing all four
+back together reconstructs the item's own raw `questFlags` byte exactly,
+confirming the extraction shape without needing to guess a specific
+expected value; shop 4+ falls through to 0, matching the original's own
+final `else` branch). 50 smoke tests now pass in total (49 carried over +
+this milestone's own); full clean rebuild stayed at zero `/W4` warnings.
+Manually launched the real windowed exe and confirmed it starts and
+stays up.
 
 ## What's next
 
@@ -3563,22 +3551,24 @@ NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's own
 lift than camp/rest or chest interaction were, likely worth its own
 multi-part treatment rather than one milestone.
 
-**Heads up for whoever picks this up (M53's own finding, superseding
-M51's original, narrower heads-up):** `Shop.reset()`'s own zero-caller
-status doesn't just mean "pick sane `ShopState` defaults without a live
-`Reset()` call" -- it means the real game's own `writeMasterLists()`/
-`readMasterLists()` (Save/Load) and `Shop.clearQuestTurnInState()`
-(completing a level-up) ALL unconditionally throw `NullPointerException`
-in the shipped game (see M53's own entry above for the full trace). Any
-future work wiring `ShopState` into the save format or into
-`PlayerLeveling::ConsumeLevelExp` needs to make a conscious call, not a
-silent one, given that either "faithful" option means intentionally
-regressing this port's own already-shipped save/load (M49/M50) or
-leveling (M13/M14) systems to match a bug those systems don't currently
-share. This project has no precedent yet for a deliberate port-only
-fidelity exception (every "not modeled"/"not fixed" note elsewhere in
-this doc stays faithful) -- so if that ever becomes the call, it needs to
-be made and labeled explicitly as one, not defaulted into.
+**Correction note for whoever picks this up:** M51's original heads-up
+here (and M53's own first draft) claimed `Shop.reset()` has zero callers
+in the real game, making Save/Load and completing a level-up
+unconditionally crash there. That was WRONG -- both greps missed `Shop.
+java`'s own trailing `static { reset(); }` initializer, a real call site
+the JVM runs automatically on class load. `Shop.reset()` DOES run in the
+real game (see M53's own entry above for the full correction). There is
+NO bug to preserve or avoid here: wiring `ShopState` into
+`PlayerLeveling::ConsumeLevelExp` (a real `Shop.clearQuestTurnInState()`
+call) and into the save format (`writeMasterLists()`/`readMasterLists()`'s
+still-missing half, M49's own note) are both just ordinary, not-yet-done
+completeness work now that a correctly-defaulted `ShopState` exists to
+wire them to -- no conscious "preserve the bug vs. deliberate exception"
+decision needed. The one real caveat that survives the correction:
+`Shop.reset()`, via a static initializer, only ever runs ONCE per app
+launch in the real game, not once per New Game, so quest-economy state
+carries over across a same-session death-restart -- worth keeping in mind
+whichever milestone actually wires this, not urgent on its own.
 
 Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
