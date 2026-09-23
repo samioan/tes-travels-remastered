@@ -4590,6 +4590,65 @@ expecting further Stormhold-specific divergences the way
 M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63/M64/M65/M66
 already found.
 
+**Researched but deliberately NOT built this session: `GameCanvas.
+isNpcDialogueDue()`'s own proactive "Warden speaks" trigger
+(`run()`'s own `if (isNpcDialogueDue() && Shop.wardenVisitCount >
+player.wardenLoreStep) { ... Shop.dialogue(player, 6, -1, -1) ... }`,
+main.cpp's own comment on the `warden.ShouldVisit`/`Arrive` call site
+already flagged this as unwired, same gap M43/M49/M50's own "what's next"
+notes once carried). Investigated properly while scoping the next
+milestone, and found it's a poor fit for one, for two independent
+reasons:**
+1. **The dialogue this produces is confirmed to NEVER actually reach the
+   player.** `Shop.dialogue(player, 6, -1, -1)` (which, per
+   `ShopInteraction::VarusDialogue`'s own doc comment, ignores its
+   `action`/`extra` arguments entirely -- this is exactly Varus's own
+   greeting state machine, just invoked automatically instead of via
+   player interaction) runs, its real side effect on `player.
+   wardenLoreStep` genuinely applies, and its result text is used to
+   build a real screen (`newWardenSpeaksUI`, screenGroup 102, correctly
+   titled "Varus", no dead-write bug this time) -- but that screen is
+   only ever ASSIGNED to `this.game.rumorsUI`, never passed to
+   `showScreen()` anywhere in the file (confirmed: `rumorsUI` has exactly
+   one other reference in the whole of `GameCanvas.java`, this exact
+   assignment). screenGroup 102 even has its own real, correctly-working
+   dispatch handler (`showScreen(gameCanvas); resumeTicking();`,
+   unconditional) -- entirely moot, since nothing ever makes that screen
+   the active one. **So standing near Varus silently advances his own
+   lore-reveal state every tick once new lore is available, with the
+   player never shown the line at all** -- a genuine, confirmed dead-UI
+   bug, and a real behavioral coupling worth knowing about (a player who
+   lingers near Varus before ever pressing "interact" could find his
+   interactive greeting already "caught up," returning a repeat instead
+   of fresh lore) but not one with any screen worth building, since the
+   original itself never shows one.
+2. **The gating condition itself carries a confirmed, unresolved
+   transcription gap.** `Shop.isAdjacentToVarus(player)` (one of
+   `isNpcDialogueDue()`'s two triggers) has its own header comment flagging
+   an unconfirmed extra condition from the original bytecode (`player.j
+   == 1`, "name TODO") that the transcribed body does NOT include --
+   meaning the CURRENTLY transcribed `currentLevel==1 && adjacent-to-Varus`
+   check is known to be incomplete, not just unported. The OTHER trigger
+   (`isNpcDialogueDue()`'s own level-37/monster-typeIndex-41 branch,
+   presumably the final boss, given `newEndOfGameUI`'s own `Shop.
+   dialogue[7][4]` "Victory!" text) is completely unexplored by this
+   project so far, and -- since the SAME hardcoded `Shop.dialogue(player,
+   6, -1, -1)` call fires regardless of which of the two triggers fired --
+   its only real, confirmed observable effect would ALSO be silently
+   advancing Varus's own `wardenLoreStep`, an odd, likely-unintentional
+   coupling between the final boss and the Warden that would need
+   independent confirmation before treating as faithful rather than a
+   transcription artifact.
+
+Building this now would mean either reproducing confirmed dead code with
+no player-visible behavior (not worth a milestone on its own) or guessing
+past a documented, unresolved bytecode-level gap -- exactly the
+"revisit once more can be confirmed" situation `Player.java`'s own
+`stateByteAb`/`questShopAtPendingTile()` comment (see `paintUnknown_b()`'s
+own note above) already models the right posture for. Left here as a
+confirmed, thoroughly-researched finding for whenever more of the original
+bytecode can be independently checked, not a "what's next" action item.
+
 **Resolved by M63 (was: "heads up for whoever eventually wires a real Save
 trigger", M52's own finding):** `savegame.dat` now actually gets written,
 via the in-game pause menu's own "Save Game"/"Load Game" items
