@@ -180,7 +180,8 @@ void MenuFlow::MoveSelection(MenuFlowState& state, int delta, const CharacterDat
     }
 }
 
-void MenuFlow::Confirm(MenuFlowState& state, const CharacterData& charData, const ItemDatabase& items) {
+void MenuFlow::Confirm(MenuFlowState& state, const CharacterData& charData, const ItemDatabase& items,
+                        const std::string& savePath) {
     switch (state.screen) {
         case MenuScreen::MainMenu:
             switch (state.selectedIndex) {
@@ -189,8 +190,13 @@ void MenuFlow::Confirm(MenuFlowState& state, const CharacterData& charData, cons
                     state.selectedIndex = state.chosenClassIndex;
                     break;
                 case 1:  // Continue Game -- see this file's own header comment.
-                    state.screen = MenuScreen::NoSavedGame;
-                    state.selectedIndex = 0;
+                    if (GameSave::Exists(savePath)) {
+                        state.loadRequested = true;
+                        state.screen = MenuScreen::Finished;
+                    } else {
+                        state.screen = MenuScreen::NoSavedGame;
+                        state.selectedIndex = 0;
+                    }
                     break;
                 case 2:  // Credits
                     state.screen = MenuScreen::Credits;

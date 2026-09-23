@@ -7,6 +7,7 @@
 #include "assets/item_database.h"
 #include "assets/shop_dialogue.h"
 #include "graphics/backbuffer.h"
+#include "player/game_save.h"
 #include "player/player_state.h"
 
 namespace stormhold {
@@ -22,13 +23,22 @@ namespace stormhold {
 //
 // Deliberately NOT modeled: Help (loadHelpTopicBodies()'s own Java
 // transcription is itself incomplete past topic index 4 -- a real,
-// pre-existing gap, not one this milestone introduces) and Continue
-// Game's REAL load path (this port has no persisted save file to load
-// yet -- PlayerSave, M20, only round-trips a PlayerState in memory, and
-// there's no WorldRegistry/master-list save format at all) -- selecting
-// "Continue Game" always takes the real game's own "no saved game"
-// branch (NoSavedGame below), which is simply the truth for every run of
-// this port today.
+// pre-existing gap, not one this milestone introduces).
+//
+// M50: Continue Game's real load path -- Confirm()'s own MainMenu case 1
+// now calls `GameSave::Exists(savePath)` (player/game_save.h) and only
+// falls to `NoSavedGame` when that's false, matching `loadGameState()`'s
+// own `name == null` early failure. The actual file read happens in
+// main.cpp's own hand-off block (same place `state.draft` becomes the
+// live `player` for a New Game), since only main.cpp holds the live
+// `WorldRegistry`/level array this screen never touches -- this class
+// itself only ever needs to know WHETHER a save exists, never its
+// contents, so `state.loadRequested` (below) is the only new state this
+// screen carries. `savePath` is empty in every existing call site
+// (main.cpp is the only real caller that passes a non-empty one) --
+// `GameSave::Exists("")` is always false, so every pre-M50 call site
+// (this file's own M40 smoke test included) keeps taking the
+// `NoSavedGame` branch exactly as before.
 enum class MenuScreen {
     MainMenu,
     ClassSelect,
@@ -67,6 +77,12 @@ struct MenuFlowState {
     // once per idle callback and closes the window, since this state
     // machine has no window handle of its own to close.
     bool exitRequested = false;
+    // M50: set true by MainMenu's own "Continue Game" item once
+    // `GameSave::Exists` has already confirmed a save file is there --
+    // main.cpp's own hand-off block (see this file's class comment)
+    // checks this the same way it checks `draft.has_value()`, and does
+    // the real `GameSave::Load` call once `screen` reaches `Finished`.
+    bool loadRequested = false;
 };
 
 class MenuFlow {
@@ -79,7 +95,10 @@ public:
 
     // The single soft-key "Ok"/"Select" action, keyed on `state.screen`
     // the same way commandAction() keys on `activeScreen.screenGroup`.
-    static void Confirm(MenuFlowState& state, const CharacterData& charData, const ItemDatabase& items);
+    // `savePath` (M50) is only consulted by the MainMenu "Continue Game"
+    // item -- see this file's own class comment.
+    static void Confirm(MenuFlowState& state, const CharacterData& charData, const ItemDatabase& items,
+                         const std::string& savePath = std::string());
 
     // The single soft-key "Cancel"/"Back" action.
     static void Cancel(MenuFlowState& state);

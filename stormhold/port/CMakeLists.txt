@@ -102,11 +102,14 @@ target_link_libraries(stormhold_dungeon PUBLIC stormhold_monster stormhold_world
 # .h/player_inventory.h's own dropped-item auto-loot/drop registry wiring.
 # M47: death_sequence.cpp (GameCanvas.tickDeathAndRegen()/run()'s own
 # facing!=1 death-respawn dispatch). M48: movement_messages.cpp
-# (GameCanvas.resolveMovementSideEffects()) -- see docs/PORT_ROADMAP.md and
-# src/player/.
+# (GameCanvas.resolveMovementSideEffects()). M50: game_save.cpp
+# (ESGame.saveGameState()/loadGameState(), the file-I/O framing around
+# PlayerSave (this same library) and WorldSave (stormhold_dungeon)) --
+# see docs/PORT_ROADMAP.md and src/player/.
 add_library(stormhold_player STATIC
   src/player/camp_state.cpp
   src/player/death_sequence.cpp
+  src/player/game_save.cpp
   src/player/movement_messages.cpp
   src/player/player_combat_stats.cpp
   src/player/player_creation.cpp
@@ -427,5 +430,9 @@ target_link_libraries(movement_messages_smoke PRIVATE stormhold_player)
 # M49 milestone smoke test -- see src/tests/m49_world_save_smoke.cpp.
 add_executable(world_save_smoke src/tests/m49_world_save_smoke.cpp)
 target_link_libraries(world_save_smoke PRIVATE stormhold_dungeon)
+
+# M50 milestone smoke test -- see src/tests/m50_game_save_smoke.cpp.
+add_executable(game_save_smoke src/tests/m50_game_save_smoke.cpp)
+target_link_libraries(game_save_smoke PRIVATE stormhold_render stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST

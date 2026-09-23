@@ -206,6 +206,7 @@
 #include "platform/win32/window.h"
 #include "player/camp_state.h"
 #include "player/death_sequence.h"
+#include "player/game_save.h"
 #include "player/movement_messages.h"
 #include "player/player_combat_stats.h"
 #include "player/player_inventory.h"
@@ -318,6 +319,30 @@ std::vector<stormhold::GeneratedLevel> BuildWorld(const stormhold::DungeonGeomet
     return levels;
 }
 
+// M50: port-only, no real Dungeon.java counterpart. This port eagerly
+// builds/registers EVERY level up front (BuildWorld, above) rather than
+// the original's own lazy per-level `populate()` -- so unlike a REAL
+// `refreshTileFlagsFromRegistries()` call (always a level's very FIRST
+// population, onto all-zero transient bits), calling
+// `DungeonRuntime::RefreshTileFlags` after a `GameSave::Load` would OR
+// the loaded registries' bits on top of whatever the throwaway freshly-
+// generated world already left set -- a chest/monster/dropped-item that
+// isn't in the save (e.g. a chest already looted before that save was
+// written) would wrongly stay flagged forever. `RefreshTileFlags` itself
+// is left untouched -- still a faithful, purely-additive port of the
+// real method (see its own doc comment and M16's own smoke test, which
+// only ever calls it against an all-zero level, same as the original
+// always does) -- this just clears exactly the 3 bits it ever sets
+// (2/4/16) first, so the load path gets the same "OR onto zero" result
+// the original always has.
+void ClearTransientTileFlags(stormhold::GeneratedLevel& level) {
+    for (auto& column : level.tiles) {
+        for (uint8_t& tile : column) {
+            tile = static_cast<uint8_t>(tile & ~(2 | 4 | 16));
+        }
+    }
+}
+
 // GameCanvas.itemFoundMessageLines() (was decompiled/e.java's `k()`, M41)
 // -- splits an item's display name into the message popup's 2 lines: the
 // first 2 words merged onto line 1 when there are 3+ words (line 2 gets
@@ -352,6 +377,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     const std::string userDir = ResolveUserDir();
     OpenLogFile(userDir);
     const int scale = ResolveScale();
+    // M50: GameSave's own file, next to the log file -- empty (same
+    // no-launcher-no-persistence convention OpenLogFile above already
+    // uses) when userDir itself is empty, so GameSave::Exists/Save/Load
+    // all degrade to harmless no-ops for a plain dev build.
+    const std::string savePath =
+        userDir.empty() ? std::string() : (std::filesystem::path(userDir) / "savegame.dat").string();
 
     const std::string assetRootPath = ResolveAssetRoot();
     stormhold::AssetRoot assetRoot(assetRootPath);
@@ -465,7 +496,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         if (menuState.screen != stormhold::MenuScreen::Finished) {
             if (KeyEdge(VK_UP)) stormhold::MenuFlow::MoveSelection(menuState, -1, charData);
             if (KeyEdge(VK_DOWN)) stormhold::MenuFlow::MoveSelection(menuState, 1, charData);
-            if (KeyEdge(VK_RETURN)) stormhold::MenuFlow::Confirm(menuState, charData, items);
+            if (KeyEdge(VK_RETURN)) stormhold::MenuFlow::Confirm(menuState, charData, items, savePath);
             if (KeyEdge(VK_ESCAPE)) stormhold::MenuFlow::Cancel(menuState);
 
             if (menuState.screen == stormhold::MenuScreen::EnterName) {
@@ -495,7 +526,27 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // commandAction()'s own screenGroup==101 branch: gameCanvas.
             // player=player -- the draft built across the whole New Game
             // flow finally becomes the live `player` right here, once.
-            if (menuState.draft.has_value()) player = std::move(*menuState.draft);
+            if (menuState.draft.has_value()) {
+                player = std::move(*menuState.draft);
+            } else if (menuState.loadRequested) {
+                // M50: ESGame's own helperThreadState==6 branch
+                // (loadGameState() then player.refreshCorridorView()) --
+                // GameSave::Exists already confirmed the file is there
+                // (MenuFlow::Confirm, ui/menu_flow.cpp) before `screen`
+                // was even allowed to reach Finished, so a Load failure
+                // here would mean the file vanished/corrupted between
+                // those two moments; `player`/`world` are simply left at
+                // their already-valid default-constructed state either
+                // way, same fallback the real `noSavedGameUI` branch
+                // effectively gives (this port has nowhere left to show
+                // that screen from once `Finished` is reached).
+                if (stormhold::GameSave::Load(savePath, levels.size(), player, world)) {
+                    for (stormhold::GeneratedLevel& level : levels) {
+                        ClearTransientTileFlags(level);
+                        stormhold::DungeonRuntime::RefreshTileFlags(level, world);
+                    }
+                }
+            }
             stormhold::PlayerMovement::RefreshCorridorView(player, levelLookup(player.currentLevel), levelLookup);
             gameStarted = true;
         }

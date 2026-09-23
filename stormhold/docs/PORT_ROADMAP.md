@@ -3233,6 +3233,95 @@ read-through.
       empty. 45 smoke tests now pass in total; full clean rebuild stayed
       at zero `/W4` warnings.
 
+- [x] **M50 -- `GameSave` file I/O + a real "Continue Game"** (this
+      session). New `player/game_save.h`/`.cpp` (`stormhold_player`,
+      alongside `player_save.h`): `GameSave::Exists`/`Save`/`Load`
+      (`ESGame.saveGameState()`/`loadGameState()`) -- the plain-file
+      framing M49's own "what's next" note flagged as ready once
+      `WorldSave` existed. `PlayerSave::ToBytes`/`FromBytes` (M20) and
+      `WorldSave::ToBytes`/`FromBytes` (M49) already do all the real
+      field-level work; `Save`/`Load` just write/read a 4-byte
+      player-blob length followed by the player blob then the world blob
+      (the rest of the file, read to EOF) to one fixed path.
+
+      **A confirmed simplification, not a guess:** read together,
+      `generateUniqueSaveName`/`findMostRecentSaveName`/`deleteOtherSaves`
+      can never actually leave more than one `RecordStore` on disk at a
+      time -- `deleteOtherSaves` prunes every OTHER store at the end of
+      every successful save, so the random-suffix/enumerate/prune dance
+      is pure MIDP name-collision plumbing around a single real save
+      slot, not an actual multi-save-slot feature (nothing else in
+      `ESGame.java` ever lists or offers a choice between save names to
+      the player either). `GameSave` skips reproducing that dance and
+      just uses one fixed path -- same observable behavior (exactly one
+      save persists, always the most recent), same "behavioral
+      reimplementation, not byte-exact" call this project's own
+      "Decisions carried through every milestone" section already
+      commits to.
+
+      **Wired into the live port:** `main.cpp` computes a real
+      `<userDir>/savegame.dat` path (empty when `STORMHOLD_USER_DIR` is
+      unset, the same "no launcher, no persisted state" convention the
+      log file already uses -- `GameSave::Exists`/`Save`/`Load` all
+      degrade to harmless no-ops on an empty path). `MenuFlow::Confirm`'s
+      MainMenu "Continue Game" item (`ui/menu_flow.h`/`.cpp`) now calls
+      `GameSave::Exists(savePath)` and only falls to `NoSavedGame` when
+      that's false -- otherwise it jumps straight to `Finished` with a
+      new `MenuFlowState::loadRequested` flag set, and `main.cpp`'s own
+      hand-off block (the same place a New Game's `draft` becomes the
+      live `player`) does the real `GameSave::Load` call, since only
+      `main.cpp` holds the live `WorldRegistry`/level array `MenuFlow`
+      itself never touches. `Confirm`'s new `savePath` parameter defaults
+      to an empty string, so every pre-M50 call site (M40's own smoke
+      test included) keeps compiling unchanged and keeps taking
+      `NoSavedGame` exactly as before.
+
+      **A genuine port-only correctness fix, not a Java transcription:**
+      this port eagerly builds/registers EVERY level up front
+      (`BuildWorld`, `main.cpp`) rather than the original's own lazy
+      per-level `populate()` -- so unlike a REAL
+      `refreshTileFlagsFromRegistries()` call (always a level's very
+      FIRST population, onto all-zero transient tile bits),
+      `DungeonRuntime::RefreshTileFlags` after a `GameSave::Load` would
+      OR the loaded registries' bits on top of whatever the throwaway
+      freshly-generated world already left set -- a chest already looted
+      before that save was written would wrongly stay flagged forever.
+      `RefreshTileFlags` itself is untouched (still a faithful,
+      purely-additive port of the real method -- M16's own smoke test
+      still only ever calls it against an all-zero level, same as the
+      original always does); `main.cpp`'s own new, port-only
+      `ClearTransientTileFlags` clears exactly the 3 bits
+      `RefreshTileFlags` ever sets (2/4/16) first, so the load path gets
+      the same "OR onto zero" result the original always has.
+
+      **Deliberately NOT ported here, unchanged from M49's own gap:**
+      `writeMasterLists()`/`readMasterLists()`, still blocked on the
+      not-yet-built Shop-economy C++ model. **Deliberately not wired:** a
+      real Save trigger -- the original's own Save/Load menu items live
+      inside an in-game pause/stats screen (Stats/Inventory/Skills/
+      Spells/Save/Load/Help) this port hasn't built at all, a bigger,
+      separate lift already in the same bucket as `openInventory` (M41's
+      own gap) -- unlike Camp/Attack/spell-cast's own pragmatic single-key
+      stand-ins (M39/M42/M46), Save's real trigger is a menu-item click
+      with no already-confirmed real KEY CODE to fall back to, so
+      inventing one here would be a port-only addition, not a behavioral
+      reimplementation of anything real. "Continue Game" is therefore
+      real and tested but still practically unreachable in a fresh run
+      today (nothing yet writes `savegame.dat`) -- the same
+      "data/wiring ready, one more piece still missing" shape M49 itself
+      left behind, narrowed to exactly the Save-trigger UI.
+
+      Verified with a new `game_save_smoke.exe`: `Exists`/empty-path
+      no-ops; a real `PlayerState` + `WorldRegistry` (a spawned monster
+      and a chest) round-tripping through an actual temp file exactly;
+      `Load` failing cleanly (not throwing) on a missing file; and
+      `MenuFlow::Confirm`'s three-way "Continue Game" behavior (no
+      savePath argument, a savePath with no file, and a savePath with a
+      real saved file) all landing on the right screen. 46 smoke tests
+      now pass in total; full clean rebuild stayed at zero `/W4`
+      warnings. Manually launched the real windowed exe and confirmed it
+      starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
@@ -3255,12 +3344,15 @@ interaction were, and a bigger lift than spell casting/cycling turned out
 to be too). `paintUnknown_b()` (the one remaining unported-PIXEL paint
 method, the NPC/shop-portrait and Warden-compass icon painter -- gated on
 `unconfirmed_W`/`Player.questShopAtPendingTile()`, itself downstream of
-the Shop-economy gap above) is the last item in that bucket. Beyond that:
-the RecordStore-equivalent file I/O layer + multi-save-slot management +
-Main Menu "Continue Game" wiring (M49's own "what's next" note -- the
-DATA format itself, for the WorldRegistry half anyway, is now ready for
-it); Help topics (the Java transcription itself stops at topic index 4).
-Following dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49
+the Shop-economy gap above) is the last item in that bucket. The in-game
+pause/stats screen (Stats/Inventory/Skills/Spells/Save/Load/Help) belongs
+in this same bucket too -- M50's own `GameSave` gives it a real Save/Load
+backend to call into once it exists, but building the screen itself (and
+therefore a real Save TRIGGER -- "Continue Game" is wired and tested,
+M50, but still practically unreachable today with nothing yet writing
+`savegame.dat`) is its own separate lift, same size class as
+`openInventory`. Beyond that: Help topics (the Java transcription itself
+stops at topic index 4). Following dawnstar's own later milestones
+roughly but expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50
 already found.
