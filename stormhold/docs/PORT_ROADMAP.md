@@ -3106,6 +3106,68 @@ read-through.
       total; full clean rebuild stayed at zero `/W4` warnings. Manually
       launched the real windowed exe and confirmed it starts and stays up.
 
+- [x] **M48 -- movement message-popup layer, wired into the live port**
+      (this session). New `player/movement_messages.h`/`.cpp`
+      (`stormhold_player`, alongside `death_sequence.h`): `MovementMessages
+      ::Resolve` (`GameCanvas.resolveMovementSideEffects()`, confirmed
+      real and flagged as unwired by M47's own "what's next" note) --
+      real movement finally shows the level-crossing message (reusing
+      M47's `DungeonNames`) and the "Found <item>!"/"Several items!"
+      message off the same before/after `inventoryCount` comparison M17
+      already wires through `DungeonRuntime`.
+
+      **`MovementMessageResult` is genuinely unlike every other
+      Result-shaped enum this port already uses (`CampTickResult`/
+      `DeathTickResult`/`combat/spell_casting.h`'s `Result`):** confirmed
+      by reading `resolveMovementSideEffects()` directly, the original
+      checks its crossing-message condition and its `itemsFound` count as
+      TWO INDEPENDENT `if`-statements, not one if/else-if -- a single move
+      can genuinely produce BOTH messages at once (nothing about
+      `CommitMove`'s own tile-bit checks makes level-crossing and an
+      on-tile item pickup mutually exclusive), with the original's own
+      second `showMessage()` call simply overwriting the first's popup.
+      `MovementMessageResult` models this with two independently-optional
+      fields rather than one enum, and the new smoke test proves both
+      firing together directly rather than just documenting it.
+
+      **A real, confirmed-by-grep original quirk, preserved rather than
+      "fixed" with an invented reset:** `Player.pendingLockedItemFlag` is
+      never set back to `false` anywhere in the whole original codebase
+      (both its write sites are inside `CommitMove`'s own dropped-item
+      block, only ever setting it `true`) -- so once a player ever picks
+      up one locked item, EVERY subsequent move reports
+      `lockedItemEndOfGame` forever, permanently shadowing the
+      crossing-message branch from then on. In the real game this is
+      likely inconsequential (the flag's real effect is triggering
+      `ESGame.newEndOfGameUI()`, and normal play doesn't continue past
+      that) -- this port doesn't model the end-of-game screen at all yet,
+      so the practical effect here is a silent, harmless no-op on every
+      move after the first locked pickup, not a crash or a wrong message.
+
+      Wired into `main.cpp`'s tick loop right after whichever of the 4
+      existing `PlayerMovement::Move` calls ran, gated on a held movement
+      key (matching the original's own `pendingMoveDir != 0` gate, this
+      port's simpler direct-dispatch equivalent -- see M34's own header
+      comment on why this file never buffers a `pendingMoveDir`/
+      `strafeFlag` pair the way `resolveMovementSideEffects()`'s own
+      declaration comment notes the original does). `strafeFlag`'s own
+      clear (the original's `if (this.strafeFlag) this.strafeFlag =
+      false;`) is N/A here for the same reason -- this file has no
+      buffered strafe state to clear in the first place, not a new gap.
+
+      Verified with a new `movement_messages_smoke.exe`:
+      `pendingLockedItemFlag` correctly taking precedence over (and
+      suppressing) an otherwise-would-fire crossing message; the full
+      3-way crossing-message choice against real `dungnamesin.dat` data
+      (including the confirmed-dead `leftLevelZone` branch, preserved);
+      `itemsFound`'s None/One/Several branches against real
+      `ItemDatabase` names (including the negative/equipped-id
+      `Math.abs()` case); and a direct proof that a crossing message and
+      an items-found message both populate from one call. 44 smoke tests
+      now pass in total; full clean rebuild stayed at zero `/W4` warnings.
+      Manually launched the real windowed exe and confirmed it starts and
+      stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
@@ -3130,13 +3192,8 @@ the Shop-economy gap above) is the last item in that bucket. Beyond that:
 a real save/load system (`PlayerSave` exists, M20, but there's no
 `WorldRegistry`/master-list save format, and `main.cpp`'s own Main Menu
 "Continue Game" item always takes the no-saved-game branch until one
-exists, M40); `resolveMovementSideEffects()`'s own message-popup layer
-(the "Found <item>!"/"Several items!" and level-crossing MSG_WARDENS_CAMP/
-MSG_OUTER_CAMP/displayNames() messages that real movement should show --
-confirmed real and un-ported while scoping M47, since main.cpp currently
-calls `PlayerMovement::Move` directly with no message wiring at all); Help
-topics (the Java transcription itself stops at topic index 4). Following
-dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47
+exists, M40); Help topics (the Java transcription itself stops at topic
+index 4). Following dawnstar's own later milestones roughly but expecting
+further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48
 already found.

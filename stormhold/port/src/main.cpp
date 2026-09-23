@@ -173,6 +173,14 @@
 // unconditionally, same as the original. New `assets/dungeon_names.h`
 // (Dungeon.loadNames()/displayNames(), never ported before now) backs
 // the real respawn-location message.
+//
+// M48 layers in `MovementMessages` (player/movement_messages.h, new this
+// session) -- GameCanvas.resolveMovementSideEffects(), the message-popup
+// layer real movement should show (confirmed real and flagged as
+// unwired by M47's own "what's next" note): a level-crossing message
+// (reusing DungeonNames, M47) and a "Found <item>!"/"Several items!"
+// message off the same before/after inventoryCount comparison M17
+// already wires through DungeonRuntime.
 #include <windows.h>
 
 #include <array>
@@ -198,6 +206,7 @@
 #include "platform/win32/window.h"
 #include "player/camp_state.h"
 #include "player/death_sequence.h"
+#include "player/movement_messages.h"
 #include "player/player_combat_stats.h"
 #include "player/player_inventory.h"
 #include "player/player_creation.h"
@@ -561,6 +570,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             bool shouldRunTick = campResult != stormhold::CampTickResult::StillWaiting &&
                                   deathResult != stormhold::DeathTickResult::Waiting;
             if (shouldRunTick) {
+                bool moveKeyPressed = up || down || left || right;
+                int8_t inventoryCountBeforeMove = player.inventoryCount;
                 if (up) {
                     stormhold::PlayerMovement::Move(player, 1, false, levelLookup, world, items, monsters, warden);
                 } else if (down) {
@@ -569,6 +580,25 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     stormhold::PlayerMovement::Move(player, 3, false, levelLookup, world, items, monsters, warden);
                 } else if (right) {
                     stormhold::PlayerMovement::Move(player, 4, false, levelLookup, world, items, monsters, warden);
+                }
+
+                // M48: GameCanvas.resolveMovementSideEffects() (was
+                // decompiled/e.java's `n()`) -- see player/
+                // movement_messages.h's own header comment for why both
+                // messages below can fire from the same move, and for
+                // `lockedItemEndOfGame`'s own not-modeled end-of-game gap.
+                if (moveKeyPressed) {
+                    stormhold::MovementMessageResult moveMsg = stormhold::MovementMessages::Resolve(
+                        player, inventoryCountBeforeMove, dungeonNames, items);
+                    if (moveMsg.crossingMessage.has_value()) {
+                        stormhold::MessagePopup::Show(messagePopup, *moveMsg.crossingMessage, 1, gameTimeMs);
+                    }
+                    if (moveMsg.itemsFound == stormhold::ItemsFoundKind::One) {
+                        stormhold::MessagePopup::Show(messagePopup, ItemFoundMessageLines(moveMsg.foundItemName), -1,
+                                                        gameTimeMs);
+                    } else if (moveMsg.itemsFound == stormhold::ItemsFoundKind::Several) {
+                        stormhold::MessagePopup::Show(messagePopup, {"Several", "items!"}, -1, gameTimeMs);
+                    }
                 }
 
                 // M43: GameCanvas.checkChestAhead() (was decompiled/
