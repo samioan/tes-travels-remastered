@@ -185,6 +185,31 @@ int PlayerCombatStats::EffectiveStat(const PlayerState& p, const CharacterData& 
     return v;
 }
 
+int PlayerCombatStats::ActiveAilmentCount(const PlayerState& p) {
+    int count = 0;
+    for (int i = 0; i < 8; i++) {
+        if ((p.ailmentMask >> i) & 1) count++;
+    }
+    return count;
+}
+
+void PlayerCombatStats::CureRandomAilment(PlayerState& p, JavaRandom& rng) {
+    int count = ActiveAilmentCount(p);
+    if (count <= 0) return;
+
+    int pick = (count == 1) ? 1 : RandomInt1Based(rng, count);
+    int seen = 0;
+    for (int i = 0; i < 8; i++) {
+        int bit = (p.ailmentMask >> i) & 1;
+        if (bit == 1) {
+            if (++seen == pick) {
+                p.ailmentMask = static_cast<int8_t>(p.ailmentMask & ~(1 << i));
+                break;
+            }
+        }
+    }
+}
+
 int PlayerCombatStats::RollOutcome(JavaRandom& rng, int atkChance, int defChance) {
     int atkRoll = RandomInt1Based(rng, 100);
     int defRoll = RandomInt1Based(rng, 100);

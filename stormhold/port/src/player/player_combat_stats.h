@@ -94,6 +94,21 @@ public:
     static bool HasAilment(const PlayerState& p, int ailmentId) {
         return (p.ailmentMask & (1 << (ailmentId - 1))) != 0;
     }
+    // Player.activeAilmentCount(): how many of the 8 ailmentMask bits are
+    // currently set -- CureRandomAilment's own helper, ported separately
+    // since the original itself is a separate named method.
+    static int ActiveAilmentCount(const PlayerState& p);
+    // Player.cureRandomAilment() (combat/spell_casting.h's own CastOnSelf,
+    // spell 25's repeated call): picks ONE currently-active ailment
+    // uniformly at random and clears it -- a genuinely DIFFERENT mechanic
+    // from ApplyRestRecovery's own per-bit 25%-independent-chance loop
+    // above, not a duplicate of it. The original draws its pick from
+    // `Util.randomInt(count)`, the SHARED-static-RNG one-arg overload
+    // (`ESGame.nextInt`) -- same "caller supplies/owns the RNG stream"
+    // divergence this port's RollOutcome/RollShopOutcome/ApplyRestRecovery
+    // all already establish, not reproduced bit-exact against a single
+    // shared generator.
+    static void CureRandomAilment(PlayerState& p, JavaRandom& rng);
 
     // coreStats[statIndex], plus a SkillValue(10, false)-scaled bonus
     // (clamped to the matching max stat) when effect 23

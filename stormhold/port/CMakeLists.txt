@@ -111,10 +111,13 @@ target_link_libraries(stormhold_player PUBLIC stormhold_assets stormhold_world s
 
 # M14: the two combat entry points needing both Player and Monster
 # (Player.attack(Monster)/Monster.tick(Player,now)). M17: target.store()/
-# Dungeon.spawnAmbushMonsters()'s own WorldRegistry wiring -- see
+# Dungeon.spawnAmbushMonsters()'s own WorldRegistry wiring. M46:
+# spell_casting.cpp (Player.castOnSelf/castOnMonster/cycleSelectedSpell +
+# GameCanvas.resolveSpellCastInput/resolveSpellCycleInput) -- see
 # docs/PORT_ROADMAP.md and src/combat/.
 add_library(stormhold_combat STATIC
   src/combat/combat_resolution.cpp
+  src/combat/spell_casting.cpp
 )
 target_include_directories(stormhold_combat PUBLIC src)
 target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster stormhold_dungeon)
@@ -398,5 +401,9 @@ target_link_libraries(chest_interaction_smoke PRIVATE stormhold_player)
 # M45 milestone smoke test -- see src/tests/m45_flash_overlay_smoke.cpp.
 add_executable(flash_overlay_smoke src/tests/m45_flash_overlay_smoke.cpp)
 target_link_libraries(flash_overlay_smoke PRIVATE stormhold_render)
+
+# M46 milestone smoke test -- see src/tests/m46_spell_casting_smoke.cpp.
+add_executable(spell_casting_smoke src/tests/m46_spell_casting_smoke.cpp)
+target_link_libraries(spell_casting_smoke PRIVATE stormhold_combat stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST

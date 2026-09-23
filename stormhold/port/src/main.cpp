@@ -172,7 +172,9 @@
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
 #include "assets/shop_dialogue.h"
+#include "assets/spell_database.h"
 #include "combat/combat_resolution.h"
+#include "combat/spell_casting.h"
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
@@ -333,6 +335,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     stormhold::DungeonGeometry geometry = stormhold::DungeonGeometry::Load(assetRoot);
     stormhold::CharacterData charData = stormhold::CharacterData::Load(assetRoot);
     stormhold::ShopDialogue dialogue = stormhold::ShopDialogue::Load(assetRoot);
+    // M46: combat/spell_casting.h's own SpellCasting::CastOnSelf/
+    // CastOnMonster/CycleSelectedSpell.
+    stormhold::SpellDatabase spells = stormhold::SpellDatabase::Load(assetRoot);
 
     stormhold::WorldRegistry world(37);
     std::vector<stormhold::GeneratedLevel> levels = BuildWorld(geometry, items, monsters, world);
@@ -401,6 +406,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // ResolveAttackInput's own job to clear it again either way.
     bool attackRequested = false;
     int64_t lastAttackTimeMs = 0;
+    // M46: GameCanvas.unconfirmed_ap/unconfirmed_U's own port-side stand-
+    // ins -- SpellCasting::ResolveSpellCastInput/ResolveSpellCycleInput's
+    // own job to clear each again either way. Unlike attackRequested
+    // above, keys '3'/'5' (below) are the REAL, unconditional key codes,
+    // not pragmatic stand-ins -- see combat/spell_casting.h's own
+    // ResolveSpellCastInput doc comment.
+    bool spellCastRequested = false;
+    bool spellCycleRequested = false;
+    int64_t lastSpellCastTimeMs = 0;
 
     // M40: edge-triggered key state for the Main Menu/new-game flow --
     // one MenuFlow action per physical keypress rather than once per
@@ -464,6 +478,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             bool campKeyEdge = KeyEdge('C');
             bool interactKeyEdge = KeyEdge('F');
             if (GetAsyncKeyState(VK_SPACE) & 0x8000) attackRequested = true;
+            // M46: real key codes ('3'/'5'), not stand-ins -- see
+            // spellCastRequested/spellCycleRequested's own comment above.
+            if (KeyEdge('3')) spellCastRequested = true;
+            if (KeyEdge('5')) spellCycleRequested = true;
 
             gameTimeMs += stormhold::GameClock::kTickInterval.count();
             stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
@@ -616,6 +634,53 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                                           gameTimeMs, lastAttackTimeMs, charData,
                                                                           items, monsters, combatRng, world)) {
                         flashOverlay.hit = true;
+                    }
+                }
+
+                // M46: GameCanvas.resolveSpellCastInput() (was e.java's
+                // h(long)) -- see combat/spell_casting.h's own header
+                // comment for the two flash-overlay flags this finally
+                // gives a real trigger (M45's own "what's next" note).
+                if (spellCastRequested) {
+                    stormhold::SpellCasting::Result castResult = stormhold::SpellCasting::ResolveSpellCastInput(
+                        player, targetMonster, spellCastRequested, gameTimeMs, lastSpellCastTimeMs, spells, charData,
+                        items, monsters, combatRng, world);
+                    if (castResult == stormhold::SpellCasting::Result::NotEnoughMagicka) {
+                        stormhold::MessagePopup::Show(messagePopup, {"Not enough", "magic!"}, 3, gameTimeMs);
+                    } else if (castResult == stormhold::SpellCasting::Result::NoMonster) {
+                        stormhold::MessagePopup::Show(messagePopup, {"No monster", "here!"}, 1, gameTimeMs);
+                    } else if (castResult == stormhold::SpellCasting::Result::CastOnMonster) {
+                        flashOverlay.spellHitMonster = true;
+                    } else if (castResult == stormhold::SpellCasting::Result::CastOnSelf) {
+                        flashOverlay.spellHitSelf = true;
+                    }
+                    // InvalidSpell/OnCooldown/NotRequested: no message in
+                    // the original either (InvalidSpell only prints a
+                    // debug line, not reproduced -- see combat/
+                    // spell_casting.h's own Result::InvalidSpell comment).
+                }
+
+                // M46: GameCanvas.resolveSpellCycleInput() (was e.java's
+                // g(long)).
+                if (spellCycleRequested) {
+                    int newSpellId =
+                        stormhold::SpellCasting::ResolveSpellCycleInput(player, spellCycleRequested, spells);
+                    if (newSpellId == 0) {
+                        stormhold::MessagePopup::Show(messagePopup, {"No spells!", ""}, -1, gameTimeMs);
+                    } else {
+                        // Reuses ItemFoundMessageLines' own word-split
+                        // algorithm -- confirmed IDENTICAL to
+                        // resolveSpellCycleInput()'s own inlined copy of
+                        // itemFoundMessageLines()'s split (both: >=3 words
+                        // -> first two words joined on line 1, 3rd word
+                        // alone on line 2; else one word per line), so this
+                        // port reuses the one already-confirmed helper
+                        // rather than duplicating it a 3rd time, unlike the
+                        // original's own two separate near-identical
+                        // copies (see combat/spell_casting.h's own
+                        // ResolveSpellCycleInput doc comment).
+                        stormhold::MessagePopup::Show(messagePopup, ItemFoundMessageLines(spells.ById(newSpellId).name),
+                                                        -1, gameTimeMs);
                     }
                 }
 

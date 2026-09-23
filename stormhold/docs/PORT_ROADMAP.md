@@ -2906,6 +2906,100 @@ read-through.
       `/W4` warnings. Manually launched the real windowed exe and
       confirmed it starts and stays up.
 
+- [x] **M46 -- spell casting/cycling, wired into the live port** (this
+      session). New `combat/spell_casting.h`/`.cpp` (`stormhold_combat`,
+      alongside `combat_resolution.h` since `CastOnMonster` needs a live
+      `MonsterState` + `WorldRegistry`, and its own case-14 branch calls
+      `CombatResolution::PlayerAttack` directly): `SpellCasting::
+      CastOnSelf`/`CastOnMonster` (`Player.castOnSelf(int)`/
+      `castOnMonster(int, Monster)`, both fully confirmed Java since M13
+      but never ported to C++ before now) and `CycleSelectedSpell`
+      (`Player.cycleSelectedSpell()`), plus the GameCanvas-level dispatch
+      pair `ResolveSpellCastInput`/`ResolveSpellCycleInput`
+      (`resolveSpellCastInput(long)`/`resolveSpellCycleInput(long)`, M41's
+      own `unconfirmed_ap`/`unconfirmed_U` dispatch branches, decompiled/
+      e.java's `h(long)`/`g(long)`) -- M41's whole per-tick dispatch web is
+      now fully wired except `openInventory()`. Also extended
+      `player/player_combat_stats.h` with `ActiveAilmentCount`/
+      `CureRandomAilment` (`Player.activeAilmentCount()`/
+      `cureRandomAilment()`, a genuinely different mechanic from
+      `ApplyRestRecovery`'s own per-bit 25%-chance loop, not a duplicate of
+      it).
+
+      **Real key-binding finding:** unlike attack/camp/interact (all
+      pragmatic stand-in keys, SPACE/'C'/'F', since their real hotbar keys
+      are gated behind a `hotbarActionSet` this port doesn't model), spell
+      cast/cycle's real key codes ('3'/'5') are confirmed genuinely
+      UNCONDITIONAL in `keyPressed()` -- no `hotbarActionSet` gate at all.
+      So `main.cpp` binds directly to the real keys this time, edge-
+      triggered (`KeyEdge`) like camp/interact, not level-triggered like
+      attack's own SPACE.
+
+      **Two real, deliberately-preserved findings from reading
+      `castOnMonster`'s whole switch side by side, confirmed by dumping
+      the real `spellsin.dat` rows while scoping this milestone (25 spells,
+      names/school/cost/power all read directly, not assumed):**
+      1. Only 5 of its 9 `scratch[]`-mutating cases (4, 11, 12, 13, 15)
+         call `target.store()` -- cases 10, 16, 18, 19 mutate
+         `target.scratch[]`/`player.effectDurations[]` but never persist
+         back to the registry. A real asymmetry, preserved exactly (see
+         `combat/spell_casting.h`'s own class comment) and directly proven
+         by a live test: casting spell 4 (which stores) really updates the
+         `WorldRegistry`'s own copy; casting spell 16 (which doesn't)
+         leaves the registry's copy untouched even though the local
+         `target` mutated.
+      2. Spell 17 ("Sanctuary") has `school=1` in the real data, not 2 --
+         so `Spell.isOffensive(17)` is always false and `castOnMonster`'s
+         own case 17 (a defensive self-buff, oddly written into the
+         *offensive* spell method) is confirmed UNREACHABLE through any
+         real dispatch. Transcribed anyway, not deleted, same "port a
+         confirmed-dead branch faithfully" treatment M40's own
+         classInfoUI dead-branch finding already established.
+
+      Also confirmed and preserved: `castOnMonster`'s own local
+      `Spell.power` read is never actually used anywhere in its switch
+      (every damage case derives its magnitude from skill values/
+      `targetOffense` instead, unlike `castOnSelf` where `power` IS used)
+      -- a genuine dead read, elided (not declared at all) rather than
+      left to trip this port's `/W4` bar, same treatment given
+      `Player.nthKnownSpellId`'s own dead local (computes `spellId = i+1`
+      but returns `i`) in `CycleSelectedSpell`'s private helper. And: a
+      real, surprising control-flow finding -- `lastSpellCastTimeMs`
+      restamps even when an offensive spell finds no target (`NoMonster`),
+      since the original's own restamp sits OUTSIDE the offensive/self
+      dispatch; preserved exactly, not "fixed" into only restamping on an
+      actual cast.
+
+      `ResolveSpellCastInput` returns a `Result` enum (`NotRequested`/
+      `InvalidSpell`/`NotEnoughMagicka`/`NoMonster`/`OnCooldown`/
+      `CastOnMonster`/`CastOnSelf`) rather than a bare bool, same
+      "game logic returns a signal, the caller shows the message" pattern
+      `CampTickResult`/`ResolveAttackInput` already established --
+      `main.cpp` shows `MSG_NOT_ENOUGH_MAGICKA`/`MSG_NO_MONSTER` and sets
+      `FlashOverlayState::spellHitMonster`/`spellHitSelf` accordingly,
+      finally giving those two M45 flags a real trigger site.
+      `ResolveSpellCycleInput`'s own "newly selected spell" message reuses
+      `main.cpp`'s existing `ItemFoundMessageLines` helper rather than
+      duplicating a 3rd copy of the same word-split algorithm -- confirmed
+      identical output to `resolveSpellCycleInput()`'s own inlined 2nd
+      copy of `itemFoundMessageLines()`'s split, unlike the original's own
+      two separate near-identical blocks.
+
+      Verified with a new `spell_casting_smoke.exe`, built on real
+      `spellsin.dat` data (dumped first to hand-pick spell ids whose
+      effect is provably tier-independent, so every check is deterministic
+      regardless of RNG seed -- no seed-hunting needed): every
+      `ResolveSpellCastInput` branch (not-enough-Magicka, invalid spell,
+      the 500ms cooldown's exact `>=` boundary, no-monster-but-still-
+      restamps, a deterministic self cast, a deterministic
+      ailment-cure-with-count-1 cast, a deterministic offensive cast with
+      a live `store()` check), the store()-asymmetry proof above, and
+      `CycleSelectedSpell`/`ResolveSpellCycleInput`'s wraparound/single-
+      spell/no-spells-known behavior. 42 smoke tests now pass in total;
+      full clean rebuild stayed at zero `/W4` warnings (after eliding the
+      2 confirmed-dead locals above, which otherwise tripped it). Manually
+      launched the real windowed exe and confirmed it starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
@@ -2919,24 +3013,20 @@ NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's own
 than camp/rest or chest interaction were, likely worth its own multi-part
 treatment rather than one milestone.
 
-Beyond that, M41's dispatch web still has spell casting/cycling
-(`resolveSpellCastInput`/`resolveSpellCycleInput` -- both fully confirmed
-Java, `Player.castOnSelf`/`castOnMonster`/`cycleSelectedSpell` already
-exist, but neither has a C++ port yet -- once it is, it also finally
-gives `FlashOverlayState::spellHitMonster`/`spellHitSelf` (M45) a real
-trigger site) and opening the inventory screen (`openInventory` -- needs
-a real inventory UI this port doesn't have at all yet, a bigger lift
-than camp/rest or chest interaction were) left unwired. `paintUnknown_b()`
-(the one remaining unported-PIXEL paint method, the NPC/shop-portrait and
-Warden-compass icon painter -- gated on `unconfirmed_W`/`Player.
-questShopAtPendingTile()`, itself downstream of the same Shop-economy gap
-above) is the last item in this bucket. Beyond that: a real save/load
-system (`PlayerSave` exists, M20, but there's no `WorldRegistry`/
-master-list save format, and `main.cpp`'s own Main Menu "Continue Game"
-item always takes the no-saved-game branch until one exists, M40); the
-still-unwired death/respawn sequence (M42's own "what's next" note
-carried forward); Help topics (the Java transcription itself stops at
-topic index 4). Following dawnstar's own later milestones roughly but
-expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45
+Beyond that, M41's dispatch web now has only ONE branch left unwired:
+opening the inventory screen (`openInventory` -- needs a real inventory UI
+this port doesn't have at all yet, a bigger lift than camp/rest or chest
+interaction were, and a bigger lift than spell casting/cycling turned out
+to be too). `paintUnknown_b()` (the one remaining unported-PIXEL paint
+method, the NPC/shop-portrait and Warden-compass icon painter -- gated on
+`unconfirmed_W`/`Player.questShopAtPendingTile()`, itself downstream of
+the Shop-economy gap above) is the last item in that bucket. Beyond that:
+a real save/load system (`PlayerSave` exists, M20, but there's no
+`WorldRegistry`/master-list save format, and `main.cpp`'s own Main Menu
+"Continue Game" item always takes the no-saved-game branch until one
+exists, M40); the still-unwired death/respawn sequence (M42's own "what's
+next" note carried forward); Help topics (the Java transcription itself
+stops at topic index 4). Following dawnstar's own later milestones
+roughly but expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46
 already found.
