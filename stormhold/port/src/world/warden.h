@@ -1,4 +1,6 @@
 #pragma once
+#include "assets/binary_reader.h"
+#include "assets/binary_writer.h"
 #include "world/dungeon_generator.h"
 
 namespace stormhold {
@@ -55,6 +57,25 @@ public:
     // `level2` here is level NUMBER 2's own generated tiles (`PopulateLevel
     // (2, ...)`'s output), matching that real indexing exactly.
     void Leave(GeneratedLevel& hub, const GeneratedLevel& level2);
+
+    // ESGame.writeMasterLists()/readMasterLists()'s own `Shop.
+    // wardenVisitCount`/`Shop.wardenPresent` fields (M55, world/
+    // shop_save.h's own header comment on this record's real vs. this
+    // port's own layout). `visitCount` is written as a single signed byte
+    // (`WriteS8`), matching the real field's own Java `byte` type --
+    // `int` here is this struct's own in-memory widening (see this
+    // class's own header comment: a primitive with a real inline
+    // default, unaffected by the Shop.reset() correction M53 made).
+    static void WriteTo(BinaryWriter& out, const WardenState& w) {
+        out.WriteS8(static_cast<int8_t>(w.visitCount));
+        out.WriteBool(w.present);
+    }
+    static WardenState ReadFrom(BinaryReader& in) {
+        WardenState w;
+        w.visitCount = in.ReadS8();
+        w.present = in.ReadBool();
+        return w;
+    }
 };
 
 }  // namespace stormhold

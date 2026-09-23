@@ -19,6 +19,10 @@ public:
 
     uint8_t ReadU8() { return static_cast<uint8_t>(ReadByte()); }
     int8_t ReadS8() { return static_cast<int8_t>(ReadByte()); }
+    // Mirror of BinaryWriter::WriteBool (M55) -- matches
+    // DataInputStream.readBoolean()'s own "any nonzero byte is true"
+    // reading, not just a strict 0/1 check.
+    bool ReadBool() { return ReadU8() != 0; }
 
     uint16_t ReadU16() {
         uint16_t hi = ReadU8();

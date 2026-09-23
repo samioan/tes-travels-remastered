@@ -19,19 +19,18 @@ namespace stormhold {
 // the same loop inlined directly for chests/dropped-items (which have no
 // live object to round-trip through, just raw byte records already).
 //
-// **Deliberately NOT ported here, both confirmed real, separate gaps:**
-// `writeMasterLists()`/`readMasterLists()` (Item.nextSpawnId/
-// Monster.nextSpawnIdCounter plus most of Shop's own static per-shop
-// quest-economy state). **M53 update:** a live `ShopState` now exists
-// (world/shop_state.h -- see its own class comment, including a
-// correction of an earlier `Shop.reset()` finding this comment used to
-// cite: `reset()` genuinely runs, via a `Shop.java`-own static
-// initializer this project's own grep-based checks had missed, so
-// Save/Load are NOT broken in the real game after all). Wiring this
-// format extension in is simply not done yet -- an ordinary port
-// completeness gap, `ShopState` for now stays entirely session-local (a
-// fresh `ShopState` every launch, never round-tripped), left for a later
-// milestone. And the RecordStore-equivalent
+// **Deliberately NOT ported here:** `writeMasterLists()`/
+// `readMasterLists()` (Item.nextSpawnId/Monster.nextSpawnIdCounter plus
+// most of Shop's own static per-shop quest-economy state). **M53/M55
+// update:** `ShopState` (world/shop_state.h) now exists, and `Shop::
+// WriteTo`/`ReadFrom` there plus `WardenState::WriteTo`/`ReadFrom`
+// (world/warden.h) cover everything this port models of that record --
+// wired into the actual save file by `player/game_save.h`'s own
+// `GameSave::Save`/`Load`, not here (this module stays scoped to the
+// per-level registries alone). `Item.nextSpawnId`/
+// `Monster.nextSpawnIdCounter` are still NOT covered -- see game_save.h's
+// own header comment for why (this port has never modeled either as a
+// single persistent global counter). And the RecordStore-equivalent
 // file I/O itself (multi-save-slot naming/discovery/deletion,
 // `generateUniqueSaveName`/`findMostRecentSaveName`/`deleteOtherSaves`) --
 // this port needs its own plain-file save mechanism, not a MIDP

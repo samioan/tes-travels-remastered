@@ -2,8 +2,11 @@
 // including the confirmed wardenLeaves() index bug (see world/warden.h's
 // own header comment) reproduced deliberately rather than "fixed".
 #include <cstdio>
+#include <sstream>
 
 #include "assets/asset_root.h"
+#include "assets/binary_reader.h"
+#include "assets/binary_writer.h"
 #include "assets/dungeon_geometry.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
@@ -81,6 +84,23 @@ int main(int argc, char** argv) {
         warden.Leave(hub, level2);
         ok &= Expect(!warden.ShouldVisit(100000),
                      "should never visit again past visitCount==3, matching the original's missing 4th branch");
+
+        // WardenState::WriteTo/ReadFrom (M55): round-trips through the
+        // exact BinaryWriter/BinaryReader pair player/game_save.h composes
+        // into the real save file.
+        {
+            std::ostringstream out;
+            stormhold::BinaryWriter writer(out);
+            stormhold::WardenState::WriteTo(writer, warden);
+
+            std::istringstream in(out.str());
+            stormhold::BinaryReader reader(in);
+            stormhold::WardenState loaded = stormhold::WardenState::ReadFrom(reader);
+
+            ok &= Expect(loaded.visitCount == warden.visitCount,
+                         "WardenState::WriteTo/ReadFrom round-trips visitCount");
+            ok &= Expect(loaded.present == warden.present, "WardenState::WriteTo/ReadFrom round-trips present");
+        }
 
         if (!ok) {
             std::fprintf(stderr, "m8_warden_smoke: FAILED self-consistency checks\n");

@@ -2,6 +2,8 @@
 #include <array>
 #include <cstdint>
 
+#include "assets/binary_reader.h"
+#include "assets/binary_writer.h"
 #include "assets/item_database.h"
 
 namespace stormhold {
@@ -47,12 +49,15 @@ namespace stormhold {
 //
 // `Shop.clearQuestTurnInState()` (the confirmed real, already-flagged gap
 // -- see player/player_leveling.h's own class comment, open since
-// M13/M14) and `writeMasterLists()`/`readMasterLists()`'s own missing
-// half of the save format (M49's own "what's next" note) are both still
-// simply NOT WIRED into any live call site yet -- an ordinary port
-// completeness gap now that this struct exists to wire them TO, not a
-// bug-preservation question. Left for a later milestone; see
-// docs/PORT_ROADMAP.md's own "what's next".
+// M13/M14) was wired into `PlayerLeveling::ConsumeLevelExp` at M54.
+// `writeMasterLists()`/`readMasterLists()`'s own missing half of the save
+// format (M49's own "what's next" note) is now covered too, as far as
+// this port currently can -- see `Shop::WriteTo`/`ReadFrom` below, and
+// `player/game_save.h`'s own header comment for what's deliberately still
+// left out (`Item.nextSpawnId`/`Monster.nextSpawnIdCounter`, a bigger,
+// separate, not-yet-modeled-as-persistent-state gap, and this record's
+// own byte LAYOUT, which no longer matches the original's field order
+// now that those two counters are skipped).
 //
 // Every array/field below default-initializes to the REAL state
 // `Shop.reset()` itself produces (questRewardClaimable/firstVisit true
@@ -144,6 +149,45 @@ public:
             default:
                 return 0;
         }
+    }
+
+    // ESGame.writeMasterLists()/readMasterLists()'s own `Shop`-owned
+    // fields (M55) -- see player/game_save.h's own header comment for the
+    // full picture of what this port's save file covers and what it
+    // deliberately doesn't yet. Field order here is this port's OWN
+    // layout (firstVisit/questRewardClaimable/interactionCount/
+    // rewardsGiven/unconfirmedCooldownH/questState1/questState2/
+    // benecaPoints/helgaPoints/showSpecialGreeting), not the original's
+    // interleaved one -- the original's own order only makes sense
+    // alongside the nextSpawnId counters and wardenVisitCount/
+    // wardenPresent fields this port writes elsewhere (WardenState::
+    // WriteTo/ReadFrom, world/warden.h) or not at all, so reproducing its
+    // exact byte positions here would be misleading, not faithful.
+    static void WriteTo(BinaryWriter& out, const ShopState& s) {
+        for (bool v : s.firstVisit) out.WriteBool(v);
+        for (bool v : s.questRewardClaimable) out.WriteBool(v);
+        for (int16_t v : s.interactionCount) out.WriteS16(v);
+        for (int16_t v : s.rewardsGiven) out.WriteS16(v);
+        for (int16_t v : s.unconfirmedCooldownH) out.WriteS16(v);
+        for (int8_t v : s.questState1) out.WriteS8(v);
+        for (int8_t v : s.questState2) out.WriteS8(v);
+        out.WriteS16(s.benecaPoints);
+        out.WriteS16(s.helgaPoints);
+        out.WriteBool(s.showSpecialGreeting);
+    }
+    static ShopState ReadFrom(BinaryReader& in) {
+        ShopState s;
+        for (bool& v : s.firstVisit) v = in.ReadBool();
+        for (bool& v : s.questRewardClaimable) v = in.ReadBool();
+        for (int16_t& v : s.interactionCount) v = in.ReadS16();
+        for (int16_t& v : s.rewardsGiven) v = in.ReadS16();
+        for (int16_t& v : s.unconfirmedCooldownH) v = in.ReadS16();
+        for (int8_t& v : s.questState1) v = in.ReadS8();
+        for (int8_t& v : s.questState2) v = in.ReadS8();
+        s.benecaPoints = in.ReadS16();
+        s.helgaPoints = in.ReadS16();
+        s.showSpecialGreeting = in.ReadBool();
+        return s;
     }
 };
 

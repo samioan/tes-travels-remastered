@@ -3562,27 +3562,71 @@ fires (not just "still zero from a fresh `ShopState`"). 50 smoke tests
 pass; full clean rebuild stayed at zero `/W4` warnings. Manually launched
 the real windowed exe and confirmed it starts and stays up.
 
+## M55: `ShopState`/`WardenState` join the save format
+
+**Scope.** `writeMasterLists()`/`readMasterLists()`'s own missing half of
+the save format (M49's own "what's next" note) is now covered, as far as
+this port currently models it: new `Shop::WriteTo`/`ReadFrom`
+(`world/shop_state.h`) and `WardenState::WriteTo`/`ReadFrom`
+(`world/warden.h`) serialize every field either struct owns, via a new
+`BinaryReader::ReadBool()` (mirroring the existing `BinaryWriter::
+WriteBool`). `GameSave::Save`/`Load` (`player/game_save.h`/`.cpp`) both
+now take a `ShopState&`/`WardenState&` and write/read them right after
+the world blob. Wiring this into the file needed one real format change:
+the world blob now gets its own 4-byte length prefix (previously read to
+EOF, which only worked because it was always the last thing in the
+file) -- documented in `game_save.h`'s own header comment as an
+unremarkable dev-only format bump, not a compatibility concern. `main.cpp`
+gained a new session-local `ShopState shop;` alongside its existing
+`WardenState warden;`, both now populated for real by `GameSave::Load`'s
+own call site instead of staying at their default-constructed state
+forever.
+
+**Deliberately still NOT covered:** `Item.nextSpawnId`/
+`Monster.nextSpawnIdCounter`, the other half of the original's own
+`writeMasterLists()`/`readMasterLists()` record -- this port has never
+modeled either as the single persistent global counter the original
+uses (every spawn site already uses its own local counter instead, a
+confirmed divergence made peace with since M6/M9); unifying them into
+one save-able counter is a bigger, separate lift. This record's own byte
+LAYOUT is this port's own (shop fields in `ShopState`'s own declaration
+order, then warden fields), not the original's interleaved one -- already
+a "behavioral reimplementation, not byte-exact" divergence the moment the
+two spawn-id counters are skipped, so reproducing the original's exact
+byte positions here would be misleading, not faithful.
+
+**Verification.** `m53_shop_state_smoke.cpp` and `m8_warden_smoke.cpp`
+each gained a focused `WriteTo`/`ReadFrom` round-trip test (a
+deliberately non-default `ShopState`/`WardenState` through the exact
+`BinaryWriter`/`BinaryReader` pair `GameSave` composes). `m50_game_save_
+smoke.cpp`'s own `TestRoundTrip` extended with a real, non-default
+`ShopState`/`WardenState` alongside its existing player/world data,
+asserting every field of both round-trips through a full `GameSave::
+Save`/`Load` cycle; its other 3 tests' call sites updated for the new
+signature. 48 smoke tests pass; full clean rebuild stayed at zero `/W4`
+warnings. Manually launched the real windowed exe and confirmed it
+starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
 port -- doing so needs the REST of a real `Shop`-economy C++ model
 (M53 built the data struct and pure lookup helpers, M54 wired
-`clearQuestTurnInState()`; still missing: porting `Shop.dialogue()`'s own
-large per-action switch), which would also finally unblock the NPC-talk
-half of `resolveInteractInput()` and the NPC-nameplate half of
-`refreshNpcNameplateAndWardenLeave()` (M43's own "what's next" note) in
-the live port, AND `writeMasterLists()`/`readMasterLists()`'s own missing
-half of the save format (M49's own "what's next" note, still open post-
-M54 -- `Item::nextSpawnId`/`Monster::nextSpawnIdCounter` plus the rest of
-`ShopState` all still need serializing). That's a substantially bigger
+`clearQuestTurnInState()`, M55 wired the save format; still missing:
+porting `Shop.dialogue()`'s own large per-action switch), which would
+also finally unblock the NPC-talk half of `resolveInteractInput()` and
+the NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's
+own "what's next" note) in the live port. That's a substantially bigger
 lift than camp/rest or chest interaction were, likely worth its own
 multi-part treatment rather than one milestone. No bug-preservation
 dilemma blocks it either way -- see M53's own entry for the corrected
 `Shop.reset()` finding (it genuinely runs in the real game, via a static
 initializer); the one real surviving caveat is that `reset()` only ever
 runs ONCE per app launch there, not once per New Game, so quest-economy
-state carries over across a same-session death-restart, worth keeping in
-mind whichever milestone actually wires the save format.
+state carries over across a same-session death-restart -- not modeled by
+`ShopState` either way (this port has no live app-lifetime `Shop`
+instance to carry state between a death-restart and the next), just
+worth keeping in mind for whoever eventually adds one.
 
 Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
@@ -3604,7 +3648,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own

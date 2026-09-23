@@ -6,8 +6,11 @@
 // question -- see that comment's own correction of an earlier session's
 // mistaken `Shop.reset()` finding).
 #include <cstdio>
+#include <sstream>
 
 #include "assets/asset_root.h"
+#include "assets/binary_reader.h"
+#include "assets/binary_writer.h"
 #include "assets/item_database.h"
 #include "world/shop_state.h"
 
@@ -85,6 +88,53 @@ int main(int argc, char** argv) {
         ok &= Expect(stormhold::Shop::QuestFlagsFor(4, 1, items) == 0,
                      "questFlagsFor(shopId>=4, ...) should fall through to 0, matching the original's own final "
                      "else branch");
+
+        // Shop::WriteTo/ReadFrom (M55): a non-default ShopState round-trips
+        // through the exact BinaryWriter/BinaryReader pair player/
+        // game_save.h composes into the real save file.
+        {
+            std::printf("-- Shop::WriteTo/ReadFrom round-trip --\n");
+            stormhold::ShopState original;
+            original.questRewardClaimable = {false, true, false, true, false, true, false};
+            original.firstVisit = {true, false, true, false, true, false, true};
+            original.questState1 = {-1, 2, -3, 4};
+            original.questState2 = {5, -6, 7, -8};
+            original.interactionCount = {100, -200, 300, -400};
+            original.rewardsGiven = {1, 2, 3, 4};
+            original.unconfirmedCooldownH = {-1, -2, -3, -4};
+            original.benecaPoints = 12345;
+            original.helgaPoints = -12345;
+            original.showSpecialGreeting = true;
+
+            std::ostringstream out;
+            stormhold::BinaryWriter writer(out);
+            stormhold::Shop::WriteTo(writer, original);
+
+            std::istringstream in(out.str());
+            stormhold::BinaryReader reader(in);
+            stormhold::ShopState loaded = stormhold::Shop::ReadFrom(reader);
+
+            ok &= Expect(loaded.questRewardClaimable == original.questRewardClaimable,
+                         "questRewardClaimable round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.firstVisit == original.firstVisit,
+                         "firstVisit round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.questState1 == original.questState1,
+                         "questState1 round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.questState2 == original.questState2,
+                         "questState2 round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.interactionCount == original.interactionCount,
+                         "interactionCount round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.rewardsGiven == original.rewardsGiven,
+                         "rewardsGiven round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.unconfirmedCooldownH == original.unconfirmedCooldownH,
+                         "unconfirmedCooldownH round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.benecaPoints == original.benecaPoints,
+                         "benecaPoints round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.helgaPoints == original.helgaPoints,
+                         "helgaPoints round-trips through WriteTo/ReadFrom");
+            ok &= Expect(loaded.showSpecialGreeting == original.showSpecialGreeting,
+                         "showSpecialGreeting round-trips through WriteTo/ReadFrom");
+        }
 
         if (!ok) {
             std::fprintf(stderr, "m53_shop_state_smoke: FAILED self-consistency checks\n");

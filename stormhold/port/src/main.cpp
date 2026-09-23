@@ -404,6 +404,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     auto levelLookup = [&](int levelNumber) -> stormhold::GeneratedLevel& { return levels[static_cast<size_t>(levelNumber - 1)]; };
 
     stormhold::WardenState warden;
+    // M55: session-local until GameSave::Load actually populates it below
+    // (a fresh, default-constructed ShopState otherwise -- see world/
+    // shop_state.h's own class comment for why that default is already
+    // the real Shop.reset() state, not a placeholder).
+    stormhold::ShopState shop;
     // M40: no longer created up front -- MenuFlowState::draft holds the
     // in-progress character through the whole Main Menu/new-game flow;
     // `player` itself is only given real content once that flow reaches
@@ -565,7 +570,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // `player/player_movement.h`'s own CommitMove gate (M52)
                 // now correctly refuses to move through at all -- see
                 // that method's own declaration comment.
-                if (stormhold::GameSave::Load(savePath, levels.size(), player, world)) {
+                // M55: `shop`/`warden` are now loaded for real too (both
+                // previously session-local always-default state on a
+                // load, same as `player`/`world` describes above -- see
+                // player/game_save.h's own header comment for what this
+                // file format does and doesn't cover yet).
+                if (stormhold::GameSave::Load(savePath, levels.size(), player, world, shop, warden)) {
                     for (stormhold::GeneratedLevel& level : levels) {
                         ClearTransientTileFlags(level);
                         stormhold::DungeonRuntime::RefreshTileFlags(level, world);
