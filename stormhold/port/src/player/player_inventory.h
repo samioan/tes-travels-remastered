@@ -2,8 +2,11 @@
 #include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 
+#include "assets/character_data.h"
 #include "assets/item_database.h"
+#include "assets/spell_database.h"
 #include "dungeon/dungeon_runtime.h"
 #include "player/player_state.h"
 #include "world/game_advancement.h"
@@ -200,6 +203,90 @@ public:
     // death/respawn handling (player/death_sequence.h), which strips every
     // NON-equipped item on respawn.
     static bool IsSlotEquipped(const PlayerState& p, int slot, const ItemDatabase& items);
+
+    // M61: the last un-ported pieces of Player.java's inventory-ACTION
+    // logic -- the item-tooltip text and the 4 menu-gate/action pairs
+    // ESGame's `newInventoryItemUI()` (Drop/Equip-or-Unequip/Learn/Use)
+    // reads before showing each option, plus the two actions themselves.
+    // Deliberately NOT the inventory screens themselves (`newInventoryUI`/
+    // `newInventoryItemUI`, `openInventory`'s own dispatch) -- that's its
+    // own separate, bigger UI-wiring lift, same "logic first, wiring
+    // later" split M56 (ShopInteraction) and M60 (its live wiring) already
+    // used.
+
+    // Player.canEquipOrUnequip(slot): equipment categories 1-10, OR 17.
+    // NOT the same predicate as ItemDatabase::IsEquipmentCategory (which
+    // only covers 1-10) -- category 17 is a real, distinct case here (see
+    // ItemTooltip's own case 17 branch below, "Weapon value: 20+bonus",
+    // confirmed by reading Player.java's own canEquipOrUnequip() switch
+    // directly, not inferred from IsEquipmentCategory's existing range).
+    static bool CanEquipOrUnequip(const PlayerState& p, int slot, const ItemDatabase& items);
+
+    // Player.isScrollCategory(slot): categories 13 or 15. No confirmed
+    // caller anywhere in ../../../src/ -- Player.java's own source has no
+    // comment on this one either, unlike most of its other no-confirmed-
+    // caller methods; ported for completeness alongside its neighbors,
+    // not because anything is known to call it. See CanUseItem's own
+    // comment below for the real finding that this is, byte-for-byte, the
+    // exact same category check as canUseItem() under a different name.
+    static bool IsScrollCategory(const PlayerState& p, int slot, const ItemDatabase& items);
+
+    // Player.canLearnSpellFromScroll(slot): category-12 gate + a skill-
+    // PREREQUISITE gate (skills[spellSkill][0] > 0, i.e. must already have
+    // SOME rank in the spell's governing skill) -- NOT a "not already
+    // known" gate.
+    static bool CanLearnSpellFromScroll(const PlayerState& p, int slot, const ItemDatabase& items,
+                                         const SpellDatabase& spells);
+
+    // Player.learnSpellFromScroll(slot): sets the matching knownSpellsMask
+    // bit and consumes the slot (RemoveInventorySlot). Always returns
+    // true, and never itself calls CanLearnSpellFromScroll -- any "don't
+    // call this twice"/prerequisite gating is the caller's job.
+    static bool LearnSpellFromScroll(PlayerState& p, int slot, const ItemDatabase& items);
+
+    // Player.canUseItem(slot): category 13 or 15 -- a real, confirmed
+    // EXACT duplicate of IsScrollCategory's own category check above
+    // (both switch on the identical two cases), just under a second name;
+    // not a transcription slip on this port's side, confirmed by reading
+    // both original methods side by side.
+    static bool CanUseItem(const PlayerState& p, int slot, const ItemDatabase& items);
+
+    // Player.useItem(slot, target): the 87-99 "gift"/special-consumable
+    // switch -- warp/mark camp, cure ailment, HP/Magicka/Fatigue/level-exp
+    // restoratives, harm/armor/safe-camping buffs, and 3 instant-kill
+    // scrolls gated on target's difficulty stats (columns 4/10 vs.
+    // 13/22/29). `target` is nullable, matching the original's own
+    // `Monster target` parameter -- pass nullptr when there's no monster
+    // to target.
+    //
+    // **A real, confirmed finding:** `../../../src/ESGame.java`'s only
+    // call site (its inventory-item-action handler, screenGroup 5/34's
+    // "Use" branch) always passes `null` for `target` -- there is no
+    // confirmed path anywhere in `../../../src/` that ever gives useItem()
+    // a real monster to target. That makes the id 97/98/99 instant-kill
+    // branches dead code in the real game's own confirmed call graph, not
+    // just an unwired gap in this port -- ported faithfully anyway
+    // (including the `MonsterDatabase&`/`WorldRegistry&` machinery they'd
+    // need) rather than dropped, on the chance a caller this pass missed
+    // exists, or a future milestone adds one.
+    static void UseItem(PlayerState& p, int slot, MonsterState* target, const ItemDatabase& items,
+                         const MonsterDatabase& monsters, WorldRegistry& world, JavaRandom& rng);
+
+    // Player.itemTooltip(slot): category-dependent tooltip text
+    // (weapon/armor slots show their value, spells show "Spell: <name>",
+    // "gift" items (category 13) show Item.specialEffectText, etc).
+    // `Item.specialEffectText` itself has no equivalent loaded asset table
+    // (it's fixed literal flavor text in the original source, never read
+    // from itemsin.dat) -- kept as a local literal table in
+    // player_inventory.cpp, matching the original's own hardcoded static
+    // field exactly rather than inventing a data-file entry for it.
+    // `charData` is only actually read by the category-17 branch (its own
+    // `SkillValue(..., includeBonus=false)` call still needs it, even
+    // though `includeBonus=false` -- PlayerCombatStats::SkillValue's own
+    // signature always takes CharacterData, see that method's own
+    // comment).
+    static std::string ItemTooltip(const PlayerState& p, int slot, const ItemDatabase& items,
+                                    const SpellDatabase& spells, const CharacterData& charData);
 };
 
 }  // namespace stormhold

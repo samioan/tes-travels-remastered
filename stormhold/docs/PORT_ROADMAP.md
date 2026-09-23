@@ -3896,6 +3896,104 @@ starts and stays up.
       asset data by the smoke test above, just not the live rendering
       itself.
 
+- [x] **M61 -- `PlayerInventory`'s inventory-ACTION logic (`itemTooltip`/
+      `canEquipOrUnequip`/`isScrollCategory`/`canLearnSpellFromScroll`/
+      `learnSpellFromScroll`/`canUseItem`/`useItem`)** (this session). The
+      last un-ported pieces of `Player.java`'s general inventory logic --
+      everything `ESGame.java`'s own `newInventoryItemUI()` (the real
+      Drop/Equip-or-Unequip/Learn/Use per-slot action menu) reads before
+      showing each option, plus the two actions ("Learn"/"Use") themselves.
+      Deliberately NOT the inventory screens themselves (`newInventoryUI`/
+      `newInventoryItemUI`, or `openInventory`'s own dispatch out of
+      `tickPlayerAction()`) -- that's its own separate, bigger UI-wiring
+      lift (`docs/PORT_ROADMAP.md`'s own "What's next" already flagged
+      `openInventory` as M41's last unwired branch), same "logic first,
+      wiring later" split M56 (`ShopInteraction`)/M60 (its live wiring)
+      already used. All the underlying primitives this logic needed
+      (`AddInventoryItemRaw`/`RemoveInventorySlot`/`EquipItem`/
+      `UnequipSlot`/`IsSlotEquipped`/`MarkCampAndReturnToTown`/
+      `WarpToCampMark`/`HasCampMark`, `PlayerCombatStats::
+      CureRandomAilment`/`SkillValue`, `DungeonRuntime::StoreMonster`,
+      `MonsterRuntime::Stat`) already existed from M9/M12/M17/M36/M46/M47 --
+      this milestone only needed to add the 7 new methods themselves.
+
+      **Two real, confirmed findings, both preserved rather than
+      "cleaned up":**
+      - `canUseItem(slot)` and `isScrollCategory(slot)` are BYTE-FOR-BYTE
+        the exact same category-13-or-15 check under two different names
+        -- confirmed by reading both methods side by side, not a
+        transcription slip on this port's side. Verified in the smoke test
+        by sweeping every real item in `itemsin.dat` and confirming the two
+        ported predicates never disagree.
+      - `useItem()`'s case 91 (no confirmed item name -- its own
+        `specialEffectText` flavor-text entry, giftIdx 4, is blank, the
+        ONLY blank entry in the whole 87-99 table) adds `3 *
+        coreStats[5]` (max MAGICKA, the same stat case 90 restores current
+        Magicka to) to `coreStats[6]` (current FATIGUE), uncapped -- NOT
+        `3 * coreStats[7]` (max Fatigue), despite sitting immediately after
+        the Magicka-restore case in the switch, which would suggest a
+        Fatigue-restore item. Confirmed by reading `useItem()`'s own case
+        91 line directly; the blank flavor text raises the possibility
+        this is unused/debug content in the original rather than a live
+        player-facing item, but it's ported exactly as found either way.
+      - Also confirmed (not a finding needing preservation, just worth
+        recording): `ESGame.java` has exactly ONE call site for
+        `useItem(slot, target)`, and it always passes `target = null`.
+        There is no confirmed path anywhere in `../../../src/` that ever
+        gives `useItem()` a real monster to target, making the id 97/98/99
+        instant-kill scroll branches dead code in the real game's own
+        confirmed call graph, not just an unwired gap in this port. Ported
+        faithfully anyway (`UseItem` takes a nullable `MonsterState*`, and
+        the real `MonsterDatabase&`/`WorldRegistry&` machinery those three
+        branches need), on the chance a caller this pass missed exists, or
+        a future milestone (the still-unwired `npcChoicesUI`/inventory
+        screens) adds one.
+
+      `CanEquipOrUnequip` also confirmed as a DISTINCT predicate from
+      `ItemDatabase::IsEquipmentCategory` (equipment categories 1-10 only)
+      -- the real `canEquipOrUnequip()` additionally allows category 17
+      (the same category `ItemTooltip`'s own case 17 branch, "Weapon
+      value: 20+bonus", already handles), confirmed by reading
+      `canEquipOrUnequip()`'s own switch directly rather than assumed to
+      match the existing predicate's range. `ItemTooltip` reuses the same
+      real "questFlags column doubles as weapon/armor magnitude" quirk
+      `player_combat_stats.cpp`'s `WeaponDamage`/`ArmorValue` already
+      documented (M13) -- not a new discovery here, just the same
+      `items.questFlags[id-1]` read applied to a second real call site.
+      `Item.specialEffectText[13][2]`'s fixed flavor text has no loaded
+      asset-table equivalent (it's hardcoded in the original source, never
+      read from `itemsin.dat` -- confirmed by `docs/ASSET_FORMATS.md`'s own
+      note on item ids 87-99) -- kept as a literal `kSpecialEffectText`
+      table in `player_inventory.cpp`, matching the original's own
+      hardcoded static field exactly.
+
+      Verified by a new `inventory_actions_smoke.exe`: the confirmed
+      `CanUseItem`/`IsScrollCategory` duplicate swept across every real
+      item in `itemsin.dat`; `CanEquipOrUnequip`'s 1-10-or-17 range swept
+      the same way; `CanLearnSpellFromScroll`'s skill-rank-prerequisite
+      gate (both refused-at-zero-rank and allowed-at-nonzero-rank) plus
+      `LearnSpellFromScroll`'s `knownSpellsMask` bit-set and slot-consume,
+      against a real category-12 item; every one of the 13 real ids 87-99
+      individually (camp mark/warp branching on `HasCampMark`, the random-
+      ailment cure, HP/Magicka/both restoratives, the confirmed id-91
+      quirk, the level-exp increment, the harm/armor/safe-camping buffs
+      including safe-camping's own non-consuming exception, and the three
+      instant-kill scrolls' real `target=nullptr` shape all just consuming
+      their slot and doing nothing else); the id-97/98/99 instant-kill
+      gate exercised separately against a REAL `MonsterState`/
+      `MonsterDatabase` (both a monster type that passes the gate, killed
+      and stored into the registry, and one that fails it, left completely
+      untouched) -- a logic check on the ported switch itself, not a claim
+      that this path is reachable in the real game (see the dead-call-site
+      finding above); and `ItemTooltip` against a real starting weapon, a
+      real starting armor piece, a real category-12 spell scroll, and real
+      item id 87's own confirmed `specialEffectText[0]` line. 51 smoke
+      tests pass; full clean rebuild stayed at zero `/W4` warnings.
+      Manually launched the real windowed exe and confirmed it starts and
+      stays up (this milestone changes no live-gameplay-reachable code
+      path at all -- nothing calls any of these 7 new methods yet -- so
+      this launch check is a basic regression guard, not a feature check).
+
 ## What's next
 
 `talkToNpc()`'s own "greeting" action is wired end to end as of M60, but
@@ -3923,7 +4021,14 @@ Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
 this port doesn't have at all yet, a bigger lift than camp/rest or chest
 interaction were, and a bigger lift than spell casting/cycling turned out
-to be too). `paintUnknown_b()` (the one remaining unported-PIXEL paint
+to be too). M61 ported the LOGIC that screen will eventually call
+(`itemTooltip`/`canEquipOrUnequip`/`isScrollCategory`/
+`canLearnSpellFromScroll`/`learnSpellFromScroll`/`canUseItem`/`useItem`),
+same "logic first, wiring later" split as the M56-then-M60 shop-dialogue
+pair -- what's left for `openInventory` itself is purely the UI/screen-
+state-machine side: `newInventoryUI`'s item-list screen, `newInventoryItemUI`'s
+per-slot action menu, and `tickPlayerAction()`'s own dispatch out of
+`unconfirmed_Z`. `paintUnknown_b()` (the one remaining unported-PIXEL paint
 method, the NPC/shop-portrait and Warden-compass icon painter -- gated on
 `unconfirmed_W`/`Player.questShopAtPendingTile()`, itself downstream of
 the Shop-economy gap above, AND itself flagged LOW CONFIDENCE by the
@@ -3939,7 +4044,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own

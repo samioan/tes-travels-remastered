@@ -111,8 +111,11 @@ target_link_libraries(stormhold_dungeon PUBLIC stormhold_monster stormhold_world
 # PlayerSave (this same library) and WorldSave (stormhold_dungeon)). M56:
 # shop_interaction.cpp (Shop.dialogue()'s dispatcher, scoped to shops 0-3,
 # the quest-turn-in shopkeepers -- lives here, not stormhold_world, since
-# it needs PlayerState directly) -- see docs/PORT_ROADMAP.md and
-# src/player/.
+# it needs PlayerState directly). M61: player_inventory.cpp's own
+# ItemTooltip/CanEquipOrUnequip/IsScrollCategory/CanLearnSpellFromScroll/
+# LearnSpellFromScroll/CanUseItem/UseItem additions -- the last un-ported
+# pieces of Player's inventory-ACTION logic, still deliberately not wired
+# into any UI screen -- see docs/PORT_ROADMAP.md and src/player/.
 add_library(stormhold_player STATIC
   src/player/camp_state.cpp
   src/player/death_sequence.cpp
@@ -461,5 +464,9 @@ target_link_libraries(shop_interaction_smoke PRIVATE stormhold_player)
 # M60 milestone smoke test -- see src/tests/m60_npc_dialogue_smoke.cpp.
 add_executable(npc_dialogue_smoke src/tests/m60_npc_dialogue_smoke.cpp)
 target_link_libraries(npc_dialogue_smoke PRIVATE stormhold_render stormhold_player)
+
+# M61 milestone smoke test -- see src/tests/m61_inventory_actions_smoke.cpp.
+add_executable(inventory_actions_smoke src/tests/m61_inventory_actions_smoke.cpp)
+target_link_libraries(inventory_actions_smoke PRIVATE stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST
