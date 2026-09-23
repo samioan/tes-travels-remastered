@@ -67,7 +67,9 @@ target_link_libraries(stormhold_assets PRIVATE stb_image)
 
 # M6: procedural dungeon generation. M52: game_advancement.cpp (ESGame.
 # getGameAdvancementLevel()/checkOpenAndPopulateDungeons(), the dungeon
-# zone-gating system) -- see docs/PORT_ROADMAP.md and src/world/.
+# zone-gating system). M53: shop_state.h (Shop.java's live per-NPC
+# quest-economy state, header-only -- see its own class comment) -- see
+# docs/PORT_ROADMAP.md and src/world/.
 add_library(stormhold_world STATIC
   src/world/dungeon_generator.cpp
   src/world/game_advancement.cpp
@@ -440,5 +442,9 @@ target_link_libraries(game_save_smoke PRIVATE stormhold_render stormhold_player)
 # M52 milestone smoke test -- see src/tests/m52_game_advancement_smoke.cpp.
 add_executable(game_advancement_smoke src/tests/m52_game_advancement_smoke.cpp)
 target_link_libraries(game_advancement_smoke PRIVATE stormhold_player)
+
+# M53 milestone smoke test -- see src/tests/m53_shop_state_smoke.cpp.
+add_executable(shop_state_smoke src/tests/m53_shop_state_smoke.cpp)
+target_link_libraries(shop_state_smoke PRIVATE stormhold_world)
 
 endif()  # NOT STORMHOLD_DIST

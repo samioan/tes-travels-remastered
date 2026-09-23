@@ -22,9 +22,21 @@ namespace stormhold {
 // NOT ported here: `Shop.clearQuestTurnInState()`, a confirmed real
 // cross-system coupling `consumeLevelExp()` triggers on every rank-up
 // (see ../../../src/Player.java's own header comment, and M13/M14's
-// "what's next" notes flagging this exact gap) -- no live `Shop` state
-// exists yet (M11 only ported its dialogue TEXT), so `ConsumeLevelExp`
-// below skips it, flagged at the skip site rather than silently dropped.
+// "what's next" notes flagging this exact gap) -- `ConsumeLevelExp`
+// below still skips it, flagged at the skip site rather than silently
+// dropped. **M53 update:** a live `ShopState` now exists
+// (world/shop_state.h), but wiring a real `clearQuestTurnInState()`-
+// equivalent call here anyway is deliberately NOT done -- see that
+// header's own class comment for the confirmed finding that makes doing
+// so a much bigger call than it looks: `Shop.reset()`'s own zero-caller
+// status (M51) means `Shop.questState1`/`questState2` are permanently
+// null in the real game, so the original's own `clearQuestTurnInState()`
+// call HERE throws an uncaught NullPointerException on every completed
+// level-up. Reproducing that would make this port's own leveling system
+// (working since M13/M14) start crashing; NOT reproducing it (the
+// current default) leaves this a confirmed real bug this port doesn't
+// share. Flagged in docs/PORT_ROADMAP.md's own "what's next" as a
+// conscious decision point, not resolved here.
 class PlayerLeveling {
 public:
     // Player.gainSkillExp(skillIndex, amount): adds to skills[i][2] (exp

@@ -22,11 +22,25 @@ namespace stormhold {
 // **Deliberately NOT ported here, both confirmed real, separate gaps:**
 // `writeMasterLists()`/`readMasterLists()` (Item.nextSpawnId/
 // Monster.nextSpawnIdCounter plus most of Shop's own static per-shop
-// quest-economy state) -- blocked on the not-yet-built Shop-economy C++
-// model (docs/PORT_ROADMAP.md's own "what's next"), since most of what it
-// writes (`Shop.questRewardClaimable`/`interactionCount`/`rewardsGiven`/
-// `questState1`/`questState2`/`benecaPoints`/`helgaPoints`) has no live
-// port-side state to read from at all yet. And the RecordStore-equivalent
+// quest-economy state). **M53 update:** the missing piece is no longer
+// "no live state to read from" -- world/shop_state.h's own `ShopState`
+// now exists -- but wiring this format extension in anyway is still not
+// done, for a much bigger reason than a missing struct: `ShopState`'s own
+// class comment documents a confirmed finding that `readMasterLists()`/
+// `writeMasterLists()` unconditionally throw a `NullPointerException` in
+// the real game (`Shop.reset()`'s own zero-caller status, M51, leaves the
+// arrays these methods index null forever) -- meaning Save and Load are
+// BOTH completely non-functional in the real shipped game. Porting this
+// format extension faithfully would mean this port's own already-working
+// GameSave/WorldSave (M49/M50) should also fail here; porting it
+// unfaithfully (just serializing ShopState cleanly, no crash) would only
+// grow the "behavioral gain" M49/M50 already, unknowingly, represent.
+// Flagged in docs/PORT_ROADMAP.md's own "what's next" as a conscious
+// decision point, not resolved here. Since what it writes
+// (`Shop.questRewardClaimable`/`interactionCount`/`rewardsGiven`/
+// `questState1`/`questState2`/`benecaPoints`/`helgaPoints`) still isn't
+// serialized, `ShopState` for now stays entirely session-local: a fresh
+// `ShopState` every launch, never round-tripped. And the RecordStore-equivalent
 // file I/O itself (multi-save-slot naming/discovery/deletion,
 // `generateUniqueSaveName`/`findMostRecentSaveName`/`deleteOtherSaves`) --
 // this port needs its own plain-file save mechanism, not a MIDP

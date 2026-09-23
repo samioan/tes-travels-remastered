@@ -3467,29 +3467,118 @@ read-through.
       warnings. Manually launched the real windowed exe and confirmed it
       starts and stays up.
 
+## M53: ShopState -- the Shop-economy data model's own first slice
+
+**Scope.** A live C++ counterpart for `Shop.java`'s per-NPC quest-economy
+state (new `world/shop_state.h`, header-only, `stormhold_world`):
+`ShopState` (`questRewardClaimable[7]`/`firstVisit[7]`/`questState1[4]`/
+`questState2[4]`/`interactionCount[4]`/`rewardsGiven[4]`/
+`unconfirmedCooldownH[4]`/`benecaPoints`/`helgaPoints`/
+`showSpecialGreeting` -- deliberately excludes `wardenVisitCount`/
+`wardenPresent`, which already live on `WardenState`, M8/M51) plus a new
+`Shop` class holding the confirmed-real, purely-functional lookup helpers
+that don't need a live Player/Item-inventory/dialogue model at all:
+`IsQuestShop`/`QuestShopAt`/`QuestFlagsFor` (the last transcribed against
+real `itemsin.dat` `questFlags` bytes, already loaded since M4). Same
+"primitive first, wiring later" shape `WardenState` itself used (a
+primitive since M8, wired for real 43 milestones later by M51).
+
+**A major finding, much bigger than the gap this milestone closes.**
+Tracing `Shop.clearQuestTurnInState()` (the confirmed real gap
+`player/player_leveling.h` has flagged unwired since M13/M14) all the way
+to its own field writes reconnected it to M51's own `Shop.reset()`
+finding, with a consequence M51 itself hadn't traced that far: `Shop.
+reset()` is the ONLY place `questRewardClaimable`/`firstVisit`/
+`questState1`/`questState2`/`interactionCount`/`rewardsGiven`/
+`unconfirmedCooldownH` (every ARRAY field above) ever get allocated, and
+it has zero callers anywhere in `src/*.java` (re-confirmed by the same
+grep M51 ran). Every one of those seven fields is therefore a
+permanently-null Java array for the entire life of the real shipped
+game, and two confirmed, real, unconditional-index code paths hit that
+null head-on:
+
+- `ESGame.writeMasterLists()`/`readMasterLists()` (M49's own flagged
+  "missing half of the save format") are reached by `saveGameState()`/
+  `loadGameState()` (`run()`'s real `helperThreadState` 5/6 dispatch) --
+  so **every Save and every Load in the real shipped game throws a
+  `NullPointerException`** on the first `Shop.firstVisit[i]` access,
+  caught by each method's own try/catch (`saveGameState()` deletes the
+  just-created record store and returns false; the caller then shows a
+  Save-error screen instead of resuming play). **Save and Load are both
+  completely non-functional in the original game.**
+- `Player.consumeLevelExp()` calls `Shop.clearQuestTurnInState()` as its
+  own first statement; its confirmed sole caller is `ESGame.
+  commandAction()`'s screenGroup-39 handler, the 3rd/final step of the
+  real level-up-attribute-choice flow, called right after the chosen
+  attributes are applied and derived stats recomputed, with the
+  transition back to `gameCanvas` as the very next statement. **Completing
+  a level-up in the real shipped game throws an uncaught
+  `NullPointerException`** from inside a raw MIDP `commandAction()`
+  callback with no surrounding try/catch -- the attribute boost already
+  landed, but `coreStats[1] -= 10` and the return to gameplay never run.
+
+Both are genuine, severe, confirmed bugs -- not guesses. But unlike
+M51/M52's own "don't add a call the original never makes" choice, closing
+either gap faithfully here would mean deliberately BREAKING already-
+shipped, already-verified port functionality: M49/M50's own save/load
+system (which already works, and was already, unknowingly, a "behavioral
+gain" over the original the moment M50 landed) and M13/M14's own leveling
+system. That's a materially bigger call than M51/M52's, and not one to
+make silently while just building a data-model primitive. So `ShopState`
+this milestone provides NO `Reset()`-equivalent method (nothing to
+accidentally wire the same way `Shop.reset()` should have been but never
+was) and is NOT referenced from `player/player_leveling.h`,
+`player/game_save.h`, or `dungeon/world_save.h` yet -- flagged below as a
+conscious decision point, not resolved here. `player/player_leveling.h`
+and `dungeon/world_save.h` both got their own comments updated to point
+at this finding directly at their own skip sites.
+
+**Verification.** New `shop_state_smoke.exe`: `IsQuestShop` against all 7
+shops' real categories; `QuestShopAt` against a hand-set `ShopState`
+(miss when `questRewardClaimable` is false even at a real shop position,
+hit once set, miss at a non-shop position, and confirms the lookup itself
+isn't quest-shop-gated -- Varus, shop 6, is found too once his own flag
+is set, matching the original exactly); `QuestFlagsFor` against every
+real item in `itemsin.dat` (each shop 0-3's own extracted 2-bit field is
+in range, and OR-ing all four back together reconstructs the item's own
+raw `questFlags` byte exactly, confirming the extraction shape without
+needing to guess a specific expected value; shop 4+ falls through to 0,
+matching the original's own final `else` branch). 50 smoke tests now
+pass in total (49 carried over + this milestone's own); full clean
+rebuild stayed at zero `/W4` warnings. Manually launched the real
+windowed exe and confirmed it starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
-port -- doing so needs a real `Shop`-economy C++ model first
-(`questRewardClaimable[7]`/`questState1`/`questState2`/`benecaPoints`/
-`helgaPoints`/`rewardsGiven`/`interactionCount`, plus porting
-`Shop.dialogue()`'s own large per-action switch), which would also
+port -- doing so needs the REST of a real `Shop`-economy C++ model
+(M53 built the data struct and pure lookup helpers; still missing:
+porting `Shop.dialogue()`'s own large per-action switch and deciding the
+conscious question M53's own finding raises, below), which would also
 finally unblock the NPC-talk half of `resolveInteractInput()` and the
 NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's own
 "what's next" note) in the live port, AND `writeMasterLists()`/
 `readMasterLists()`'s own missing half of the save format (M49's own
-"what's next" note). That's a substantially bigger lift than camp/rest or
-chest interaction were, likely worth its own multi-part treatment rather
-than one milestone. **Heads up for whoever picks this up (M51's own
-finding):** `Shop.reset()` -- the only place `questRewardClaimable`/
-`firstVisit`/`questState1`/`questState2`/`interactionCount`/
-`rewardsGiven`/`benecaPoints`/`helgaPoints`/`showSpecialGreeting` ever
-get initialized -- has ZERO callers anywhere in the real game, so a
-byte-faithful port would need to decide what a live `ShopState` defaults
-to WITHOUT ever calling an equivalent `Reset()` (calling one for real,
-unlike the original, risks the same "behavioral gain, not
-reimplementation" trap M51 sidestepped for `questRewardClaimable`/
-`HubMinimapMarkers`).
+"what's next" note, still open post-M53). That's a substantially bigger
+lift than camp/rest or chest interaction were, likely worth its own
+multi-part treatment rather than one milestone.
+
+**Heads up for whoever picks this up (M53's own finding, superseding
+M51's original, narrower heads-up):** `Shop.reset()`'s own zero-caller
+status doesn't just mean "pick sane `ShopState` defaults without a live
+`Reset()` call" -- it means the real game's own `writeMasterLists()`/
+`readMasterLists()` (Save/Load) and `Shop.clearQuestTurnInState()`
+(completing a level-up) ALL unconditionally throw `NullPointerException`
+in the shipped game (see M53's own entry above for the full trace). Any
+future work wiring `ShopState` into the save format or into
+`PlayerLeveling::ConsumeLevelExp` needs to make a conscious call, not a
+silent one, given that either "faithful" option means intentionally
+regressing this port's own already-shipped save/load (M49/M50) or
+leveling (M13/M14) systems to match a bug those systems don't currently
+share. This project has no precedent yet for a deliberate port-only
+fidelity exception (every "not modeled"/"not fixed" note elsewhere in
+this doc stays faithful) -- so if that ever becomes the call, it needs to
+be made and labeled explicitly as one, not defaulted into.
 
 Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
@@ -3511,7 +3600,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own
