@@ -2853,9 +2853,62 @@ read-through.
       a large per-shopId/per-action switch -- porting it responsibly is a
       milestone of its own, not a quick follow-on to a Java-only pass.
 
+- [x] **M45 -- `paintFlashOverlays()`'s C++ body, wired into the live
+      port** (this session). The short follow-on the previous "what's
+      next" flagged: the Java side was already fully transcribed (M22),
+      so this milestone is pure C++ -- no decompiled-source
+      investigation needed. New `render/flash_overlay_assets.h`
+      (`FlashOverlayAssets`, the same small-bundle-loader shape
+      `HotbarAssets` already established) loads the 3 real plain PNGs
+      (`blood1.png`/`monsterspell.png`/`selfspell.png`, confirmed
+      filenames via `ESGame.java`'s own asset-loading call site) through
+      `DecodedImage`/`Backbuffer::Blit` (both M24). New `render/
+      flash_overlay.h`/`.cpp` (`FlashOverlayState` + `FlashOverlay::
+      Paint`, the same state-struct-plus-static-class shape
+      `MessagePopupState`/`MessagePopup` already established, M30): the
+      3 independent one-shot flash overlays, each self-clearing its own
+      trigger flag once drawn, at a small random jittered position via
+      `RandomInt1Based` (`Util.randomInt()`'s own 1-based convention).
+
+      **A deliberate, documented divergence from the real game's own
+      shared static RNG:** the original draws these jitter offsets from
+      `ESGame`'s single process-wide `Random rng` -- the same stream
+      combat/dungeon generation etc. all draw from -- purely for cosmetic
+      screen-space jitter with zero gameplay effect. This port already
+      keeps combat/ambush spawning on dedicated `JavaRandom` instances
+      rather than one shared stream (M16/M37/M42's own "confirmed
+      different RNG fidelity" findings), so `main.cpp` reuses its own
+      `combatRng` here rather than adding a 3rd RNG stream or wiring in
+      a genuinely shared one -- consistent with that existing split, not
+      a new divergence.
+
+      Wired into `main.cpp`'s tick loop: `CombatResolution::
+      ResolveAttackInput`'s own return value (M39, previously discarded)
+      now sets `FlashOverlayState::hit` on a landed attack --
+      `paintFlashOverlays()`'s own `unconfirmed_S` trigger, real since
+      M39 but with no observable effect anywhere in this port until now.
+      `Paint()` is called directly after `MessagePopup::Paint`, matching
+      `paintGameView()`'s own real call order. `spellHitMonster`/
+      `spellHitSelf` (`unconfirmed_ao`/`unconfirmed_am`) paint for real
+      here too but stay permanently unreachable until spell casting
+      itself is wired -- no invented trigger site, same "wire what's
+      reachable, document what isn't" discipline M41/M43 already used.
+
+      Verified with a new `flash_overlay_smoke.exe`: real asset decode
+      dimensions; a true no-op with every flag false; each of the 3
+      flags independently, with the exact jitter offset re-derived
+      INDEPENDENTLY via a second `JavaRandom` fed the same seed (not
+      read back from `flash_overlay.cpp`'s own output) and checked
+      pixel-exact against the real loaded PNG's own opaque pixels at
+      that computed offset, not just "some pixel changed somewhere"; all
+      3 flags set at once, all 3 clearing after one `Paint()` call. 41
+      smoke tests now pass in total; full clean rebuild stayed at zero
+      `/W4` warnings. Manually launched the real windowed exe and
+      confirmed it starts and stays up.
+
 ## What's next
 
-`talkToNpc()` is now fully transcribed (M44), but NOT wired into the C++
+`talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
 port -- doing so needs a real `Shop`-economy C++ model first
 (`questRewardClaimable[7]`/`questState1`/`questState2`/`benecaPoints`/
 `helgaPoints`/`rewardsGiven`/`interactionCount`, plus porting
@@ -2869,20 +2922,21 @@ treatment rather than one milestone.
 Beyond that, M41's dispatch web still has spell casting/cycling
 (`resolveSpellCastInput`/`resolveSpellCycleInput` -- both fully confirmed
 Java, `Player.castOnSelf`/`castOnMonster`/`cycleSelectedSpell` already
-exist, but neither has a C++ port yet) and opening the inventory screen
-(`openInventory` -- needs a real inventory UI this port doesn't have at
-all yet, a bigger lift than camp/rest or chest interaction were) left
-unwired. `paintFlashOverlays()`/`paintUnknown_b()` (the two remaining
-unported-PIXEL paint methods, both gated on that same live state --
-`paintFlashOverlays()`'s own `unconfirmed_S` trigger is real since M39,
-so that one in particular may be a short follow-on rather than a fresh
-investigation). Beyond that: a real save/load system (`PlayerSave`
-exists, M20, but there's no `WorldRegistry`/master-list save format, and
-`main.cpp`'s own Main Menu "Continue Game" item always takes the
-no-saved-game branch until one exists, M40); the still-unwired
-death/respawn sequence (M42's own "what's next" note carried forward);
-Help topics (the Java transcription itself stops at topic index 4).
-Following dawnstar's own later milestones roughly but expecting further
-Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44
+exist, but neither has a C++ port yet -- once it is, it also finally
+gives `FlashOverlayState::spellHitMonster`/`spellHitSelf` (M45) a real
+trigger site) and opening the inventory screen (`openInventory` -- needs
+a real inventory UI this port doesn't have at all yet, a bigger lift
+than camp/rest or chest interaction were) left unwired. `paintUnknown_b()`
+(the one remaining unported-PIXEL paint method, the NPC/shop-portrait and
+Warden-compass icon painter -- gated on `unconfirmed_W`/`Player.
+questShopAtPendingTile()`, itself downstream of the same Shop-economy gap
+above) is the last item in this bucket. Beyond that: a real save/load
+system (`PlayerSave` exists, M20, but there's no `WorldRegistry`/
+master-list save format, and `main.cpp`'s own Main Menu "Continue Game"
+item always takes the no-saved-game branch until one exists, M40); the
+still-unwired death/respawn sequence (M42's own "what's next" note
+carried forward); Help topics (the Java transcription itself stops at
+topic index 4). Following dawnstar's own later milestones roughly but
+expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45
 already found.

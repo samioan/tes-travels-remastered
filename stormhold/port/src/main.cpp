@@ -147,6 +147,17 @@
 // `corridorView` -- the NPC-nameplate half (gated on the SAME
 // `Shop.questShopAt()` gap) stays unported too, flagged at its own
 // omission point below rather than silently dropped.
+//
+// M45 layers in `FlashOverlay`/`FlashOverlayState` (render/flash_
+// overlay.h, new this session) -- GameCanvas.paintFlashOverlays()'s 3
+// one-shot flash sprites (M22's own confirmed Java transcription; this
+// milestone only ports the C++ body). Only the monster-hit flash
+// (`FlashOverlayState::hit`) has a live trigger anywhere in this port:
+// `CombatResolution::ResolveAttackInput`'s own return value (M39),
+// previously discarded here, now sets it. The spell-hit-monster/
+// self-spell-hit flashes paint for real but stay unreachable until
+// spell casting itself is wired (see docs/PORT_ROADMAP.md's own "what's
+// next").
 #include <windows.h>
 
 #include <array>
@@ -174,6 +185,7 @@
 #include "player/player_movement.h"
 #include "player/visible_objects.h"
 #include "render/corridor_assets.h"
+#include "render/flash_overlay.h"
 #include "render/game_renderer.h"
 #include "render/hotbar_assets.h"
 #include "render/hud_state.h"
@@ -340,6 +352,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     stormhold::CorridorAssets corridorAssets = stormhold::CorridorAssets::Load(assetRoot);
     stormhold::HotbarAssets hotbarAssets = stormhold::HotbarAssets::Load(assetRoot);
     stormhold::VisibleObjectAssets objectAssets = stormhold::VisibleObjectAssets::Load(assetRoot);
+    stormhold::FlashOverlayAssets flashOverlayAssets = stormhold::FlashOverlayAssets::Load(assetRoot);
+    stormhold::FlashOverlayState flashOverlay;
 
     stormhold::Window window(stormhold::Backbuffer::kWidth * scale, stormhold::Backbuffer::kHeight * scale,
                               L"Stormhold Port");
@@ -594,9 +608,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // d(long)) -- see this file's own header comment for the
                 // input-binding simplification.
                 if (attackRequested) {
-                    stormhold::CombatResolution::ResolveAttackInput(player, targetMonster, attackRequested,
-                                                                      gameTimeMs, lastAttackTimeMs, charData, items,
-                                                                      monsters, combatRng, world);
+                    // M45: the previously-discarded return value now
+                    // drives FlashOverlayState::hit (paintFlashOverlays()'s
+                    // own unconfirmed_S, see this file's own header
+                    // comment).
+                    if (stormhold::CombatResolution::ResolveAttackInput(player, targetMonster, attackRequested,
+                                                                          gameTimeMs, lastAttackTimeMs, charData,
+                                                                          items, monsters, combatRng, world)) {
+                        flashOverlay.hit = true;
+                    }
                 }
 
                 // M37: GameCanvas.run()'s own this.tickMonsterAI(frameStart)
@@ -665,6 +685,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 stormhold::GameRenderer::RenderMinimapNormal(backbuffer, grid, player.facing);
             }
             stormhold::MessagePopup::Paint(backbuffer, messagePopup);
+            // M45: paintGameView()'s own call order has this directly
+            // after paintMessagePopup() (see this file's own header
+            // comment) -- combatRng reused for the jitter, see
+            // FlashOverlay's own header comment on why that's not a new
+            // RNG-stream divergence.
+            stormhold::FlashOverlay::Paint(backbuffer, flashOverlay, flashOverlayAssets, combatRng);
         }
         window.Present(backbuffer);
     });

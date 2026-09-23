@@ -129,6 +129,7 @@ target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster
 add_library(stormhold_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
+  src/render/flash_overlay.cpp
   src/render/game_renderer.cpp
   src/render/message_popup.cpp
   src/render/status_bar_plan.cpp
@@ -393,5 +394,9 @@ target_link_libraries(camp_state_smoke PRIVATE stormhold_player)
 # M43 milestone smoke test -- see src/tests/m43_chest_interaction_smoke.cpp.
 add_executable(chest_interaction_smoke src/tests/m43_chest_interaction_smoke.cpp)
 target_link_libraries(chest_interaction_smoke PRIVATE stormhold_player)
+
+# M45 milestone smoke test -- see src/tests/m45_flash_overlay_smoke.cpp.
+add_executable(flash_overlay_smoke src/tests/m45_flash_overlay_smoke.cpp)
+target_link_libraries(flash_overlay_smoke PRIVATE stormhold_render)
 
 endif()  # NOT STORMHOLD_DIST
