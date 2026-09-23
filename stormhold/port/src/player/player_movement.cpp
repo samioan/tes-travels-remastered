@@ -5,6 +5,7 @@
 
 #include "monster/monster_runtime.h"
 #include "player/player_inventory.h"
+#include "world/game_advancement.h"
 
 namespace stormhold {
 
@@ -148,12 +149,9 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
     if (p.pendingLevel <= 0) return false;
 
     GeneratedLevel& target = levels(p.pendingLevel);
-    // target.populated is always true for every level this port's
-    // LevelLookup can actually return -- see GeneratedLevel::populated's
-    // own header comment on why the real populated-gating (ESGame's
-    // progressive zone-opening system) isn't modeled here, so there's no
-    // equivalent of Player.commitMove()'s `if (!target.populated) return
-    // false;` check to reproduce.
+    // M52: Player.commitMove()'s own real gate -- see this method's own
+    // declaration comment for the confirmed GameSave::Load consequence.
+    if (!target.populated) return false;
 
     uint8_t tileBits = target.tiles[static_cast<size_t>(p.pendingTileX)][static_cast<size_t>(p.pendingTileY)];
     if (!IsWalkableTileBits(tileBits)) return false;
@@ -231,10 +229,8 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
                     if (items.category[static_cast<size_t>(itemIndex)] == 11) {
                         p.giftPointsFound = static_cast<int16_t>(p.giftPointsFound +
                                                                   items.subtype[static_cast<size_t>(itemIndex)]);
-                        // ESGame.getGameAdvancementLevel()/
-                        // checkOpenAndPopulateDungeons(): SKIPPED, see
-                        // this method's own declaration comment -- no
-                        // live ESGame session object exists yet.
+                        // M52: see this method's own declaration comment.
+                        GameAdvancement::OpenZone(GameAdvancement::Level(p.giftPointsFound), levels);
                     }
                 }
             }
@@ -264,6 +260,9 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
                         if (items.category[static_cast<size_t>(itemIndex)] == 11) {
                             p.giftPointsFound = static_cast<int16_t>(p.giftPointsFound +
                                                                       items.subtype[static_cast<size_t>(itemIndex)]);
+                            // M52: see this method's own declaration
+                            // comment.
+                            GameAdvancement::OpenZone(GameAdvancement::Level(p.giftPointsFound), levels);
                         }
                     }
                 }

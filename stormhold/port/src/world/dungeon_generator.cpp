@@ -344,6 +344,8 @@ GeneratedLevel DungeonGenerator::BuildHubLevel(const DungeonGeomRow& geomRow) {
     level.neighborWest = geomRow.west;
     level.stairsUpDir = geomRow.stairsUpDir;
     level.stairsDownDir = geomRow.stairsDownDir;
+    // The hub's own real constructor sets this unconditionally -- see
+    // GeneratedLevel::populated's own header comment (M52).
     level.populated = true;
     return level;
 }
@@ -446,7 +448,11 @@ GeneratedLevel DungeonGenerator::PopulateLevel(int levelNumber, const DungeonGeo
     level.neighborWest = geomRow.west;
     level.stairsUpDir = geomRow.stairsUpDir;
     level.stairsDownDir = geomRow.stairsDownDir;
-    level.populated = true;
+    // A standard level's real constructor leaves this false -- only
+    // GameAdvancement::OpenZone (M52) ever flips it, once this level's
+    // own zone is unlocked. See GeneratedLevel::populated's own header
+    // comment.
+    level.populated = false;
     level.rooms = roomList;
 
     return level;

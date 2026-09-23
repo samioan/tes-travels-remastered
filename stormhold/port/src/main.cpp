@@ -225,6 +225,7 @@
 #include "ui/menu_flow.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
+#include "world/game_advancement.h"
 #include "world/warden.h"
 
 #include <cstdlib>
@@ -528,6 +529,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // flow finally becomes the live `player` right here, once.
             if (menuState.draft.has_value()) {
                 player = std::move(*menuState.draft);
+                // M52: ESGame.createNewGame()'s own `for (i = 0; i <=
+                // zone; i++) checkOpenAndPopulateDungeons(i);` loop --
+                // zone is always 0 here (GameAdvancement::Level(0) == 0,
+                // a fresh character's own giftPointsFound), kept as a
+                // loop anyway for line-for-line fidelity with the
+                // original's own shape rather than hand-simplified to a
+                // single OpenZone(0, ...) call.
+                for (int i = 0; i <= stormhold::GameAdvancement::Level(0); i++) {
+                    stormhold::GameAdvancement::OpenZone(i, levelLookup);
+                }
             } else if (menuState.loadRequested) {
                 // M50: ESGame's own helperThreadState==6 branch
                 // (loadGameState() then player.refreshCorridorView()) --
@@ -540,6 +551,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // way, same fallback the real `noSavedGameUI` branch
                 // effectively gives (this port has nowhere left to show
                 // that screen from once `Finished` is reached).
+                //
+                // M52: deliberately NO `GameAdvancement` call here --
+                // every `levels` entry's own `populated` bit is still
+                // exactly whatever this SAME session's own BuildWorld
+                // (standard levels: false) left it at, since a load never
+                // touches it, faithfully matching the real game (see
+                // world/game_advancement.h's own header comment on why
+                // `openAndPopulateAllUpTo()`/`enterCurrentZone()` are
+                // confirmed dead code, not just unported). A loaded
+                // player whose own `giftPointsFound` had progressed past
+                // zone 0 in an earlier session lands back in a level
+                // `player/player_movement.h`'s own CommitMove gate (M52)
+                // now correctly refuses to move through at all -- see
+                // that method's own declaration comment.
                 if (stormhold::GameSave::Load(savePath, levels.size(), player, world)) {
                     for (stormhold::GeneratedLevel& level : levels) {
                         ClearTransientTileFlags(level);
@@ -673,7 +698,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // here either -- CollectChestItem can only return 0 or 1.
                 if (interactKeyEdge && chestAhead.has_value()) {
                     int result = stormhold::PlayerInventory::CollectChestItem(player, *chestAhead, items,
-                                                                                currentLevelMutable, world);
+                                                                                currentLevelMutable, world,
+                                                                                levelLookup);
                     if (result == 0) {
                         stormhold::MessagePopup::Show(messagePopup, {"Inventory", "full!"}, -1, gameTimeMs);
                     } else {

@@ -145,13 +145,32 @@ public:
     //    that reads like a copy-paste inversion bug, not something this
     //    port introduced. Preserved exactly, not "fixed" to be consistent.
     //
-    // `ESGame.getGameAdvancementLevel()`/`checkOpenAndPopulateDungeons()`
-    // (the progressive zone-opening side effect a gift-point gain can
-    // trigger) is SKIPPED entirely -- no live `ESGame` session object
-    // exists in this port to open zones on, same class of gap as this
-    // header's own class comment. `p.giftPointsFound` itself is still
-    // accumulated (that part is pure `PlayerState` arithmetic, no `ESGame`
-    // needed), only the dungeon-opening side effect is dropped.
+    // M52: `ESGame.getGameAdvancementLevel()`/
+    // `checkOpenAndPopulateDungeons()` (the progressive zone-opening side
+    // effect a gift-point gain can trigger) now runs for real --
+    // `GameAdvancement::OpenZone(GameAdvancement::Level(p.giftPointsFound),
+    // levels)` -- right after each of the two `giftPointsFound` increments
+    // above, matching `Player.commitMove()`'s own real per-branch call
+    // exactly (see `world/game_advancement.h`'s own class comment for the
+    // confirmed asymmetry this preserves: only the CURRENT zone opens,
+    // never every zone up to it).
+    //
+    // M52 also gives `CommitMove` a real `if (!target.populated) return
+    // false;` gate, matching `Player.commitMove()`'s own line for line
+    // (src/Player.java:809-811) -- moving into (or, for a same-level step,
+    // simply remaining in) a level whose zone hasn't been opened yet now
+    // fails exactly like hitting a wall. **Confirmed real consequence for
+    // `player/game_save.h`'s own `GameSave::Load` (M50):** since this
+    // port's `GameSave::Load` doesn't call `GameAdvancement::OpenZone` for
+    // the loaded player's own advancement (see `world/game_advancement.h`'s
+    // own header comment on why not -- `openAndPopulateAllUpTo()`/
+    // `enterCurrentZone()` are confirmed dead code in the real game, not
+    // merely unported), a Continue Game resumed past zone 0 lands the
+    // player back in a level whose `populated` bit reset to its
+    // freshly-built default (false) -- and since even stepping IN PLACE
+    // gates on that same level's own `populated` bit, the player cannot
+    // move at all. A genuine softlock in the original engine, preserved
+    // here rather than "fixed".
     //
     // Also wires `Player.autoMarkCampOnTile()`: on a successful STEP (not
     // a turn) landing on a bit-8 tile, calls

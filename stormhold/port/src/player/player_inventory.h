@@ -6,6 +6,7 @@
 #include "assets/item_database.h"
 #include "dungeon/dungeon_runtime.h"
 #include "player/player_state.h"
+#include "world/game_advancement.h"
 
 namespace stormhold {
 
@@ -146,14 +147,16 @@ public:
     // removes the chest (DungeonRuntime::RemoveChest); when the item's
     // own category is 11 ("gift"), grants gift points too -- mirroring
     // player_movement.h's own CommitMove dropped-item gift-point logic
-    // (M17) exactly, INCLUDING the same skipped
-    // ESGame.getGameAdvancementLevel()/checkOpenAndPopulateDungeons()
-    // call (no live ESGame session to open zones on). Without space:
-    // auto-drops the item onto the same tile instead (a 7-byte dropped-
-    // item record, matching DropInventoryItem's own record shape) and
-    // still removes the chest.
+    // (M17) exactly, INCLUDING (M52) the same real
+    // `GameAdvancement::OpenZone(GameAdvancement::Level(p.giftPointsFound),
+    // levels)` call CommitMove's own two branches now make -- see that
+    // method's own declaration comment for what this class's new
+    // `levels` parameter is for. Without space: auto-drops the item onto
+    // the same tile instead (a 7-byte dropped-item record, matching
+    // DropInventoryItem's own record shape) and still removes the chest.
     static int CollectChestItem(PlayerState& p, std::array<int8_t, 8> record, const ItemDatabase& items,
-                                 GeneratedLevel& level, WorldRegistry& world);
+                                 GeneratedLevel& level, WorldRegistry& world,
+                                 const GameAdvancement::LevelLookup& levels);
 
     // Player.hasCampMark().
     static bool HasCampMark(const PlayerState& p);

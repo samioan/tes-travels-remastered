@@ -12,6 +12,7 @@
 #include "assets/monster_database.h"
 #include "player/player_inventory.h"
 #include "player/player_movement.h"
+#include "world/game_advancement.h"
 
 namespace {
 
@@ -35,6 +36,18 @@ GeneratedLevel MakeOpenLevel(int number, int width = 35, int height = 35) {
     level.tiles.assign(static_cast<size_t>(width), std::vector<uint8_t>(static_cast<size_t>(height), 0));
     level.populated = true;
     return level;
+}
+
+// M52: PlayerInventory::CollectChestItem now takes a GameAdvancement::
+// LevelLookup too, for the same real GameAdvancement::OpenZone wiring
+// player/player_movement.h's own CommitMove already exercises. A single-
+// level stand-in (returns `level` regardless of the number asked for) is
+// enough for every test below whose own item never crosses a gift-points
+// threshold, since OpenZone is then never actually called --
+// TestCollectChestItemGiftCategory (which deliberately DOES cross one)
+// uses a real lazily-populated all-levels lookup instead, below.
+GameAdvancement::LevelLookup SingleLevelLookup(GeneratedLevel& level) {
+    return [&level](int) -> GeneratedLevel& { return level; };
 }
 
 void TestChestAheadOfPlayer() {
@@ -104,7 +117,7 @@ void TestCollectChestItemWithSpace(const ItemDatabase& items) {
     p.inventoryCount = 0;
     int16_t before = p.giftPointsFound;
 
-    int result = PlayerInventory::CollectChestItem(p, record, items, level, world);
+    int result = PlayerInventory::CollectChestItem(p, record, items, level, world, SingleLevelLookup(level));
     Expect(result == 1, "a normal collect with inventory space returns 1");
     Expect(p.inventoryCount == 1, "the item was actually added to the inventory");
     Expect(p.inventoryItemIds[0] == 1, "the added item's id matches record[4]");
@@ -141,11 +154,38 @@ void TestCollectChestItemGiftCategory(const ItemDatabase& items) {
     p.inventoryCount = 0;
     p.giftPointsFound = 0;
 
-    int result = PlayerInventory::CollectChestItem(p, record, items, level, world);
+    // M52: a real gift item DOES cross a gift-points threshold here (any
+    // category-11 item's own subtype is >= 9, i.e. at least zone 0's own
+    // boundary), so GameAdvancement::OpenZone runs for real inside
+    // CollectChestItem -- give it a lookup that can resolve ANY of the
+    // 37 levels on demand, not just this test's own level 5, since which
+    // zone actually opens depends on the real item's own subtype value.
+    std::map<int, GeneratedLevel> allLevels;
+    GameAdvancement::LevelLookup lazyLookup = [&allLevels](int n) -> GeneratedLevel& {
+        auto it = allLevels.find(n);
+        if (it != allLevels.end()) return it->second;
+        return allLevels.emplace(n, MakeOpenLevel(n)).first->second;
+    };
+
+    int result = PlayerInventory::CollectChestItem(p, record, items, level, world, lazyLookup);
     Expect(result == 1, "collecting a real gift item with space succeeds");
     int expectedSubtype = items.subtype[static_cast<size_t>(giftItemId - 1)];
     Expect(p.giftPointsFound == expectedSubtype,
            "giftPointsFound increases by exactly the item's own subtype column");
+
+    // Every real category-11 item's own subtype is >= 9 (GameAdvancement
+    // ::Level's own bucket-0 upper bound), so SOME zone always opens --
+    // `allLevels` only ever gets entries via `lazyLookup`'s own on-demand
+    // creation, and the only caller that ever invokes `lazyLookup` in
+    // this test is `GameAdvancement::OpenZone` itself (inside
+    // CollectChestItem) -- so a non-empty, all-`populated` result here
+    // confirms the M52 wiring fired for real, without this test needing
+    // its own copy of GameAdvancement.cpp's own private zone table (see
+    // m52_game_advancement_smoke.cpp for that exact-membership check).
+    Expect(!allLevels.empty(), "OpenZone touched at least one level -- the M52 wiring fired");
+    bool allOpened = true;
+    for (const auto& [number, openedLevel] : allLevels) allOpened = allOpened && openedLevel.populated;
+    Expect(allOpened, "every level OpenZone touched ended up populated");
 }
 
 void TestCollectChestItemNoSpace(const ItemDatabase& items) {
@@ -165,7 +205,7 @@ void TestCollectChestItemNoSpace(const ItemDatabase& items) {
     PlayerState p;
     p.inventoryCount = 24;  // completely full
 
-    int result = PlayerInventory::CollectChestItem(p, record, items, level, world);
+    int result = PlayerInventory::CollectChestItem(p, record, items, level, world, SingleLevelLookup(level));
     Expect(result == 0, "a full inventory returns 0");
     Expect(p.inventoryCount == 24, "the inventory itself is untouched");
 

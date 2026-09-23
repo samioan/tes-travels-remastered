@@ -3376,6 +3376,97 @@ read-through.
       stayed at zero `/W4` warnings. Manually launched the real windowed
       exe and confirmed it starts and stays up.
 
+- [x] **M52 -- dungeon zone gating (`GameAdvancement`)** (this session).
+      New `world/game_advancement.h`/`.cpp` ports `ESGame.
+      getGameAdvancementLevel()`/`checkOpenAndPopulateDungeons()` -- the
+      progressive "open this zone's dungeon levels once giftPointsFound
+      crosses a threshold" system `world/dungeon_generator.h`'s own
+      `GeneratedLevel::populated` header comment had flagged as
+      unmodeled since M6/M10 (that field was an always-true placeholder
+      the whole time, since nothing had ever flipped it any other way).
+      `GameAdvancement::Level(giftPoints)` buckets into the real 0-8 zone
+      index; `GameAdvancement::OpenZone(zone, levels)` flips `populated`
+      true for exactly that zone's own level list (ESGame's own
+      `zoneLevels` table, transcribed verbatim). `DungeonGenerator::
+      PopulateLevel` now starts standard levels at `populated=false`
+      (matching `Dungeon`'s own real field default); `BuildHubLevel`
+      still starts the hub at `true` (its own real constructor does
+      this unconditionally). `player/player_movement.h`'s `CommitMove`
+      finally gets a real `if (!target.populated) return false;` gate,
+      matching `Player.commitMove()` line for line (src/Player.java:
+      809-811) -- and calls `GameAdvancement::OpenZone` at its own two
+      gift-point-increment branches (both previously stamped "SKIPPED,
+      no live ESGame session object exists yet"); `player/
+      player_inventory.h`'s `CollectChestItem` gets the same treatment
+      (a new `levels` parameter) at its own gift-point branch. `main.cpp`
+      opens zone 0 right after a New Game's `draft` becomes the live
+      `player` (`ESGame.createNewGame()`'s own `for (i = 0; i <= zone;
+      i++) checkOpenAndPopulateDungeons(i);` loop, kept as a loop for
+      line-for-line fidelity even though `zone` is always 0 for a fresh
+      character).
+
+      **A second real, confirmed dead-code finding, turned up the same
+      "grep every call site" way M51's own `Shop.reset()` finding was,**
+      that reshaped this milestone's own Load-path behavior: `ESGame.
+      openAndPopulateAllUpTo()` (the "open every zone up to the loaded
+      player's own advancement" catch-up pair, meant to run right after
+      `loadGameState()`) is ONLY ever called from `ESGame.
+      enterCurrentZone()` -- which itself has ZERO callers anywhere in
+      `../src/*.java`. (There's a confusingly same-prefixed
+      `enterCurrentZoneStatic()`, called once from ESGame's own static
+      initializer, but it's an unrelated method that only calls
+      `buildHubTileTemplate()` -- easy to conflate by name alone, so
+      called out explicitly in `game_advancement.h`'s own header
+      comment.) That means **in the real shipped game, loading a save
+      never re-opens any dungeon zone.** Since even a same-level STEP's
+      own `target` in `commitMove()` is `dungeons[currentLevel-1]` (the
+      level the player already occupies), a fresh-launch Continue Game
+      resumed past zone 0 finds that level's own `populated` bit back at
+      its freshly-booted default (false) -- and the player cannot move
+      AT ALL, not even in place. A genuine softlock in the original
+      engine. Building a load-time zone catch-up into `GameSave::Load`
+      anyway would be STRICTLY MORE correct than the shipped game -- the
+      same "behavioral gain, not reimplementation" trap M51's own note
+      already warns future work away from -- so `GameAdvancement::
+      OpenUpTo`/`enterCurrentZone`'s equivalent was deliberately NOT
+      built at all, and `GameSave::Load`'s own hand-off in `main.cpp`
+      calls nothing from this new class, faithfully reproducing the
+      softlock. Documented prominently at 3 levels (`game_advancement.h`'s
+      own class comment, `CommitMove`'s own declaration comment, and the
+      `main.cpp` call site itself) rather than buried in one place, given
+      how easy this is to trip over by accident in a later milestone.
+
+      **Verified safe against every existing smoke test that exercises
+      cross-level movement against real `PopulateLevel`/`BuildHubLevel`
+      output** (`m10_player_movement_smoke.cpp`'s own `TestAgainstRealData`
+      only asserts zero exceptions, never exact success counts -- traced
+      directly, not assumed). Two existing test files needed real edits
+      because `CommitMove`/`CollectChestItem` now call `GameAdvancement::
+      OpenZone` for real whenever a test's own gift item actually crosses
+      a threshold, and `OpenZone` touches EVERY level in the opened
+      zone's own list, not just the one level a hand-built test cache
+      happened to contain: `m17_world_wiring_smoke.cpp` (7 call sites)
+      and `m43_chest_interaction_smoke.cpp` (1 of its 3 `CollectChestItem`
+      call sites needed a real all-levels lookup; the other 2 never cross
+      a threshold at all) both switched their hand-built `LevelLookup`s
+      from a plain `cache.at(n)` to a lazy "create a fresh open level on
+      first ask" fallback -- exactly the shape `m10`'s own
+      `TestAgainstRealData` already established.
+
+      Verified with a new `game_advancement_smoke.exe`: `Level`'s own
+      0-8 bucket boundaries against every real threshold; `OpenZone`
+      opening exactly one zone's levels and leaving every other zone
+      untouched (additive across repeated calls); `OpenZone(9, ...)`
+      throwing `std::out_of_range` (there are only 9 zones); `CommitMove`
+      correctly blocking both a same-level step and a cross-level step
+      into an unpopulated level, then succeeding once `GameAdvancement::
+      OpenZone` opens it; and `DungeonGenerator`'s own real
+      `PopulateLevel`/`BuildHubLevel` populated defaults against real
+      asset geometry. 47 smoke tests now pass in total (46 carried over
+      + this milestone's own); full clean rebuild stayed at zero `/W4`
+      warnings. Manually launched the real windowed exe and confirmed it
+      starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
@@ -3420,5 +3511,21 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52
 already found.
+
+**Heads up for whoever eventually wires a real Save trigger (M52's own
+finding):** now that `savegame.dat` actually gets written once the
+in-game pause screen exists, the confirmed real softlock M52 documented
+(`world/game_advancement.h`'s own class comment) becomes reachable for
+the first time in THIS PORT specifically -- a Continue Game resumed past
+zone 0 leaves the player unable to move at all, faithfully matching the
+original engine's own confirmed bug. This is a deliberate "preserve the
+real bug" choice already made (see M52's own entry above), not an
+oversight -- but it's worth a conscious decision point, not a silent
+default, whenever a real Save UI makes it player-reachable: keep it
+faithful (do nothing further, the current default), or make a clearly-
+labeled, deliberate port-only exception (this project has no precedent
+for one yet -- every "not modeled"/"not fixed" note elsewhere in this
+doc stays faithful) and call it out explicitly as such if that's ever
+the call.

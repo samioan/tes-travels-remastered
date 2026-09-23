@@ -147,7 +147,8 @@ std::optional<std::array<int8_t, 7>> PlayerInventory::DropInventoryItem(PlayerSt
 }
 
 int PlayerInventory::CollectChestItem(PlayerState& p, std::array<int8_t, 8> record, const ItemDatabase& items,
-                                       GeneratedLevel& level, WorldRegistry& world) {
+                                       GeneratedLevel& level, WorldRegistry& world,
+                                       const GameAdvancement::LevelLookup& levels) {
     // record[2] = 2 -- confirmed dead, not reproduced; see this method's
     // own declaration comment.
     if (p.inventoryCount < 24) {
@@ -161,9 +162,8 @@ int PlayerInventory::CollectChestItem(PlayerState& p, std::array<int8_t, 8> reco
         if (items.category[static_cast<size_t>(itemIndex)] == 11) {
             p.giftPointsFound =
                 static_cast<int16_t>(p.giftPointsFound + items.subtype[static_cast<size_t>(itemIndex)]);
-            // ESGame.getGameAdvancementLevel()/checkOpenAndPopulateDungeons():
-            // SKIPPED, same reasoning as player_movement.h's own CommitMove
-            // dropped-item block -- no live ESGame session to open zones on.
+            // M52: see this method's own declaration comment.
+            GameAdvancement::OpenZone(GameAdvancement::Level(p.giftPointsFound), levels);
         }
 
         return 1;

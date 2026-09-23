@@ -65,10 +65,12 @@ add_library(stormhold_assets STATIC
 target_include_directories(stormhold_assets PUBLIC src)
 target_link_libraries(stormhold_assets PRIVATE stb_image)
 
-# M6: procedural dungeon generation -- see docs/PORT_ROADMAP.md and
-# src/world/.
+# M6: procedural dungeon generation. M52: game_advancement.cpp (ESGame.
+# getGameAdvancementLevel()/checkOpenAndPopulateDungeons(), the dungeon
+# zone-gating system) -- see docs/PORT_ROADMAP.md and src/world/.
 add_library(stormhold_world STATIC
   src/world/dungeon_generator.cpp
+  src/world/game_advancement.cpp
   src/world/warden.cpp
 )
 target_include_directories(stormhold_world PUBLIC src)
@@ -434,5 +436,9 @@ target_link_libraries(world_save_smoke PRIVATE stormhold_dungeon)
 # M50 milestone smoke test -- see src/tests/m50_game_save_smoke.cpp.
 add_executable(game_save_smoke src/tests/m50_game_save_smoke.cpp)
 target_link_libraries(game_save_smoke PRIVATE stormhold_render stormhold_player)
+
+# M52 milestone smoke test -- see src/tests/m52_game_advancement_smoke.cpp.
+add_executable(game_advancement_smoke src/tests/m52_game_advancement_smoke.cpp)
+target_link_libraries(game_advancement_smoke PRIVATE stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST

@@ -79,7 +79,16 @@ void TestSingleItemNotPossessedBeforeGrantsGiftPoints(const stormhold::ItemDatab
 
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[5] = level;
-    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    // M52: CommitMove's own gift-points branches now call GameAdvancement
+    // ::OpenZone for real, which touches EVERY level in the crossed-into
+    // zone's own list, not just this test's own single `cache[N]` entry
+    // -- lazy on-demand creation (rather than hand-listing a whole zone)
+    // keeps every level number OpenZone might ask for resolvable.
+    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& {
+        auto it = cache.find(n);
+        if (it != cache.end()) return it->second;
+        return cache.emplace(n, MakeLevel(n)).first->second;
+    };
 
     stormhold::PlayerState p;
     p.currentLevel = 5;
@@ -110,7 +119,16 @@ void TestSingleItemAlreadyPossessedSkipsGiftPoints(const stormhold::ItemDatabase
 
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[6] = level;
-    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    // M52: CommitMove's own gift-points branches now call GameAdvancement
+    // ::OpenZone for real, which touches EVERY level in the crossed-into
+    // zone's own list, not just this test's own single `cache[N]` entry
+    // -- lazy on-demand creation (rather than hand-listing a whole zone)
+    // keeps every level number OpenZone might ask for resolvable.
+    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& {
+        auto it = cache.find(n);
+        if (it != cache.end()) return it->second;
+        return cache.emplace(n, MakeLevel(n)).first->second;
+    };
 
     stormhold::PlayerState p;
     p.currentLevel = 6;
@@ -138,7 +156,16 @@ void TestSingleItemLockedSetsPendingFlagAndSkipsPickup(const stormhold::ItemData
 
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[7] = level;
-    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    // M52: CommitMove's own gift-points branches now call GameAdvancement
+    // ::OpenZone for real, which touches EVERY level in the crossed-into
+    // zone's own list, not just this test's own single `cache[N]` entry
+    // -- lazy on-demand creation (rather than hand-listing a whole zone)
+    // keeps every level number OpenZone might ask for resolvable.
+    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& {
+        auto it = cache.find(n);
+        if (it != cache.end()) return it->second;
+        return cache.emplace(n, MakeLevel(n)).first->second;
+    };
 
     stormhold::PlayerState p;
     p.currentLevel = 7;
@@ -181,7 +208,16 @@ void TestMultiItemAsymmetryOppositeOfSingleItem(const stormhold::ItemDatabase& i
 
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[8] = level;
-    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    // M52: CommitMove's own gift-points branches now call GameAdvancement
+    // ::OpenZone for real, which touches EVERY level in the crossed-into
+    // zone's own list, not just this test's own single `cache[N]` entry
+    // -- lazy on-demand creation (rather than hand-listing a whole zone)
+    // keeps every level number OpenZone might ask for resolvable.
+    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& {
+        auto it = cache.find(n);
+        if (it != cache.end()) return it->second;
+        return cache.emplace(n, MakeLevel(n)).first->second;
+    };
 
     stormhold::PlayerState p;
     p.currentLevel = 8;
@@ -219,7 +255,16 @@ void TestNonGiftItemPicksUpWithNoPointsChange(const stormhold::CharacterData& ch
 
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[9] = level;
-    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    // M52: CommitMove's own gift-points branches now call GameAdvancement
+    // ::OpenZone for real, which touches EVERY level in the crossed-into
+    // zone's own list, not just this test's own single `cache[N]` entry
+    // -- lazy on-demand creation (rather than hand-listing a whole zone)
+    // keeps every level number OpenZone might ask for resolvable.
+    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& {
+        auto it = cache.find(n);
+        if (it != cache.end()) return it->second;
+        return cache.emplace(n, MakeLevel(n)).first->second;
+    };
 
     stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
     Expect(p.inventoryCount == startCount + 1, "a non-gift item should still be auto-picked-up");
@@ -237,7 +282,16 @@ void TestAutoMarkCampOnTile() {
 
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[10] = level;
-    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    // M52: CommitMove's own gift-points branches now call GameAdvancement
+    // ::OpenZone for real, which touches EVERY level in the crossed-into
+    // zone's own list, not just this test's own single `cache[N]` entry
+    // -- lazy on-demand creation (rather than hand-listing a whole zone)
+    // keeps every level number OpenZone might ask for resolvable.
+    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& {
+        auto it = cache.find(n);
+        if (it != cache.end()) return it->second;
+        return cache.emplace(n, MakeLevel(n)).first->second;
+    };
 
     stormhold::PlayerState p;
     p.currentLevel = 10;
@@ -279,7 +333,16 @@ void TestDropThenWalkBackPicksItUpAgain(const stormhold::CharacterData& charData
 
     std::map<int, stormhold::GeneratedLevel> cache;
     cache[11] = level;
-    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& { return cache.at(n); };
+    // M52: CommitMove's own gift-points branches now call GameAdvancement
+    // ::OpenZone for real, which touches EVERY level in the crossed-into
+    // zone's own list, not just this test's own single `cache[N]` entry
+    // -- lazy on-demand creation (rather than hand-listing a whole zone)
+    // keeps every level number OpenZone might ask for resolvable.
+    stormhold::PlayerMovement::LevelLookup lookup = [&](int n) -> stormhold::GeneratedLevel& {
+        auto it = cache.find(n);
+        if (it != cache.end()) return it->second;
+        return cache.emplace(n, MakeLevel(n)).first->second;
+    };
 
     // Step away, then back.
     bool steppedAway = stormhold::PlayerMovement::CommitMove(p, 1, lookup, world, items, monsters, warden);
