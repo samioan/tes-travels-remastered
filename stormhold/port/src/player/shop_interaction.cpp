@@ -171,4 +171,53 @@ std::optional<std::string> ShopInteraction::QuestShopDialogue(PlayerState& playe
     return std::nullopt;
 }
 
+std::optional<std::string> ShopInteraction::BenecaDialogue(PlayerState& player, ShopState& shop,
+                                                             const ShopDialogue& text, const ItemDatabase& items,
+                                                             int16_t& spawnIdCounter, int action, int extra) {
+    const std::vector<std::string>& lines = text.groups[4];
+
+    if (action == 1) {
+        if (shop.firstVisit[4]) {
+            shop.firstVisit[4] = false;
+            return lines[0];
+        }
+        return std::nullopt;
+    }
+
+    if (action == 4) {
+        int slot = extra;
+        int itemId = std::abs(static_cast<int>(player.inventoryItemIds[static_cast<size_t>(slot)]));
+        int category = items.category[static_cast<size_t>(itemId - 1)];
+        if (category != 13 && category != 15 && category != 17) {
+            shop.benecaPoints++;
+            PlayerInventory::RemoveInventorySlot(player, slot, items);
+            return lines[2];
+        }
+        return lines[1];
+    }
+
+    if (action == 7) {
+        if (shop.benecaPoints / 3 > 0) {
+            // `extra` is an item id here, NOT a slot -- see this method's
+            // own header comment for the real naming trap in Shop.java.
+            int itemId = extra;
+            int16_t spawnId = ++spawnIdCounter;
+            bool trained = PlayerInventory::AddInventoryItemRaw(player, itemId, spawnId, 0);
+            if (!trained) {
+                // A real cross-group return in the original: the
+                // training-failed message lives in group 7 (the generic
+                // pool), not group 4 -- confirmed independently by M11's
+                // own smoke test, which found this exact string sitting at
+                // dialogue[7][0].
+                return text.groups[7][0];
+            }
+            shop.benecaPoints = static_cast<int16_t>(shop.benecaPoints - 3);
+            return lines[3];
+        }
+        return lines[4];
+    }
+
+    return std::nullopt;
+}
+
 }  // namespace stormhold

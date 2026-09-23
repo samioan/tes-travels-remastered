@@ -13,17 +13,19 @@
 namespace stormhold {
 
 // Renamed-source counterpart of ../../../src/Shop.java's dialogue()
-// dispatcher -- SCOPED to shops 0-3 (the quest-turn-in shopkeepers:
-// Arantamo/Celegil/Favela Dralor/Vander, `Shop::IsQuestShop`, world/
-// shop_state.h) only. Shops 4 (Beneca)/5 (Helga)/6 (Varus) are each
-// bespoke single-NPC branches sharing no pattern with this one or each
-// other (Shop.java's own header comment already says so) -- deliberately
-// left for later milestones, one coherent slice at a time, the same
-// "primitive first, wired later, don't do it all at once" shape this
-// project's own M53/M54/M55 trio already used for ShopState itself. This
-// closes the bulk of the remaining gap docs/PORT_ROADMAP.md's "what's
-// next" flagged after M55 -- talkToNpc() still can't be wired for real
-// until shops 4-6 exist too.
+// dispatcher, ported one NPC-group at a time (docs/PORT_ROADMAP.md's own
+// "what's next" note after M55 flagged the whole dispatcher as "worth its
+// own multi-part treatment" rather than one milestone, the same "primitive
+// first, wired later, don't do it all at once" shape this project's own
+// M53/M54/M55 trio already used for ShopState itself):
+// - M56: `QuestShopDialogue`, shops 0-3 (the quest-turn-in shopkeepers:
+//   Arantamo/Celegil/Favela Dralor/Vander, `Shop::IsQuestShop`).
+// - M57 (this milestone): `BenecaDialogue`, shop 4.
+// Shops 5 (Helga)/6 (Varus) are each their own bespoke single-NPC branch,
+// sharing no pattern with shop 4 or each other (Shop.java's own header
+// comment already says so) -- still deliberately left for later
+// milestones. talkToNpc() can't be wired for real into the live port
+// until all of shops 4-6 exist too.
 //
 // Lives in stormhold_player, not alongside world/shop_state.h's own
 // `Shop` class (stormhold_world) -- this needs `PlayerState` directly,
@@ -66,6 +68,30 @@ public:
                                                           const ShopDialogue& text, const CharacterData& charData,
                                                           const ItemDatabase& items, GeneratedLevel& hub,
                                                           JavaRandom& rng, int shopId, int action, int extra);
+
+    // Shop.dialogue(player, 4, action, extra) -- shop 4 (Beneca) only.
+    // Returns std::nullopt wherever the original returns `null`.
+    // `spawnIdCounter` models `Item.nextSpawnId()`'s global counter, same
+    // caller-supplies-the-counter pattern every other spawn site in this
+    // port already uses (combat/combat_resolution.h, dungeon/
+    // dungeon_runtime.h) -- pre-incremented exactly like those (`++
+    // spawnIdCounter`), not reproduced as a ported static.
+    //
+    // **A real naming trap in Shop.java itself, confirmed by reading
+    // Player.addInventoryItemRaw(int itemId, int packedValue, int charge)'s
+    // own real signature, not assumed from the local variable's name:** the
+    // original's action==7 branch reuses the identifier `slot` for its
+    // local (copy-pasted from the action==4 branch just above it, where
+    // `slot` genuinely IS an inventory slot index) -- but here it's passed
+    // as `addInventoryItemRaw`'s FIRST parameter, `itemId`, not a slot at
+    // all. So action 7's own `extra` argument is really the ITEM ID being
+    // requested as a training reward, matching the plain
+    // `addInventoryItemRaw(itemId, packedValue, extra)` call shape used
+    // everywhere else in `../../../src/Player.java`. Named `itemId` here,
+    // not `slot`, to not carry the original's own misleading name forward.
+    static std::optional<std::string> BenecaDialogue(PlayerState& player, ShopState& shop, const ShopDialogue& text,
+                                                       const ItemDatabase& items, int16_t& spawnIdCounter, int action,
+                                                       int extra);
 };
 
 }  // namespace stormhold

@@ -1,10 +1,11 @@
-// M56 smoke test: ShopInteraction (player/shop_interaction.h) -- Shop.
-// dialogue()'s dispatcher, scoped to shops 0-3 (the quest-turn-in
-// shopkeepers) only. Shops 4 (Beneca)/5 (Helga)/6 (Varus) are each bespoke
-// single-NPC branches, deliberately NOT covered here -- see shop_interaction
+// M56/M57 smoke test: ShopInteraction (player/shop_interaction.h) -- Shop.
+// dialogue()'s dispatcher. M56: shops 0-3 (the quest-turn-in shopkeepers).
+// M57: shop 4 (Beneca). Shops 5 (Helga)/6 (Varus) are each their own bespoke
+// single-NPC branch, deliberately NOT covered here -- see shop_interaction
 // .h's own class comment.
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 
 #include "assets/asset_root.h"
@@ -388,6 +389,109 @@ void TestUnhandledAction(const PlayerState& baseline, const CharacterData& charD
     Expect(!result.has_value(), "an unrecognized action should return std::nullopt, matching the original's null");
 }
 
+// M57: shop 4 (Beneca).
+void TestBenecaDialogue(const PlayerState& baseline, const ItemDatabase& items, const ShopDialogue& text) {
+    std::printf("-- Beneca (shop 4): greet, donation, and training-reward branches --\n");
+    const auto& lines = text.groups[4];
+
+    // Greet: first visit, then nullopt on a repeat.
+    {
+        ShopState shop;
+        PlayerState p = baseline;
+        int16_t spawnCounter = 10000;
+        auto first = ShopInteraction::BenecaDialogue(p, shop, text, items, spawnCounter, 1, 0);
+        Expect(first.has_value() && *first == lines[0], "Beneca's first visit should return line 0");
+        Expect(!shop.firstVisit[4], "firstVisit should clear after the first greeting");
+        auto second = ShopInteraction::BenecaDialogue(p, shop, text, items, spawnCounter, 1, 0);
+        Expect(!second.has_value(), "a repeat greeting should return std::nullopt");
+    }
+
+    // Donation: an eligible item (category not 13/15/17) earns a point and
+    // is consumed; an ineligible one is refused and kept.
+    int eligibleItemId = -1, ineligibleItemId = -1;
+    for (int id = 1; id <= items.ItemCount(); id++) {
+        int cat = items.category[static_cast<size_t>(id - 1)];
+        if (cat != 13 && cat != 15 && cat != 17 && eligibleItemId < 0) eligibleItemId = id;
+        if ((cat == 13 || cat == 15 || cat == 17) && ineligibleItemId < 0) ineligibleItemId = id;
+    }
+    Expect(eligibleItemId > 0, "itemsin.dat should have at least one donation-eligible item");
+    {
+        ShopState shop;
+        PlayerState p = baseline;
+        bool added = PlayerInventory::AddInventoryItemRaw(p, eligibleItemId, 0, 0);
+        Expect(added, "adding the eligible item should succeed");
+        int slot = p.inventoryCount - 1;
+        int16_t spawnCounter = 10000;
+        auto result = ShopInteraction::BenecaDialogue(p, shop, text, items, spawnCounter, 4, slot);
+        Expect(result.has_value() && *result == lines[2], "an eligible donation should return line 2");
+        Expect(shop.benecaPoints == 1, "an eligible donation should award exactly one point");
+        Expect(p.inventoryItemIds[static_cast<size_t>(slot)] != eligibleItemId,
+               "the donated item should be removed from inventory");
+    }
+    if (ineligibleItemId > 0) {
+        ShopState shop;
+        PlayerState p = baseline;
+        bool added = PlayerInventory::AddInventoryItemRaw(p, ineligibleItemId, 0, 0);
+        Expect(added, "adding the ineligible item should succeed");
+        int slot = p.inventoryCount - 1;
+        int16_t spawnCounter = 10000;
+        auto result = ShopInteraction::BenecaDialogue(p, shop, text, items, spawnCounter, 4, slot);
+        Expect(result.has_value() && *result == lines[1], "an ineligible donation (category 13/15/17) should return line 1");
+        Expect(shop.benecaPoints == 0, "an ineligible donation should award no point");
+        Expect(p.inventoryItemIds[static_cast<size_t>(slot)] == ineligibleItemId,
+               "an ineligible item should NOT be removed from inventory");
+    } else {
+        std::printf("  (no real category 13/15/17 item found -- skipping the ineligible-donation sub-case)\n");
+    }
+
+    // Training reward: not enough points yet.
+    {
+        ShopState shop;
+        shop.benecaPoints = 2;
+        PlayerState p = baseline;
+        int16_t spawnCounter = 10000;
+        auto result = ShopInteraction::BenecaDialogue(p, shop, text, items, spawnCounter, 7, eligibleItemId);
+        Expect(result.has_value() && *result == lines[4], "fewer than 3 points should return line 4");
+        Expect(shop.benecaPoints == 2, "an insufficient-points request should not spend any points");
+    }
+
+    // Training reward: enough points, room in the pack -- succeeds, spends
+    // exactly 3 points, and burns exactly one spawn id.
+    {
+        ShopState shop;
+        shop.benecaPoints = 5;
+        PlayerState p = baseline;
+        int16_t spawnCounter = 10000;
+        auto result = ShopInteraction::BenecaDialogue(p, shop, text, items, spawnCounter, 7, eligibleItemId);
+        Expect(result.has_value() && *result == lines[3], "a successful training reward should return line 3");
+        Expect(shop.benecaPoints == 2, "a successful training reward should spend exactly 3 points");
+        Expect(spawnCounter == 10001, "a successful training reward should burn exactly one spawn id");
+        bool found = false;
+        for (int i = 0; i < p.inventoryCount; i++) {
+            if (std::abs(static_cast<int>(p.inventoryItemIds[static_cast<size_t>(i)])) == eligibleItemId) found = true;
+        }
+        Expect(found, "the trained item should actually land in the player's inventory");
+    }
+
+    // Training reward: enough points, but a full pack -- the cross-group
+    // failure message (dialogue[7][0], not dialogue[4][...]), and the
+    // spawn id is still burned even though the item wasn't granted (the
+    // same "counter advances before the outcome is known" shape M43's own
+    // GrantStarFrostItem precedent already documented for this project).
+    {
+        ShopState shop;
+        shop.benecaPoints = 5;
+        PlayerState p = baseline;
+        p.inventoryCount = 24;
+        int16_t spawnCounter = 10000;
+        auto result = ShopInteraction::BenecaDialogue(p, shop, text, items, spawnCounter, 7, eligibleItemId);
+        Expect(result.has_value() && *result == text.groups[7][0],
+               "a full-pack training reward should return the GENERIC group's line 0, not Beneca's own group");
+        Expect(shop.benecaPoints == 5, "a failed training reward should not spend any points");
+        Expect(spawnCounter == 10001, "a failed training reward still burns the spawn id, matching the original");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -411,6 +515,7 @@ int main(int argc, char** argv) {
         TestRumorRequest(baseline, charData, text, items, hub);
         TestRewardClaim(baseline, charData, text, items);
         TestUnhandledAction(baseline, charData, text, items, hub);
+        TestBenecaDialogue(baseline, items, text);
 
         if (!g_ok) {
             std::fprintf(stderr, "m56_shop_interaction_smoke: FAILED self-consistency checks\n");

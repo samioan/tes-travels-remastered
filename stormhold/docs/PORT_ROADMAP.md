@@ -3663,13 +3663,71 @@ starts and stays up.
       full clean rebuild stayed at zero `/W4` warnings. Manually launched
       the real windowed exe and confirmed it starts and stays up.
 
+- [x] **M57 -- `ShopInteraction::BenecaDialogue`, shop 4** (this session).
+      Second slice of the `Shop.dialogue()` dispatcher (see M56's own
+      entry for the "one NPC-group at a time" plan): greet (first-visit
+      line, then `std::nullopt` on every repeat -- Beneca has no
+      cooldown/fatigue/random-line branches at all, unlike shops 0-3's own
+      greet), the item-donation economy (action 4: an eligible item
+      -- category not 13/15/17 -- earns one `benecaPoints` and is
+      consumed; an ineligible one is refused and kept), and the
+      training-reward redemption (action 7: 3 points buys back a
+      caller-chosen item, gated on `benecaPoints / 3 > 0`).
+
+      **A real naming trap in `Shop.java` itself, caught by reading
+      `Player.addInventoryItemRaw(int itemId, int packedValue, int
+      charge)`'s own real signature rather than trusting the local
+      variable's name:** action 7's own local is named `slot` (copy-pasted
+      from action 4's branch just above it, where `slot` genuinely IS an
+      inventory slot index) but is actually passed as
+      `addInventoryItemRaw`'s FIRST parameter -- `itemId`, not a slot at
+      all. So action 7's own `extra` argument is really the ITEM ID being
+      requested as a training reward, matching the plain
+      `addInventoryItemRaw(itemId, packedValue, extra)` call shape used
+      everywhere else in `Player.java`. `BenecaDialogue`'s own parameter is
+      named `itemId`, not `slot`, to not carry the original's misleading
+      name forward -- flagged prominently in the method's own header
+      comment given how easy this is to misport by pattern-matching
+      against the sibling branch instead of checking the real callee.
+
+      `spawnIdCounter` (`Item.nextSpawnId()`'s global counter) is threaded
+      through the same `int16_t&`, caller-supplies-it,
+      pre-incremented-with `++` way `combat/combat_resolution.h`/
+      `dungeon/dungeon_runtime.h` already established -- not reproduced as
+      a ported static. Confirmed the training-reward branch burns a spawn
+      id even when the pack is full and the item isn't actually granted
+      (`Item.nextSpawnId()` runs before `addInventoryItemRaw`'s own
+      capacity check), the same "counter advances before the outcome is
+      known" shape this project's own M43 `GrantStarFrostItem` finding
+      already documented. Also confirmed (independently, by M11's own
+      smoke test before this milestone existed) that the training-failure
+      message is a real cross-group return: `dialogue[7][0]` (the GENERIC
+      pool), not `dialogue[4][...]` -- reproduced exactly as
+      `text.groups[7][0]`, not narrowed to Beneca's own group.
+
+      Verified by extending `shop_interaction_smoke.exe` (same executable
+      as M56, `src/tests/m56_shop_interaction_smoke.cpp`) against real
+      `itemsin.dat` data: the first-visit/repeat-visit greet pair; a real
+      donation-eligible item (found by scanning for `category != 13/15/17`)
+      earning exactly one point and being removed, and a real
+      category-13/15/17 item being refused and kept; the
+      insufficient-points training-reward refusal spending nothing; a
+      successful training reward spending exactly 3 points, burning
+      exactly one spawn id, and actually landing the item in inventory;
+      and a full-pack training reward returning the cross-group failure
+      line while still burning the spawn id and spending no points. 49
+      smoke tests pass (same total as M56 -- this extended the existing
+      executable rather than adding a new one); full clean rebuild stayed
+      at zero `/W4` warnings. Manually launched the real windowed exe and
+      confirmed it starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but still NOT wired into the
-C++ port -- M56 built the first real slice of `Shop.dialogue()`'s own
-dispatcher (shops 0-3's quest-turn-in pattern), but shops 4 (Beneca)/5
-(Helga)/6 (Varus)'s own bespoke branches are still unported, and even
-once all 7 are covered, wiring `ShopInteraction`/`Shop`'s dispatch into
+C++ port -- M56/M57 built the first two slices of `Shop.dialogue()`'s own
+dispatcher (shops 0-3's quest-turn-in pattern, then shop 4/Beneca), but
+shops 5 (Helga)/6 (Varus)'s own bespoke branches are still unported, and
+even once all 7 are covered, wiring `ShopInteraction`/`Shop`'s dispatch into
 `main.cpp`'s own tick loop (unblocking the NPC-talk half of
 `resolveInteractInput()` and the NPC-nameplate half of
 `refreshNpcNameplateAndWardenLeave()`, M43's own "what's next" note) is
@@ -3705,7 +3763,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own
