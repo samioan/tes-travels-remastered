@@ -28,18 +28,34 @@ the `.scr`/`.cml` paths) first.
 to readable-but-unrenamed Java (`decompiled/`, 11 files) via
 [`../../tools/decompile.py`](../../tools/decompile.py). Clean recovery.
 
-**Phase 1 (not started): read through and rename**, starting from
-`blt/Main.java` -> `b.java`.
+**Phase 1 (in progress): read through and rename.** A full survey pass
+of every class (`blt/Main.java`, `a`-`j`) is done -- architecture, every
+class's role, and most fields/methods are understood and written up in
+[`CLASS_MAP.md`](CLASS_MAP.md). Five classes are mechanically renamed
+into `../src/` (`Strings`, `DialogueNode`, `SpriteFrame`,
+`SpriteRenderer`, `ProjectileManager`); the rest (`Actor`/`j`,
+`ActorSystem`/`h`, `DialogueScreen`/`f`, `Game`/`b`,
+`ScriptInterpreter`/`e`) are documented but deliberately left unrenamed
+-- this codebase reuses single-letter field names across *different JVM
+descriptors on the same class* far more aggressively than
+dawnstar/stormhold's engine (`Game`/`b` alone has 12+ fields all spelled
+`a`), so those five need their own careful, one-at-a-time passes rather
+than a single rushed sweep. Suggested order in `CLASS_MAP.md`'s "Renamed
+source" section: `Actor`+`ActorSystem` together next, then
+`DialogueScreen`, then `Game`/`ScriptInterpreter` last (largest, most
+collision-heavy).
 
-**Phase 2 (not started, the hard part): reverse the `.scr`/`.cml`/`.jtm`
+**Phase 2 (in progress, the hard part): reverse the `.scr`/`.cml`/`.jtm`
 binary formats.** See [`ASSET_FORMATS.md`](ASSET_FORMATS.md). Unlike
 dawnstar/stormhold's data tables (plain length-prefixed strings, crackable
 from a hexdump alone), these are opaque binary streams with no visible
 structure -- the per-level content (`l01_*` through `l14_*`, one set per
-dungeon/area) is *entirely* encoded in them. This is the actual
-decompilation target for this game, analogous to shadowkey's world/model
-formats: format understanding has to come from reading how class `b` (or
-whichever class owns it) parses the byte stream, not from guessing.
+dungeon/area) is *entirely* encoded in them. All three formats' field
+layouts are now confirmed (by reading `b`/`e`/`g`'s own parsers as part
+of the phase-1 survey) and written up in `ASSET_FORMATS.md`; what's left
+is naming `.scr`'s ~78 bytecode opcodes and writing standalone
+`tools/parse_scr.py`/`parse_cml.py`/`parse_jtm.py` parsers instead of
+only having the logic live inside the game engine's own loaders.
 
 **Phase 3 (not started): PC port.** Scaffold is in `port/` (CMake + Ninja
 + MSVC, matching the shadowkey-decomp port's toolchain). Because content
