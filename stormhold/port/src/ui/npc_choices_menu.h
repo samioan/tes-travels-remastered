@@ -7,19 +7,19 @@
 
 namespace stormhold {
 
-// M64: renamed-source counterpart of ../../../src/ESGame.java's
-// `npcChoicesUI[shopId]` interactive follow-up menu for the 4 quest shops
-// (Arantamo/Celegil/Favela Dralor/Vander, `Shop::IsQuestShop`) -- the
-// Train/Give/Befriend/Threaten/Kill menu `ui/npc_dialogue.h`'s own class
-// comment (M60) flagged as a substantially bigger, separate lift, and
-// `docs/PORT_ROADMAP.md`'s own "what's next" note said would likely need
-// its own dawnstar-M46-sized multi-part treatment. This milestone is part
-// 1 of that: shops 0-3 only (`dispatchNpcChoice`'s own `case 0/1/2/3`
-// group, `ESGame.java`'s screenGroups 9-12/20/22). Beneca (shop 4, `case
-// 4`, screenGroup 13/27) and Helga (shop 5, `case 5`, screenGroup
-// 14/350) are their own bespoke menus, deliberately deferred to a follow-
-// up milestone, the same "one coherent slice at a time" split M56-M59's
-// own quartet already used for the dialogue TEXT side of this same gap.
+// M64/M65: renamed-source counterpart of ../../../src/ESGame.java's
+// `npcChoicesUI[shopId]` interactive follow-up menu. M64 covered the 4
+// quest shops (Arantamo/Celegil/Favela Dralor/Vander, `Shop::IsQuestShop`)
+// -- `dispatchNpcChoice`'s own `case 0/1/2/3` group, `ESGame.java`'s
+// screenGroups 9-12/20/22 (Train/Give/Befriend/Threaten/Kill). M65 (this
+// milestone) adds Beneca (shop 4, `case 4`, screenGroup 13/27: Give
+// Item/Take Crystal) -- the smaller of the two remaining bespoke menus
+// `docs/PORT_ROADMAP.md`'s own "what's next" note (after M64) flagged.
+// Helga (shop 5, `case 5`, screenGroups 14/350/352/353/41/355) is bigger
+// still (her own Enchant-item sub-screen on top of everything Beneca
+// needs) and remains deliberately deferred to a follow-up milestone, the
+// same "one coherent slice at a time" split M56-M59's own quartet already
+// used for the dialogue TEXT side of this same gap.
 //
 // **The big finding this milestone turned up, and this project's THIRD
 // deliberate, clearly-labeled port-only exception in the same category
@@ -53,8 +53,23 @@ namespace stormhold {
 // in this port too" situation M62/M63 already made peace with. Rather
 // than reproduce it, `NpcChoicesMenu::Open` is wired directly off
 // `nextScreen`'s own already-correct intended target (`main.cpp`'s own
-// dismiss handling for shops 0-3) -- honoring what the field was clearly
-// FOR, not what the broken dispatch actually does with it.
+// dismiss handling, now widened to shops 0-4 as of M65) -- honoring what
+// the field was clearly FOR, not what the broken dispatch actually does
+// with it.
+//
+// **M65 also wires a second, related gap M60's own class comment left
+// open:** `talkToNpc()`'s own null-result fallback for npcId 4 --
+// `Shop.dialogue(player, 4, 1, 0)` returns `null` on every visit after
+// the first (`BenecaDialogue`'s own action==1 branch, M57), and the real
+// game re-shows `npcChoicesUI[4]` DIRECTLY in that case (with a
+// `println("BENECA has nothing more to say!")`, not a UI message) rather
+// than opening a greeting screen with nothing to say. `main.cpp`'s own
+// interact-key dispatch now does the same: a null Beneca greeting opens
+// `NpcChoicesMenu` for shop 4 directly, skipping `NpcDialogue` entirely.
+// This one is NOT part of the softlock finding above -- it's a
+// straightforward, previously-just-unbuilt gap, now closed because the
+// machinery it needs (this file) finally exists. Helga's own identical-
+// shaped fallback (npcId 5) remains unwired, same as her whole menu.
 //
 // **A second, real, separate finding, NOT applicable to this milestone's
 // own shops 0-3 scope but confirmed while reading the very same array:**
@@ -93,16 +108,40 @@ namespace stormhold {
 // `setupMessage("Oracle", ...)` at startup, apparently reused from
 // elsewhere and never renamed) -- also reproduced exactly.
 //
-// **A fourth, minor, real finding, also cheap to preserve:** the choices
-// menu itself (`npcChoicesUI[i].setupPromptList("Name", "Aid: <TAG>", ...)`)
-// is built ONCE at startup with the literal placeholder title "Name" --
-// unlike `trainWhatMenu`/`giveWhatMenu`, which are rebuilt fresh on every
-// open and correctly pass `Shop.NAMES[shopId]` as their own title, nothing
-// ever patches `npcChoicesUI[i]`'s own title afterward. Reproduced exactly
-// (this menu's title is the literal string "Name" for all 4 shops, not
-// each shop's real name) -- "Train What?"/"Give What?" DO show the real
-// shop name, since those two are freshly built per-open with the correct
-// value from the start.
+// **A fourth, minor, real finding, also cheap to preserve:** the QUEST
+// SHOPS' choices menu (`npcChoicesUI[i].setupPromptList("Name", "Aid:
+// <TAG>", ...)` for `i` in 0-3) is built ONCE at startup with the literal
+// placeholder title "Name" -- unlike `trainWhatMenu`/`giveWhatMenu`, which
+// are rebuilt fresh on every open and correctly pass `Shop.NAMES[shopId]`
+// as their own title, nothing ever patches these 4 screens' own title
+// afterward. Reproduced exactly (the Choices screen's title is the
+// literal string "Name" for shops 0-3, not each shop's real name) --
+// "Train What?"/"Give What?" DO show the real shop name, since those two
+// are freshly built per-open with the correct value from the start.
+// **Beneca's OWN choices menu does NOT have this bug** -- confirmed by
+// reading her own separate construction directly:
+// `npcChoicesUI[4].setupPromptList("Beneca", ...)` passes her real name
+// literally, not the generic "Name" placeholder the shops-0-3 LOOP uses.
+// So this port's own Choices-screen title is `shopId <= 3 ? "Name" :
+// Shop::kNames[shopId]` -- a real, confirmed per-shop difference, not an
+// inconsistency in this port's own rendering.
+//
+// **A fifth, real, minor finding confirmed while adding Beneca's own
+// "Take Crystal" screen (`takeWhatMenu`, screenGroup 27):** unlike
+// `trainWhatMenu`/`giveWhatMenu` (both `nextScreen = gameCanvas`),
+// `takeWhatMenu` explicitly sets `ui.nextScreen = null`. That means the
+// top-level generic `cmd == cmdBack && nextScreen != null` shortcut never
+// fires for it, so its own Cancel press falls through to screenGroup 27's
+// OWN explicit `cmd == cmdBack` branch instead -- which shows
+// `npcChoicesUI[shopId]` (refreshing its gift-count label first), NOT
+// `gameCanvas`. **So Cancel on "Take Crystal" genuinely, correctly
+// returns to the Choices menu, while Cancel on "Give Item"/"Train What?"
+// genuinely, correctly closes the whole thing straight to gameplay** --
+// a real behavioral asymmetry between sub-screens, confirmed by reading
+// each one's own `nextScreen` assignment side by side, not a bug and not
+// smoothed over. Reproduced exactly below (`NpcChoicesMenu::Cancel`'s own
+// `TakeWhat` case is the only sub-screen that returns to Choices instead
+// of closing).
 //
 // **Deliberately NOT modeled, an input-layer question this port has never
 // attempted to answer for ANY screen, not just this one:** `UIScreen.
@@ -121,12 +160,12 @@ namespace stormhold {
 // command down to this port's own uniform Enter="confirm"/Escape="cancel"
 // convention). Noted here only because this milestone's own research
 // happened to turn it up, not as a new precedent or a new gap.
-enum class NpcChoicesScreen : uint8_t { Choices, TrainWhat, GiveWhat, Result };
+enum class NpcChoicesScreen : uint8_t { Choices, TrainWhat, GiveWhat, TakeWhat, Result };
 
 struct NpcChoicesMenuState {
     bool active = false;
-    // 0-3 only this milestone (see class comment) -- `main.cpp` never
-    // opens this for shopId 4/5/6.
+    // 0-4 as of M65 (see class comment) -- `main.cpp` never opens this
+    // for shopId 5/6 (Helga's own menu, Varus's own array-bounds crash).
     int shopId = -1;
     NpcChoicesScreen screen = NpcChoicesScreen::Choices;
     int selectedIndex = 0;
@@ -146,24 +185,37 @@ public:
     static void MoveSelection(NpcChoicesMenuState& state, int delta, const PlayerState& p);
 
     // Dispatches the active screen's own selection -- `dispatchNpcChoice`'s
-    // `case 0/1/2/3` body (Choices), `trainWhatMenu`'s own selection
-    // (`shopActionCode` -> `ShopInteraction::QuestShopDialogue` action 5),
-    // `giveWhatMenu`'s own selection (action 4, `extra`=slot), or Result's
-    // single "Ok" (returns to Choices -- a deliberate port-only mapping,
-    // see class comment: the real result popups have no reachable
-    // `nextScreen`/`backTarget` of their own at all).
+    // `case 0/1/2/3` body (Choices, shops 0-3) or `case 4` body (Choices,
+    // Beneca), `trainWhatMenu`'s own selection (`shopActionCode` ->
+    // `ShopInteraction::QuestShopDialogue` action 5), `giveWhatMenu`'s own
+    // selection (`QuestShopDialogue`/`BenecaDialogue` action 4, `extra`
+    // =slot -- whichever owns `state.shopId`), `takeWhatMenu`'s own
+    // selection (`BenecaDialogue` action 7, `extra`=itemId, NOT a slot --
+    // see `BenecaDialogue`'s own doc comment for the real naming trap this
+    // matches), or Result's single "Ok" (returns to Choices -- a
+    // deliberate port-only mapping, see class comment: the real result
+    // popups have no reachable `nextScreen`/`backTarget` of their own at
+    // all). `spawnIdCounter` is `BenecaDialogue`'s own action-7 parameter
+    // (a fresh item needs a fresh spawn id) -- unused for every other
+    // action/screen, threaded through regardless since it's the same
+    // function either way.
     static void Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopState& shop, const ShopDialogue& text,
                          const CharacterData& charData, const ItemDatabase& items, GeneratedLevel& hub,
-                         JavaRandom& rng);
+                         JavaRandom& rng, int16_t& spawnIdCounter);
 
     // Choices: closes the whole menu back to live gameplay, matching the
-    // real `npcChoicesUI[shopId].nextScreen = gameCanvas` exactly (this
-    // one direction is NOT part of the softlock -- screenGroup 9-12's own
-    // `cmd == cmdBack` branch reads `nextScreen`, not `backTarget`).
-    // TrainWhat/GiveWhat: same real target (`nextScreen = gameCanvas`),
-    // so this ALSO closes the whole menu, not just backing up one screen
-    // -- faithful, not a simplification. Result: same port-only mapping
-    // as Confirm above (back to Choices).
+    // real `npcChoicesUI[shopId].nextScreen = gameCanvas` exactly for
+    // EVERY shop, including Beneca (this one direction is NOT part of the
+    // softlock -- screenGroup 9-12/13's own `cmd == cmdBack` branch reads
+    // `nextScreen`, not `backTarget`). TrainWhat/GiveWhat: same real
+    // target (`nextScreen = gameCanvas`), so this ALSO closes the whole
+    // menu, not just backing up one screen -- faithful, not a
+    // simplification. TakeWhat: a real, confirmed EXCEPTION to that
+    // pattern -- returns to Choices instead of closing (see class comment
+    // for why `takeWhatMenu`'s own `nextScreen = null` makes this the
+    // genuinely correct, different real behavior, not an oversight on
+    // this port's side). Result: same port-only mapping as Confirm above
+    // (back to Choices).
     static void Cancel(NpcChoicesMenuState& state);
 
     static void Render(Backbuffer& bb, const NpcChoicesMenuState& state, const PlayerState& p,

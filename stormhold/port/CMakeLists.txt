@@ -494,4 +494,8 @@ target_link_libraries(pause_menu_smoke PRIVATE stormhold_render stormhold_player
 add_executable(npc_choices_menu_smoke src/tests/m64_npc_choices_menu_smoke.cpp)
 target_link_libraries(npc_choices_menu_smoke PRIVATE stormhold_render stormhold_player)
 
+# M65 milestone smoke test -- see src/tests/m65_beneca_choices_menu_smoke.cpp.
+add_executable(beneca_choices_menu_smoke src/tests/m65_beneca_choices_menu_smoke.cpp)
+target_link_libraries(beneca_choices_menu_smoke PRIVATE stormhold_render stormhold_player)
+
 endif()  # NOT STORMHOLD_DIST

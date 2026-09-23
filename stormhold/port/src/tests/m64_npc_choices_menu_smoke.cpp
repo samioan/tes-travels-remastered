@@ -3,6 +3,7 @@
 // shops 0-3 (ESGame.java's npcChoicesUI[shopId]/dispatchNpcChoice(),
 // case 0/1/2/3), built on M56's already-ported
 // ShopInteraction::QuestShopDialogue/IsValidShopAction/ShopActionCode.
+#include <cstdint>
 #include <cstdio>
 #include <string>
 
@@ -85,18 +86,19 @@ void TestTrainFlow(const CharacterData& charData, const ItemDatabase& items, con
         shop.rewardsGiven[static_cast<size_t>(shopId)] = 1;  // Avoid the "no rewards" early-exit line.
         GeneratedLevel hub = MakeSyntheticHub();
         JavaRandom rng(1);
+        int16_t spawnIdCounter = 10000;
 
         NpcChoicesMenuState state;
         NpcChoicesMenu::Open(state, shopId);
         state.selectedIndex = 0;  // "Train"
-        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
         Expect(state.screen == NpcChoicesScreen::TrainWhat, "selecting Train should move to the TrainWhat screen");
 
         NpcChoicesMenu::MoveSelection(state, 1000, p);
         Expect(state.selectedIndex == validCount - 1, "TrainWhat's own list should be exactly validCount long");
 
         state.selectedIndex = 0;
-        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
         Expect(state.screen == NpcChoicesScreen::Result, "confirming a skill should move to the Result screen");
         Expect(!state.resultBody.empty(), "Train should produce a real, non-empty rumor line");
         Expect(state.resultTitle == "NPC name here",
@@ -104,7 +106,7 @@ void TestTrainFlow(const CharacterData& charData, const ItemDatabase& items, con
 
         // Deliberate port-only mapping (see class comment): Result's own
         // "Ok" returns to Choices, not closing the whole menu.
-        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
         Expect(state.active && state.screen == NpcChoicesScreen::Choices,
                "confirming Result should return to Choices without closing the menu");
     }
@@ -117,18 +119,19 @@ void TestGiveFlowWithItems(const CharacterData& charData, const ItemDatabase& it
     ShopState shop;
     GeneratedLevel hub = MakeSyntheticHub();
     JavaRandom rng(1);
+    int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 1);
     state.selectedIndex = 1;  // "Give"
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
     Expect(state.screen == NpcChoicesScreen::GiveWhat, "selecting Give with items should move to the GiveWhat screen");
 
     NpcChoicesMenu::MoveSelection(state, 1000, p);
     Expect(state.selectedIndex == p.inventoryCount - 1, "GiveWhat's own list should be exactly inventoryCount long");
 
     state.selectedIndex = 0;
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
     Expect(state.screen == NpcChoicesScreen::Result, "confirming an item should move to the Result screen");
     Expect(!state.resultBody.empty(), "Give should produce a real, non-empty response line");
 }
@@ -140,11 +143,12 @@ void TestGiveFlowEmptyInventory(const CharacterData& charData, const ItemDatabas
     ShopState shop;
     GeneratedLevel hub = MakeSyntheticHub();
     JavaRandom rng(1);
+    int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 3);
     state.selectedIndex = 1;  // "Give"
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
     Expect(state.screen == NpcChoicesScreen::Result, "Give with an empty inventory should go straight to Result");
     Expect(state.resultBody == "You have nothing to give me!",
            "the empty-inventory message should match the real literal string exactly");
@@ -159,11 +163,12 @@ void TestBefriendThreatenKill(const CharacterData& charData, const ItemDatabase&
         ShopState shop;
         GeneratedLevel hub = MakeSyntheticHub();
         JavaRandom rng(1);
+        int16_t spawnIdCounter = 10000;
 
         NpcChoicesMenuState state;
         NpcChoicesMenu::Open(state, 0);
         state.selectedIndex = choice;
-        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
         Expect(state.screen == NpcChoicesScreen::Result, "Befriend/Threaten/Kill should go straight to Result");
         Expect(!state.resultBody.empty(), "Befriend/Threaten/Kill should each produce a real, non-empty line");
     }
@@ -176,10 +181,11 @@ void TestBefriendThreatenKill(const CharacterData& charData, const ItemDatabase&
     int y = Shop::kShopY[0];
     hub.tiles[static_cast<size_t>(x)][static_cast<size_t>(y)] = 32;
     JavaRandom rng(1);
+    int16_t spawnIdCounter = 10000;
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 0);
     state.selectedIndex = 4;  // Kill
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
     Expect((hub.tiles[static_cast<size_t>(x)][static_cast<size_t>(y)] & 32) == 0,
            "Kill should clear the hub's own shop-tile bit 32 via QuestShopDialogue's action 6");
 }
@@ -190,13 +196,14 @@ void TestCancelSemantics(const CharacterData& charData, const ItemDatabase& item
     ShopState shop;
     GeneratedLevel hub = MakeSyntheticHub();
     JavaRandom rng(1);
+    int16_t spawnIdCounter = 10000;
 
     // TrainWhat: real nextScreen = gameCanvas, so Cancel closes the whole
     // menu (not just backing up to Choices).
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 0);
     state.selectedIndex = 0;
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
     Expect(state.screen == NpcChoicesScreen::TrainWhat, "should be on TrainWhat");
     NpcChoicesMenu::Cancel(state);
     Expect(!state.active, "Cancel from TrainWhat should close the whole menu, matching nextScreen=gameCanvas");
@@ -204,7 +211,7 @@ void TestCancelSemantics(const CharacterData& charData, const ItemDatabase& item
     // GiveWhat: same real target.
     NpcChoicesMenu::Open(state, 0);
     state.selectedIndex = 1;
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
     Expect(state.screen == NpcChoicesScreen::GiveWhat, "should be on GiveWhat");
     NpcChoicesMenu::Cancel(state);
     Expect(!state.active, "Cancel from GiveWhat should close the whole menu, matching nextScreen=gameCanvas");
@@ -212,7 +219,7 @@ void TestCancelSemantics(const CharacterData& charData, const ItemDatabase& item
     // Result: deliberate port-only mapping, back to Choices.
     NpcChoicesMenu::Open(state, 0);
     state.selectedIndex = 2;  // Befriend
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
     Expect(state.screen == NpcChoicesScreen::Result, "should be on Result");
     NpcChoicesMenu::Cancel(state);
     Expect(state.active && state.screen == NpcChoicesScreen::Choices,

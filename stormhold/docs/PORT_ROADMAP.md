@@ -4364,29 +4364,105 @@ starts and stays up.
       asset data by the smoke test above, just not the live rendering/
       input itself.
 
+- [x] **M65 -- Beneca's own choices menu, wired live (shop 4: Give Item/
+      Take Crystal)** (this session). Part 2 of the multi-part treatment
+      M64's own "what's next" note scoped: `ui/npc_choices_menu.h`/`.cpp`
+      (already `stormhold_render`, no new files) extends `NpcChoicesScreen`
+      with a `TakeWhat` screen and teaches `Choices`/`GiveWhat`/`Cancel`
+      to branch on `shopId <= 3` vs. `shopId == 4`, built entirely on M57's
+      already-ported `ShopInteraction::BenecaDialogue`. Helga (shop 5)
+      remains deliberately deferred -- bigger still, with her own
+      Enchant-item sub-screen on top of everything Beneca needed.
+
+      **Two real, confirmed findings from Beneca's own construction,
+      genuinely DIFFERENT from the shops-0-3 findings M64 already
+      documented, not just repeats of them:**
+      - Beneca's OWN choices menu does NOT have M64's "Name" placeholder-
+        title bug -- `npcChoicesUI[4].setupPromptList("Beneca", ...)`
+        passes her real name directly (unlike the shops-0-3 LOOP's own
+        generic `"Name"` literal), confirmed by reading her separate
+        construction site. This port's own Choices-screen title is now
+        `shopId <= 3 ? "Name" : Shop::kNames[shopId]`, a real per-shop
+        difference, not an inconsistency in this port's own rendering.
+      - `takeWhatMenu` (Beneca's "Take Crystal" list, screenGroup 27) sets
+        `nextScreen = null`, unlike `trainWhatMenu`/`giveWhatMenu` (both
+        `nextScreen = gameCanvas`) -- so its own Cancel press skips the
+        top-level generic `cmdBack`-shortcut entirely and falls through to
+        screenGroup 27's OWN explicit `cmdBack` handler, which shows
+        `npcChoicesUI[shopId]` (refreshing its gift-count label first).
+        **Cancel on "Take Crystal" genuinely, correctly returns to the
+        Choices menu, while Cancel on "Give Item"/"Train What?" genuinely,
+        correctly closes the whole thing straight to gameplay** -- a real
+        behavioral asymmetry between sub-screens, confirmed by reading
+        each one's own `nextScreen` assignment side by side, reproduced
+        exactly (`NpcChoicesMenu::Cancel`'s own `TakeWhat` case is the
+        only sub-screen that returns to Choices instead of closing).
+
+      Also wired: half of `talkToNpc()`'s own null-result fallback M60's
+      class comment left open -- `Shop.dialogue(player, 4, 1, 0)` returns
+      `null` on every visit after the first (`BenecaDialogue`'s own
+      action==1 branch), and the real game re-shows `npcChoicesUI[4]`
+      directly in that case rather than opening an empty greeting.
+      `main.cpp`'s own interact-key dispatch now does the same for shop 4
+      specifically (Helga's identical-shaped fallback stays unwired, same
+      as her whole menu). This is a plain, previously-just-unbuilt gap,
+      not part of the M64 softlock finding -- closed because the machinery
+      it needs (this file) finally exists.
+
+      `BenecaDialogue`'s action 7 (Take Crystal) reuses `giveWhatMenu`'s
+      shared screen for Give Item but needs its own new `TakeWhat` list
+      (`Item.specialItemNames()`, ids 87-99, inlined as a one-line
+      `items.name[86+i]` read, same "no wrapper for a one-line real read"
+      precedent `player/shop_interaction.h`'s own class comment already
+      uses) -- confirmed the naming trap `BenecaDialogue`'s own doc
+      comment already flagged applies here too: the confirmed item id
+      (`selectedIndex + 87`) is passed as `extra`, NOT a slot.
+
+      Verified by a new `beneca_choices_menu_smoke.exe` (kept separate
+      from M64's own test file, covering only what's new): Beneca's own
+      2-item Choices list; Give Item sharing `QuestShopDialogue`'s own
+      empty-inventory early exit AND a real successful give
+      (`benecaPoints` increments, matching `BenecaDialogue`'s own action
+      4); a full Take Crystal round trip (13-item list, `benecaPoints`
+      spent by exactly 3, the granted item's id confirmed to be
+      `selectedIndex+87` not a slot) AND the insufficient-points case
+      (`benecaPoints < 3`); the confirmed Cancel asymmetry (TakeWhat back
+      to Choices, GiveWhat/Choices itself closing the whole menu); the
+      real "greeting is null after the first visit" premise the
+      `main.cpp`-only fallback wiring depends on; and `Render` running all
+      4 of Beneca's own screens without crashing. 55 smoke tests pass
+      total; full clean rebuild stayed at zero `/W4` warnings. Manually
+      launched the real windowed exe and confirmed it starts and stays up.
+      **Not independently re-verified this session** (same disclosed gap
+      M60's/M62's/M63's/M64's own entries already have): actually walking
+      up to Beneca in a live play session and navigating Give Item/Take
+      Crystal via real keyboard input wasn't attempted; every state-
+      mutating code path IS exercised against real asset data by the
+      smoke test above, just not the live rendering/input itself.
+
 ## What's next
 
-Beneca (shop 4) and Helga (shop 5) still need their own bespoke choices
-menus -- M64's own entry above only covers the 4 quest shops' shared
-Train/Give/Befriend/Threaten/Kill shape. Beneca's own menu (Give Item/Take
-Crystal, `ESGame.java`'s screenGroups 13/27, `ShopInteraction::
-BenecaDialogue`'s actions 4/7 already ported at M57) is the smaller of the
-two -- likely comparable in size to this milestone. Helga's own menu
-(Rumors/Give Crystal/Enchant/Bless/Cure/Warp/Recovery, screenGroups
+Helga (shop 5) still needs her own bespoke choices menu -- M64/M65's own
+entries above only cover the 4 quest shops' shared Train/Give/Befriend/
+Threaten/Kill shape and Beneca's own Give Item/Take Crystal. Helga's own
+menu (Rumors/Give Crystal/Enchant/Bless/Cure/Warp/Recovery, screenGroups
 14/350/352/353/41/355, `ShopInteraction::HelgaDialogue`'s 8 actions
-already ported at M58) is bigger, with its own Enchant-item sub-screen on
-top of the shared Give-item one. `IsValidShopAction`/`ShopActionCode`
-(M56) only cover shops 0-3's own menu-choice mapping either way -- shops
-4/5 have no equivalent confirmed selection-cost UI anywhere in `../src/`,
-an open question for whoever eventually builds Helga's own Enchant-item
-picker specifically (Beneca's Take-Crystal list is already confirmed:
-`Item.specialItemNames()`, ids 87-99). No bug-preservation dilemma blocks
-either -- see M53's own entry for the corrected `Shop.reset()` finding (it
-genuinely runs in the real game, via a static initializer); the one real
-surviving caveat is that `reset()` only ever runs ONCE per app launch
-there, not once per New Game, so quest-economy state carries over across a
-same-session death-restart -- not modeled by `ShopState` either way (this
-port has no live app-lifetime `Shop` instance to carry state between a
+already ported at M58) is bigger than either prior part, with its own
+Enchant-item sub-screen on top of the shared Give-item one, and her own
+`talkToNpc()` null-result fallback (npcId 5, same shape M65 just wired for
+Beneca) still to close. `IsValidShopAction`/`ShopActionCode` (M56) only
+cover shops 0-3's own menu-choice mapping either way -- Helga has no
+equivalent confirmed selection-cost UI anywhere in `../src/`, an open
+question for whoever eventually builds her own Enchant-item picker
+specifically (Beneca's own Take-Crystal list needed no such thing, just
+`Item.specialItemNames()`'s own flat 13-item catalog). No bug-preservation
+dilemma blocks it -- see M53's own entry for the corrected `Shop.reset()`
+finding (it genuinely runs in the real game, via a static initializer);
+the one real surviving caveat is that `reset()` only ever runs ONCE per
+app launch there, not once per New Game, so quest-economy state carries
+over across a same-session death-restart -- not modeled by `ShopState`
+either way (this port has no live app-lifetime `Shop` instance to carry
+state between a
 death-restart and the next), just worth keeping in mind for whoever
 eventually adds one.
 
@@ -4414,16 +4490,17 @@ M63's real Save/Load wiring). "Help" (pause-menu item 6) is confirmed
 wired-but-inert -- see M63's own entry for why (the Java transcription
 itself stops short of full topic text past index 4) -- and remains the
 next thing to finish once that transcription gap is closed. **Also note
-for whoever builds Beneca/Helga's own choices menus next (M64's own "what's
+for whoever builds Helga's own choices menu next (M64/M65's own "what's
 next" note above):** M64's own big finding -- the real `npcHelloUI` ->
-`npcChoicesUI[npcId]` transition being a confirmed softlock for every NPC,
-not just shops 0-3 -- already covers shops 4/5 too; `main.cpp`'s own
-dismiss handling will need its `shopId >= 0 && shopId <= 3` range widened
-once their menus exist, same "honor `nextScreen`'s intended target"
-exception M64's own entry already established, not a new decision to
-make. Following dawnstar's own later milestones roughly but expecting
-further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63/M64
+`npcChoicesUI[npcId]` transition being a confirmed softlock for every NPC
+-- already covers shop 5 too (M65 already widened `main.cpp`'s own dismiss
+handling to `shopId >= 0 && shopId <= 4`, covering Beneca; Helga just needs
+that same range bumped to `<= 5` once her menu exists), same "honor
+`nextScreen`'s intended target" exception M64's own entry already
+established, not a new decision to make. Following dawnstar's own later
+milestones roughly but expecting further Stormhold-specific divergences
+the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63/M64/M65
 already found.
 
 **Resolved by M63 (was: "heads up for whoever eventually wires a real Save
