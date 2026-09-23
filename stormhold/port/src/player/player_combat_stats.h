@@ -224,6 +224,17 @@ public:
     // CampState::Tick (player/camp_state.h) -- was GameCanvas's own
     // camp-interrupted/camp-complete branches in run().
     static void ApplyRestRecovery(PlayerState& p, bool fullyRested, const ItemDatabase& items, JavaRandom& rng);
+
+    // Player.tickFatigueRegen(elapsedMs) (M47, phase-3 port): passive
+    // Fatigue regen scaled by the average of attributes[10]/[11] (a base+
+    // bonus pair -- Endurance's own slot, per CharacterData::attributeNames'
+    // indexing), clamped at maxFatigue. Confirmed sole caller: player/
+    // death_sequence.h's own TickDeathAndRegen, GameCanvas's per-tick
+    // "regen while not already acting" branch -- see that method's own
+    // header comment for the real `unconfirmed_at` gate this port doesn't
+    // model (same already-documented gap combat/spell_casting.h's own
+    // ResolveSpellCastInput flags for its own read of the same field).
+    static void TickFatigueRegen(PlayerState& p, int64_t deltaMs);
 };
 
 }  // namespace stormhold

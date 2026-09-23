@@ -54,6 +54,7 @@ add_library(stormhold_assets STATIC
   src/assets/character_data.cpp
   src/assets/decoded_image.cpp
   src/assets/dungeon_geometry.cpp
+  src/assets/dungeon_names.cpp
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
   src/assets/monster_image_set.cpp
@@ -94,10 +95,13 @@ target_include_directories(stormhold_dungeon PUBLIC src)
 target_link_libraries(stormhold_dungeon PUBLIC stormhold_monster stormhold_world)
 
 # M9: player character creation. M10: player movement. M17: player_movement
-# .h/player_inventory.h's own dropped-item auto-loot/drop registry wiring
-# -- see docs/PORT_ROADMAP.md and src/player/.
+# .h/player_inventory.h's own dropped-item auto-loot/drop registry wiring.
+# M47: death_sequence.cpp (GameCanvas.tickDeathAndRegen()/run()'s own
+# facing!=1 death-respawn dispatch) -- see docs/PORT_ROADMAP.md and
+# src/player/.
 add_library(stormhold_player STATIC
   src/player/camp_state.cpp
+  src/player/death_sequence.cpp
   src/player/player_combat_stats.cpp
   src/player/player_creation.cpp
   src/player/player_inventory.cpp
@@ -405,5 +409,9 @@ target_link_libraries(flash_overlay_smoke PRIVATE stormhold_render)
 # M46 milestone smoke test -- see src/tests/m46_spell_casting_smoke.cpp.
 add_executable(spell_casting_smoke src/tests/m46_spell_casting_smoke.cpp)
 target_link_libraries(spell_casting_smoke PRIVATE stormhold_combat stormhold_player)
+
+# M47 milestone smoke test -- see src/tests/m47_death_sequence_smoke.cpp.
+add_executable(death_sequence_smoke src/tests/m47_death_sequence_smoke.cpp)
+target_link_libraries(death_sequence_smoke PRIVATE stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST

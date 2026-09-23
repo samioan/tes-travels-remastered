@@ -158,6 +158,21 @@
 // self-spell-hit flashes paint for real but stay unreachable until
 // spell casting itself is wired (see docs/PORT_ROADMAP.md's own "what's
 // next").
+//
+// M47 layers in `DeathSequence`/`DeathState` (player/death_sequence.h,
+// new this session) -- GameCanvas.tickDeathAndRegen() plus run()'s own
+// already-Java-transcribed `facing != 1` death/respawn state machine,
+// finally with a real driver (DeathSequence::Tick, this session), the
+// same "primitive ported long ago, wired now" shape M42's Camping gave
+// the camp state machine. HP reaching 0 (via CombatResolution::
+// TickMonstersOnLevel, M37) now actually does something instead of
+// silently going negative forever. While DeathSequence::Tick returns
+// Waiting, movement/attack/spellcast/target-monster-refresh/monster-AI
+// are all skipped for the tick (same shouldRunTick gate Camping::Tick
+// already shares this block with) -- everything else keeps running
+// unconditionally, same as the original. New `assets/dungeon_names.h`
+// (Dungeon.loadNames()/displayNames(), never ported before now) backs
+// the real respawn-location message.
 #include <windows.h>
 
 #include <array>
@@ -169,6 +184,7 @@
 #include "assets/asset_root.h"
 #include "assets/character_data.h"
 #include "assets/dungeon_geometry.h"
+#include "assets/dungeon_names.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
 #include "assets/shop_dialogue.h"
@@ -181,6 +197,7 @@
 #include "monster/monster_runtime.h"
 #include "platform/win32/window.h"
 #include "player/camp_state.h"
+#include "player/death_sequence.h"
 #include "player/player_combat_stats.h"
 #include "player/player_inventory.h"
 #include "player/player_creation.h"
@@ -338,6 +355,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // M46: combat/spell_casting.h's own SpellCasting::CastOnSelf/
     // CastOnMonster/CycleSelectedSpell.
     stormhold::SpellDatabase spells = stormhold::SpellDatabase::Load(assetRoot);
+    // M47: player/death_sequence.h's own respawn-message lookup.
+    stormhold::DungeonNames dungeonNames = stormhold::DungeonNames::Load(assetRoot);
 
     stormhold::WorldRegistry world(37);
     std::vector<stormhold::GeneratedLevel> levels = BuildWorld(geometry, items, monsters, world);
@@ -393,6 +412,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // trigger ('C' key, below) and a real Tick() driving run()'s own
     // already-transcribed camp state machine.
     stormhold::CampState camp;
+    // M47: GameCanvas's own unconfirmed_s -- finally with a real driver
+    // (DeathSequence::Tick, below).
+    stormhold::DeathState death;
     stormhold::MessagePopupState messagePopup;
     // M38: GameCanvas.targetMonster -- refreshed every tick by
     // PlayerMovement::MonsterInFront below.
@@ -522,7 +544,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 stormhold::MessagePopup::Show(messagePopup, {"Rest", "complete!"}, 1, gameTimeMs);
             }
 
-            if (campResult != stormhold::CampTickResult::StillWaiting) {
+            // M47: run()'s own `facing != 1` dispatch (Java-transcribed
+            // long before this port's tick loop existed) -- DeathSequence
+            // ::Tick returns Waiting while dead/waiting to respawn,
+            // matching run()'s own shouldRunTick==false gate below the
+            // exact same way CampTickResult::StillWaiting already does
+            // (both AND together into one shouldRunTick, harmless since
+            // real gameplay can't reach both at once -- see death_
+            // sequence.h's own DeathState comment).
+            stormhold::DeathTickResult deathResult = stormhold::DeathSequence::Tick(player, death, items, gameTimeMs);
+            if (deathResult == stormhold::DeathTickResult::Respawned) {
+                stormhold::MessagePopup::Show(
+                    messagePopup, stormhold::DeathSequence::RespawnMessageLines(player, dungeonNames), 1, gameTimeMs);
+            }
+
+            bool shouldRunTick = campResult != stormhold::CampTickResult::StillWaiting &&
+                                  deathResult != stormhold::DeathTickResult::Waiting;
+            if (shouldRunTick) {
                 if (up) {
                     stormhold::PlayerMovement::Move(player, 1, false, levelLookup, world, items, monsters, warden);
                 } else if (down) {
@@ -694,6 +732,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     ambushRng, nextSpawnIdCounter);
                 if (showAttackMessage) {
                     stormhold::MessagePopup::Show(messagePopup, {"Creature", "attacks!"}, 2, gameTimeMs);
+                }
+
+                // M47: GameCanvas.tickDeathAndRegen() (was a throw-stub) --
+                // see player/death_sequence.h's own header comment for why
+                // this runs last, matching run()'s own real call order
+                // relative to tickPlayerAction/tickMonsterAI. A true
+                // return means the player JUST died this tick -- clears
+                // targetMonster the same way GameCanvas's own
+                // unconfirmed_aa reset does (this port's own render/HUD-
+                // state boundary, see DeathSequence::TickDeathAndRegen's
+                // own comment).
+                if (stormhold::DeathSequence::TickDeathAndRegen(
+                        player, death, charData, gameTimeMs,
+                        static_cast<int64_t>(stormhold::GameClock::kTickInterval.count()))) {
+                    targetMonster = std::nullopt;
+                    hudState.unconfirmedAa = false;
                 }
             }
 

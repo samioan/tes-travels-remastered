@@ -188,6 +188,15 @@ public:
     // MarkCampAndReturnToTown above (Player.java line 2501) -- see that
     // method's own header comment.
     static void WarpToCampMark(PlayerState& p);
+
+    // Player.isSlotEquipped(slot) (M47, phase-3 port): true iff inventory
+    // `slot` holds an equippable item (ItemDatabase::IsEquippable) AND
+    // it's currently equipped (negative id, this codebase's equipped-slot
+    // convention -- see EquipItem's own `-std::abs(id)` write). Confirmed
+    // sole caller, per Player.java's own comment on this method: GameCanvas's
+    // death/respawn handling (player/death_sequence.h), which strips every
+    // NON-equipped item on respawn.
+    static bool IsSlotEquipped(const PlayerState& p, int slot, const ItemDatabase& items);
 };
 
 }  // namespace stormhold

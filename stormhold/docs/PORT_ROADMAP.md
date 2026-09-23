@@ -3000,6 +3000,112 @@ read-through.
       2 confirmed-dead locals above, which otherwise tripped it). Manually
       launched the real windowed exe and confirmed it starts and stays up.
 
+- [x] **M47 -- death/respawn sequence, wired into the live port** (this
+      session). New `player/death_sequence.h`/`.cpp` (`stormhold_player`,
+      alongside `camp_state.h` -- same "GameCanvas session field, not on
+      Player.java itself" placement): `DeathSequence::TickDeathAndRegen`
+      (`GameCanvas.tickDeathAndRegen()`) and `DeathSequence::Tick` (run()'s
+      own already-Java-transcribed `facing != 1` death/respawn state
+      machine, finally with a real driver -- the same "primitive ported
+      long ago, wired now" shape M42 gave the camp state machine).
+      HP reaching 0 (via `CombatResolution::TickMonstersOnLevel`, M37) now
+      actually does something instead of silently going negative forever.
+      Also new: `PlayerCombatStats::TickFatigueRegen`
+      (`Player.tickFatigueRegen()`), `PlayerCreation::NormalizeToMaxStats`/
+      `RespawnAfterDeath` (`Player.normalizeToMaxStats()`/
+      `resetState(classIndex, true)`'s "respawn" branch, the ONE branch
+      M9's own `CreateCharacter` didn't port -- that milestone only wired
+      `resetState(classIndex, false)`'s "new character" branch),
+      `PlayerInventory::IsSlotEquipped` (`Player.isSlotEquipped()`,
+      confirmed sole caller: exactly this respawn handling), and a brand
+      new asset loader, `assets/dungeon_names.h`/`.cpp`
+      (`Dungeon.loadNames()`/`displayNames()`, `dungnamesin.dat` -- never
+      touched by any earlier milestone) backing the real respawn-location
+      message.
+
+      **`PlayerState::facing` doubles as the death-sequence's own state
+      field, confirmed directly from the original, not a port-side
+      invention:** 1=alive/normal, 2=just died this tick, 3=waiting out
+      the 5s respawn window -- the exact same field `player/
+      player_movement.h`'s own `CommitMove`/`ComputeMoveTarget` drive for
+      ordinary movement. `DeathState` (this milestone's own new struct)
+      only carries the death timestamp (`GameCanvas.unconfirmed_s`) --
+      structurally the same split `player/camp_state.h`'s own `CampState`
+      already established for `campRollAt` vs. `campState`.
+
+      **A real, confirmed structural finding:** in the original, run()'s
+      own `campState==1`/`campState==2`/`facing != 1` dispatch is ONE
+      shared else-if chain, so a player can never be simultaneously
+      camping and dead. This port's own `Camping::Tick` and
+      `DeathSequence::Tick` are two independent calls in `main.cpp`
+      instead (ANDed together into one `shouldRunTick`) -- a structural,
+      not behavioral, divergence: reaching HP<=0 needs
+      `CombatResolution::TickMonstersOnLevel` to actually deal damage,
+      which itself only runs once camp/death gating has already cleared
+      for the tick, so the two states still can't overlap in real play.
+
+      **Two real findings carried through from `Player.java`'s own header
+      comments, not fresh discoveries, both preserved rather than
+      "cleaned up":** `resetState(classIndex, true)`'s own trailing
+      `this.facing = 1` is confirmed REDUNDANT (its own
+      `setHubSpawnPosition(true)` call already sets `facing = 1` as part
+      of the hub-position write) -- kept anyway, matching the original's
+      own identical redundant write. And the respawn-location message
+      selection (`enteredNewLevelZone` -> "Warden's Camp",
+      `leftLevelZone` -> "Outer Camp", else the current level's own
+      display name) reads TWO flags that `RespawnAfterDeath`/
+      `resetState(true)` never clears -- confirmed by reading
+      `resetState()` directly, neither field is in its own reset list --
+      so this can genuinely read STALE state from whatever the player's
+      last real move was before dying, not a bug on this port's side.
+      `leftLevelZone`'s own branch is additionally confirmed permanently
+      UNREACHABLE (M10's own finding), transcribed anyway, same "port a
+      confirmed-dead branch faithfully" treatment M40/M46 already gave
+      their own dead branches.
+
+      Wired into `main.cpp`'s tick loop right alongside `Camping::Tick`:
+      `DeathSequence::Tick` runs every tick (same position `Camping::Tick`
+      already occupies), gating `shouldRunTick` the same way; a
+      `Respawned` result shows the real respawn-location message via the
+      new `DungeonNames` asset; `DeathSequence::TickDeathAndRegen` runs at
+      the end of the `shouldRunTick` block (after `TickMonstersOnLevel`),
+      and a `true` (just-died) return clears `targetMonster`/
+      `hudState.unconfirmedAa` the same way `GameCanvas.unconfirmed_aa`'s
+      own reset does -- this port's own render/HUD-state boundary, kept
+      out of `death_sequence.h` itself, same "game logic returns a
+      signal, caller owns its own render/HUD state" pattern
+      `combat/spell_casting.h`'s own `Result` enum already established.
+
+      **NOT modeled, same already-documented gap M46's own
+      `ResolveSpellCastInput` header comment flags for its own read of the
+      same field:** `unconfirmed_at` (an "an action was already resolved
+      this tick" gate the original puts on `tickFatigueRegen`'s own call
+      site) -- fatigue regen here always runs unconditionally instead. Also
+      not modeled: the `facing==2->3` transition's own message-popup clear
+      (`unconfirmed_ad = false; messagePriority = 0`) -- already a
+      confirmed, documented gap from `render/message_popup.h`'s own
+      `Tick()` comment (M30), if under a slightly mislabeled "camp-state
+      transition" description there -- corrected here: it's this death-
+      sequence transition, not a camp one.
+
+      Verified with a new `death_sequence_smoke.exe`: `TickFatigueRegen`'s
+      exact gain formula and max-clamp; `TickDeathAndRegen`'s alive/dead
+      (including a negative, not just zero, HP overshoot) branches;
+      `Tick`'s Alive/Waiting/Respawned branches including the exact
+      `facing==2->3` transition tick and the `<=5000` vs. `>5000` boundary;
+      a full integration respawn (a real `PlayerCreation::CreateCharacter`
+      character, with an added un-equipped item alongside its 2 equipped
+      starting items, real accumulated gift-points/rumor/camp-mark
+      progress, and a real ailment/effect/combat-scratch state) confirming
+      full stat restoration, the (12, 14) hub landing point, PRESERVED
+      gift/rumor/camp-mark progress (unlike fresh character creation),
+      CLEARED ailment/effect/combat-scratch state, and that only the
+      un-equipped item gets stripped; and `RespawnMessageLines`'s all 3
+      branches against real `dungnamesin.dat` data (including confirming
+      the hub's own display name is non-empty). 43 smoke tests now pass in
+      total; full clean rebuild stayed at zero `/W4` warnings. Manually
+      launched the real windowed exe and confirmed it starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
@@ -3024,9 +3130,13 @@ the Shop-economy gap above) is the last item in that bucket. Beyond that:
 a real save/load system (`PlayerSave` exists, M20, but there's no
 `WorldRegistry`/master-list save format, and `main.cpp`'s own Main Menu
 "Continue Game" item always takes the no-saved-game branch until one
-exists, M40); the still-unwired death/respawn sequence (M42's own "what's
-next" note carried forward); Help topics (the Java transcription itself
-stops at topic index 4). Following dawnstar's own later milestones
-roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46
+exists, M40); `resolveMovementSideEffects()`'s own message-popup layer
+(the "Found <item>!"/"Several items!" and level-crossing MSG_WARDENS_CAMP/
+MSG_OUTER_CAMP/displayNames() messages that real movement should show --
+confirmed real and un-ported while scoping M47, since main.cpp currently
+calls `PlayerMovement::Move` directly with no message wiring at all); Help
+topics (the Java transcription itself stops at topic index 4). Following
+dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47
 already found.

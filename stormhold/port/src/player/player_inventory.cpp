@@ -201,4 +201,10 @@ void PlayerInventory::WarpToCampMark(PlayerState& p) {
     p.justMarkedCamp = true;
 }
 
+bool PlayerInventory::IsSlotEquipped(const PlayerState& p, int slot, const ItemDatabase& items) {
+    int8_t itemId = p.inventoryItemIds[static_cast<size_t>(slot)];
+    if (!items.IsEquippable(static_cast<int>(std::abs(itemId)))) return false;
+    return itemId < 0;
+}
+
 }  // namespace stormhold

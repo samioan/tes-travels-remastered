@@ -336,4 +336,12 @@ void PlayerCombatStats::ApplyRestRecovery(PlayerState& p, bool fullyRested, cons
     }
 }
 
+void PlayerCombatStats::TickFatigueRegen(PlayerState& p, int64_t deltaMs) {
+    int gain = static_cast<int>(deltaMs * (p.attributes[10] + p.attributes[11]) / 2000);
+    p.coreStats[6] = static_cast<int16_t>(p.coreStats[6] + gain);
+    if (p.coreStats[6] > p.coreStats[7]) {
+        p.coreStats[6] = p.coreStats[7];
+    }
+}
+
 }  // namespace stormhold

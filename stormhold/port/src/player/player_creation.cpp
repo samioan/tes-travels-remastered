@@ -189,4 +189,46 @@ void PlayerCreation::ComputeDerivedStats(PlayerState& p) {
     p.coreStats[7] = static_cast<int16_t>(p.attributes[0] + p.attributes[4] + p.attributes[6] + p.attributes[10]);
 }
 
+void PlayerCreation::NormalizeToMaxStats(std::array<int16_t, 10>& stats) {
+    stats[2] = stats[3];
+    stats[4] = stats[5];
+    stats[6] = stats[7];
+    stats[8] = 0;
+}
+
+void PlayerCreation::RespawnAfterDeath(PlayerState& p) {
+    // Player.resetState(classIndex, true) -- see this method's own
+    // declaration comment for exactly which fields the `full=true` branch
+    // skips relative to ResetForNewCharacter's `full=false` branch above.
+    p.ailmentMask = 0;
+    p.vampirismTimer = 0;
+    p.manaBurnTimer = 0;
+    p.terrifiedTimer = 0;
+    p.unconfirmedFlag2 = false;
+
+    // setHubSpawnPosition(true) -- (12, 14), DISTINCT from character
+    // creation's (9, 10) above.
+    p.currentLevel = p.pendingLevel = 1;
+    p.tileX = p.pendingTileX = 12;
+    p.tileY = p.pendingTileY = 14;
+    p.facing = p.pendingFacing = 1;
+
+    // full==true SKIPS: giftPointsFound/rumorRevealStep/wardenLoreStep
+    // and campLevel/campX/campY/campFacing -- both untouched here,
+    // unlike ResetForNewCharacter's own unconditional resets of those
+    // exact fields above.
+
+    p.effectDurations.fill(0);
+    p.lastCombatTargetId = 0;
+    p.spellArmorBonus = 0;
+    p.increaseHarmBuff = false;
+    p.increaseArmorBuff = false;
+    p.safeCampingBuff = false;
+
+    // full==true also skips grantStartingItems() -- the caller
+    // (player/death_sequence.h's own DeathSequence::Tick) already
+    // stripped every un-equipped inventory slot right before calling
+    // this; whatever's left (equipped gear) simply carries over.
+}
+
 }  // namespace stormhold
