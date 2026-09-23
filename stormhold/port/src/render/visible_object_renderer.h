@@ -23,6 +23,27 @@ public:
     // RenderMonsters' own job.
     static void RenderObjects(Backbuffer& bb, const VisibleObjectAssets& assets, const PlayerState& p);
 
+    // M67: GameCanvas.paintUnknown_b() (was decompiled/e.java's
+    // b(Graphics,int)) -- the NPC/shop-portrait icon overhead the
+    // look-ahead tile, shown while a quest-turn-in shop (0-5) with an
+    // unclaimed reward, or Varus/the Warden (6), sits directly ahead of
+    // the player. `stat` is `Player.questShopAtPendingTile()`'s return
+    // value, which -- now that phase-3 port M67 resolved the LOW
+    // CONFIDENCE flag on that method (see ../../../docs/PORT_ROADMAP.md's
+    // "what's next") -- is exactly PlayerMovement::ShopAheadOfPlayer's own
+    // return value; callers should NOT call this when that's < 0, mirroring
+    // the original's `if (unconfirmed_W) { ... }` gate (itself already
+    // confirmed equivalent to `shopAhead >= 0`, M60). Cases 0-5 reuse
+    // RenderMonsterOrIconSprite() with small literal indices instead of
+    // real monster typeIndexes -- an NPC/shop-portrait sprite sheet
+    // apparently laid out in the same row-index space as the monster
+    // table, not independently confirmed beyond both falling in valid
+    // table ranges (same caveat the original method's own header comment
+    // already carried). Case 6 shows the Warden compass icon instead,
+    // scaled by how many times the Warden has visited (`wardenVisitCount`,
+    // capped at 3, matching RenderWardenCompassIcon's own tier parameter).
+    static void RenderUnknownB(Backbuffer& bb, const VisibleObjectAssets& assets, int stat, int wardenVisitCount);
+
     // GameCanvas.paintMonsters() (was decompiled/e.java's g(Graphics)).
     // Returns whether any MONSTER sprite was drawn (GameCanvas's own
     // `unconfirmed_A`, reset false at the top of the original method

@@ -4537,6 +4537,59 @@ starts and stays up.
       asset data by the smoke test above, just not the live rendering/
       input itself.
 
+- [x] **M67 -- `paintUnknown_b()` wired live: the NPC/shop-portrait icon
+      and Warden compass icon overhead the look-ahead tile** (this
+      session). Closes the confidence-only gap a prior session's research
+      (see this file's own "resolved, then wired" note above) identified
+      but didn't build: `VisibleObjectRenderer::RenderUnknownB` (new,
+      `render/visible_object_renderer.{h,cpp}`) is the C++ counterpart of
+      `GameCanvas.paintUnknown_b()`, switching on the SAME value
+      `PlayerMovement::ShopAheadOfPlayer` already computes (confirmed
+      identical to `Player.questShopAtPendingTile()`, not a coincidence --
+      see that resolution's own writeup). Wired into `main.cpp`'s render
+      pass between `RenderObjects`/`RenderMonsters`, matching
+      `paintGameView()`'s own call order exactly; recomputes `shopAhead`
+      fresh at paint time (matching the original's own paint-time-fresh
+      call, not a cache) rather than reusing the tick-time local of the
+      same name declared in an outer scope.
+
+      **A second real, reachable original-game crash found and preserved
+      while building this:** case 6 (Varus/the Warden)'s own
+      `tier = min(wardenVisitCount, 3) - 1` indexes
+      `kUnconfirmedTableO[tier]` -- and Varus (shop 6) is a fixed,
+      always-present NPC independent of the WANDERING Warden's own visit
+      count, so `stat==6` is reachable from the very start of a New Game,
+      before the Warden has ever visited (`wardenVisitCount==0`), giving
+      `tier==-1`. Java's own out-of-bounds access there throws a real,
+      catchable `ArrayIndexOutOfBoundsException`; a raw negative C++
+      array index is undefined behavior, not a safe throw, so
+      `RenderUnknownB` now explicitly guards `tier < 0` and throws
+      `std::runtime_error` instead -- same "preserve the crash, don't
+      paper over it" discipline `RenderMonsterOrIconSprite`'s own
+      typeIndex-32..40 check (M28) already established, just newly
+      REQUIRED here (not just faithful) because of the C++/Java UB gap.
+
+      Verified by new `paint_unknown_b_smoke.exe` (5 checks): stat 0/1
+      route to distinct typeIndexes (proven by which image slot lit up,
+      not just position -- their table rows happen to share baseX/baseY);
+      stat 0's literal columnOverride argument threads through to
+      `RenderMonsterOrIconSprite` correctly (a transparent frame 0 vs. an
+      opaque frame 1, distinguishing "override applied" from "ignored");
+      the Warden compass icon at a valid tier; the new `wardenVisitCount
+      == 0` crash-preservation throw; and an out-of-range `stat` being a
+      true no-op (untouched backbuffer), matching the original switch
+      falling through with nothing after it. Full clean rebuild stayed at
+      zero `/W4` warnings on every project file (two pre-existing,
+      unrelated `D9025 overriding '/W4' with '/W3'` command-line notices
+      from a vendored/legacy target, not from any file this milestone
+      touched). Manually launched the real windowed exe and confirmed it
+      starts and stays up. **Not independently re-verified this session**
+      (same disclosed gap every recent milestone's own entry already
+      has): walking up to Varus/a quest shop in a live play session to
+      watch the icon actually render wasn't attempted; the dispatch and
+      crash-preservation logic IS exercised directly by the smoke test
+      above, just not the live rendering/input path end to end.
+
 ## What's next
 
 With M66, every one of the 7 real NPCs' own `npcChoicesUI` interactive
@@ -4562,32 +4615,30 @@ branch (`openInventory`), and M63 built and wired the in-game pause/
 Options menu (Stats/Inventory/Skills/Spells/Save Game/Load Game) plus a
 real Save/Load trigger against M50's `GameSave`.
 
-**RESOLVED this session (no milestone -- confidence-only fix, no new
-player-visible behavior yet):** the confidence gate that's kept
-`paintUnknown_b()`/its C++ wiring deferred is closed. `Player.
-questShopAtPendingTile()` (was `r()`), the value `paintUnknown_b()`
+**RESOLVED, then WIRED (M67):** the confidence gate that used to keep
+`paintUnknown_b()`/its C++ wiring deferred is closed, and the C++ side is
+now built and live (see M67's own entry above for the full writeup).
+`Player.questShopAtPendingTile()` (was `r()`), the value `paintUnknown_b()`
 switches on, was flagged LOW CONFIDENCE because `this.ab`/`this.z`/
 `this.w` weren't cross-checked against this file's other fields. They
-now are: `r()`'s two sibling methods in `decompiled/j.java` (`n()`/`h()`,
-the monster-at/chest-at-pending-tile lookups, sitting immediately above
-it) open with the exact same `this.g(1); if (this.ab<=0) ...` guard and
-are already ported using `pendingLevel`/`pendingTileX`/`pendingTileY` --
-confirming `r()` uses the same three fields, not an unconfirmed alias.
-dawnstar's own `Player.java` independently corroborates: it names the
-identical shared-engine mechanic `pendingLevel`/`pendingTileX`/
-`pendingTileY` with full confidence. `src/Player.java`/`src/Shop.java`
-(the Java reference tree) updated accordingly (dropped the placeholder
-`stateByteAb` field, reused `pendingLevel` directly, both already exist
-on the C++ `PlayerState` too -- `port/src/player/player_state.h`'s own
-comment updated to match). **The C++ side is not wired yet** --
-`paintUnknown_b()`'s own render building blocks (`RenderMonsterOrIcon
-Sprite`/`RenderWardenCompassIcon`) already exist in `port/src/render/
-visible_object_renderer.cpp`, but the dispatcher itself and its
-`main.cpp` call site are still the concrete next step (along with
-`paintFlashOverlays()`, bundled in the same "gated on live tick-loop
-state" note at `main.cpp`'s own header comment -- that other half is
-untouched by this session's fix and still needs its own look). **Note
-for whoever eventually revisits
+turned out to be confirmable: `r()`'s two sibling methods in
+`decompiled/j.java` (`n()`/`h()`, the monster-at/chest-at-pending-tile
+lookups, sitting immediately above it) open with the exact same
+`this.g(1); if (this.ab<=0) ...` guard and are already ported using
+`pendingLevel`/`pendingTileX`/`pendingTileY` -- confirming `r()` uses the
+same three fields, not an unconfirmed alias. dawnstar's own `Player.java`
+independently corroborates: it names the identical shared-engine
+mechanic `pendingLevel`/`pendingTileX`/`pendingTileY` with full
+confidence. `src/Player.java`/`src/Shop.java` (the Java reference tree)
+updated accordingly (dropped the placeholder `stateByteAb` field, reused
+`pendingLevel` directly, both already existed on the C++ `PlayerState`
+too). `paintFlashOverlays()`, previously bundled with `paintUnknown_b()`
+in `main.cpp`'s own "deliberately NOT wired here" header comment, turned
+out to be a stale claim on ITS side too, independent of this session's
+fix -- `FlashOverlay::Paint` is already called in the real render pass
+(confirmed by reading `main.cpp` directly), just never updated in that
+comment. Fixed there now; nothing left in that "what's next" bucket.
+**Note for whoever eventually revisits
 M62's own `ui/inventory_ui.h` class comment:** the real `openInventory()`
 softlock it deliberately didn't reproduce is STILL not reproduced now
 that the pause menu exists -- `PauseMenu`'s own "Inventory" entry

@@ -85,9 +85,12 @@
 // cooldown means holding SPACE auto-repeats at that rate, same as
 // holding an arrow key auto-repeats movement once per tick.
 //
-// Deliberately NOT wired here: paintFlashOverlays()/paintUnknown_b()
-// (both still gated on live tick-loop state, see docs/PORT_ROADMAP.md's
-// own "what's next"), and the still-untranscribed tick-loop helpers
+// This note used to list paintFlashOverlays()/paintUnknown_b() as
+// deliberately not wired -- stale on both counts by now (FlashOverlay::
+// Paint below was already live by the time this was last true;
+// VisibleObjectRenderer::RenderUnknownB joined it at M67, see
+// docs/PORT_ROADMAP.md's own M67 entry). What's still genuinely
+// deliberately NOT wired: the still-untranscribed tick-loop helpers
 // (rollCampInterrupted is transcribed but has no reachable caller worth
 // wiring without the camp system around it; tickMovementAndAI/the real
 // per-tick action dispatcher) -- so there is still no camp system and
@@ -1159,6 +1162,23 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     /*ailment3Active=*/stormhold::PlayerCombatStats::HasAilment(player, 3),
                     /*ailment4Active=*/stormhold::PlayerCombatStats::HasAilment(player, 4));
                 stormhold::VisibleObjectRenderer::RenderObjects(backbuffer, objectAssets, player);
+                // M67: GameCanvas.paintGameView()'s own `if (unconfirmed_W)
+                // { stat = player.questShopAtPendingTile(); paintUnknown_b(g,
+                // stat); }`, right here between paintObjects() and
+                // paintMonsters() in the original's own call order.
+                // `questShopAtPendingTile()` IS `ShopAheadOfPlayer` -- both
+                // reduce to the identical pendingLevel==1 && Shop::
+                // QuestShopAt(pendingTileX, pendingTileY) check (M67, see
+                // docs/PORT_ROADMAP.md's "what's next"), so this recomputes
+                // it fresh here rather than threading the tick-time `int
+                // shopAhead` above into this separate block -- matching the
+                // original's own paint-time-fresh-call behavior (it never
+                // caches `stat` either), not a shortcut.
+                int shopAheadForPaint = stormhold::PlayerMovement::ShopAheadOfPlayer(player, levelLookup, shop);
+                if (shopAheadForPaint >= 0) {
+                    stormhold::VisibleObjectRenderer::RenderUnknownB(backbuffer, objectAssets, shopAheadForPaint,
+                                                                       warden.visitCount);
+                }
                 monsterRenderedLastFrame =
                     stormhold::VisibleObjectRenderer::RenderMonsters(backbuffer, objectAssets, player);
                 stormhold::GameRenderer::RenderStatusBars(backbuffer, stormhold::StatusBarPlan::Plan(player, charData));

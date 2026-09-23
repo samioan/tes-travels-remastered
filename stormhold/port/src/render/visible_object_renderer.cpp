@@ -1,5 +1,6 @@
 #include "render/visible_object_renderer.h"
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 
@@ -428,6 +429,65 @@ void VisibleObjectRenderer::RenderObjects(Backbuffer& bb, const VisibleObjectAss
     if (near.kind == VisibleSlotKind::Chest || near.kind == VisibleSlotKind::DroppedItem) {
         RenderObjectAt(bb, assets, near, 1);
     }
+}
+
+void VisibleObjectRenderer::RenderUnknownB(Backbuffer& bb, const VisibleObjectAssets& assets, int stat,
+                                            int wardenVisitCount) {
+    switch (stat) {
+        case 0:
+            RenderMonsterOrIconSprite(bb, assets, 1, 1);
+            break;
+        case 1:
+            RenderMonsterOrIconSprite(bb, assets, 6, 1);
+            break;
+        case 2:
+            RenderMonsterOrIconSprite(bb, assets, 7, 1);
+            break;
+        case 3:
+            RenderMonsterOrIconSprite(bb, assets, 2, 1);
+            break;
+        case 4:
+            RenderMonsterOrIconSprite(bb, assets, 3, 2);
+            break;
+        case 5:
+            RenderMonsterOrIconSprite(bb, assets, 8, 0);
+            break;
+        case 6: {
+            int tier = std::min(wardenVisitCount, 3) - 1;
+            // **A real, reachable original-game crash, preserved as a
+            // thrown exception rather than silently indexing out of
+            // bounds** -- same discipline RenderMonsterOrIconSprite's own
+            // typeIndex-32..40 check above already uses, see that one's
+            // header comment. Shop 6 (Varus) is a fixed, always-present
+            // NPC independent of the wandering Warden's own visit
+            // count -- `stat==6` (Varus directly ahead, still
+            // quest-claimable) is reachable the moment a New Game starts,
+            // before the Warden has ever visited (`wardenVisitCount==0`),
+            // giving `tier==-1` here. Java's own `kUnconfirmedTableO[-1]`
+            // would throw a real, catchable ArrayIndexOutOfBoundsException
+            // in that case; the equivalent C++ negative index is
+            // undefined behavior, not a safe throw, so this check is
+            // REQUIRED here, not just faithful-for-its-own-sake.
+            // (the upper end can't overflow: std::min(wardenVisitCount, 3)
+            // caps tier at 2, the table's last valid row -- only the
+            // negative case below is actually reachable.)
+            if (tier < 0) {
+                throw std::runtime_error("VisibleObjectRenderer::RenderUnknownB: warden compass tier " +
+                                          std::to_string(tier) +
+                                          " < 0 (wardenVisitCount=" + std::to_string(wardenVisitCount) +
+                                          ") -- matches a real original ArrayIndexOutOfBoundsException, reachable "
+                                          "by approaching Varus before the Warden's first visit");
+            }
+            RenderWardenCompassIcon(bb, assets, tier);
+            break;
+        }
+        default:
+            break;
+    }
+    // GameCanvas.paintUnknown_b()'s own trailing g.setClip(0, 0, width,
+    // height) has no equivalent here -- Blit()'s clip range is a per-call
+    // argument, not stateful (see backbuffer.h's own header comment; same
+    // reasoning RenderMonsterSpriteForSlot's own comment already gives).
 }
 
 bool VisibleObjectRenderer::RenderMonsters(Backbuffer& bb, const VisibleObjectAssets& assets, const PlayerState& p) {
