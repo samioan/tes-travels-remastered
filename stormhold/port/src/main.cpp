@@ -683,6 +683,31 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     }
                 }
 
+                // M51: run()'s own `if (Shop.shouldWardenVisit(this.player.
+                // giftPointsFound)) Shop.wardenArrives();` (Java-
+                // transcribed long before this port's tick loop existed,
+                // same as M42/M47's own camp/death dispatches) --
+                // WardenState::ShouldVisit/Arrive (M8) finally get a real
+                // caller, and with it the whole already-built-but-inert
+                // Warden pipeline goes live end to end: the compass icon
+                // (render/visible_object_renderer.h's RenderWardenCompassIcon)
+                // and the visible-object slot (player/visible_objects.h's
+                // own Refresh, which already reads `warden.present`
+                // directly -- its `includeWarden` parameter is a confirmed
+                // dead no-op, see that file's own header comment) can only
+                // ever render once `warden.present` is ever true, and the
+                // ALREADY-WIRED `warden.Leave` call right below this block
+                // (M43) could likewise never fire before now, since
+                // nothing had ever set `warden.present` true to begin
+                // with. `Shop.dialogue(player, 6, -1, -1)`'s own sibling
+                // check (`isNpcDialogueDue() && wardenVisitCount >
+                // wardenLoreStep`, the Warden's own NPC-speaks dialogue
+                // line) is NOT wired here -- same Shop-economy/dialogue
+                // gap M43/M49/M50's own "what's next" notes already flag.
+                if (warden.ShouldVisit(player.giftPointsFound)) {
+                    warden.Arrive(levelLookup(1));
+                }
+
                 // M43: GameCanvas.refreshNpcNameplateAndWardenLeave()'s
                 // Warden-leaving half (M41, was decompiled/e.java's `c()`
                 // no-arg) -- the OTHER half (an NPC-nameplate popup when

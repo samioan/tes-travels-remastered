@@ -3322,6 +3322,60 @@ read-through.
       warnings. Manually launched the real windowed exe and confirmed it
       starts and stays up.
 
+- [x] **M51 -- the Warden finally arrives** (this session). Pure wiring,
+      no new files: `main.cpp`'s `shouldRunTick` block now calls
+      `WardenState::ShouldVisit(player.giftPointsFound)`/`::Arrive(hub)`
+      (both already ported at M8, matching `run()`'s own `if
+      (Shop.shouldWardenVisit(this.player.giftPointsFound))
+      Shop.wardenArrives();`) -- the one missing driver for an
+      already-fully-built-but-inert pipeline. `player/visible_objects.h`'s
+      `Refresh` (M27) already reads `warden.present` directly (its
+      `includeWarden` parameter is a confirmed dead no-op) and
+      `render/visible_object_renderer.h`'s `RenderWardenCompassIcon`
+      (M28) already exists, but `warden.present` could never actually
+      become true before now -- so neither the compass icon nor the
+      Warden's own visible-object slot could ever render, and the
+      ALREADY-WIRED `warden.Leave` call (M43) could never fire either,
+      since nothing had ever set `present` true to begin with. All three
+      go fully live with this one addition. Same "wire an
+      already-Java-transcribed/already-ported mechanic for real"
+      pattern M42/M47/M48 already established.
+
+      **A real, confirmed dead-code finding, turned up while scoping
+      this milestone, that changed its shape:** the original plan was to
+      also build a minimal `ShopState` (`questRewardClaimable[]`) to
+      finally supply `dungeon_runtime.h`'s own `HubMinimapMarkers` (M32,
+      always passed as `nullptr` today, so the hub-town minimap never
+      shows NPC markers) -- but `Shop.questRewardClaimable`'s ONLY
+      assignment site in the entire codebase is inside `Shop.reset()`,
+      which itself has ZERO callers anywhere in `../src/` (grepped).
+      That means in the REAL, ORIGINAL game this array is permanently
+      `null`, and `Dungeon.sampleView()`'s hub-town NPC-marker branch
+      (which reads `Shop.questRewardClaimable[i]` unconditionally) would
+      throw a `NullPointerException` the first time either minimap zoom
+      level is drawn while in the hub -- confirmed uncaught, by reading
+      `paintGameView()`/`paint()` directly: only `paintMonsters()` gets
+      its own try/catch; the minimap calls right after it have none.
+      Building a live `ShopState` and populating `HubMinimapMarkers` for
+      real would therefore have made the port's hub minimap show NPC
+      markers the original game's own (starved, presumably
+      platform-swallowed-exception) minimap never did -- a behavioral
+      GAIN, not a reimplementation, so it was dropped from this
+      milestone's scope. `hubMarkers` staying `nullptr` forever (no
+      `ShopState` exists to construct one from) is therefore, by
+      coincidence of two unrelated root causes, already the faithful
+      behavior. `WardenState`'s own `wardenVisitCount`/`wardenPresent`
+      are unaffected -- both are primitives with real inline default
+      values at their Java field declarations, not dependent on the dead
+      `reset()` call at all.
+
+      Verified against the existing suite (no new isolable logic to add
+      a smoke test for, same as M41's own pure-wiring milestone -- the
+      2-line change calls only already-tested M8 methods with the
+      correct field). 46 smoke tests still pass; full clean rebuild
+      stayed at zero `/W4` warnings. Manually launched the real windowed
+      exe and confirmed it starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
@@ -3335,7 +3389,16 @@ NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's own
 `readMasterLists()`'s own missing half of the save format (M49's own
 "what's next" note). That's a substantially bigger lift than camp/rest or
 chest interaction were, likely worth its own multi-part treatment rather
-than one milestone.
+than one milestone. **Heads up for whoever picks this up (M51's own
+finding):** `Shop.reset()` -- the only place `questRewardClaimable`/
+`firstVisit`/`questState1`/`questState2`/`interactionCount`/
+`rewardsGiven`/`benecaPoints`/`helgaPoints`/`showSpecialGreeting` ever
+get initialized -- has ZERO callers anywhere in the real game, so a
+byte-faithful port would need to decide what a live `ShopState` defaults
+to WITHOUT ever calling an equivalent `Reset()` (calling one for real,
+unlike the original, risks the same "behavioral gain, not
+reimplementation" trap M51 sidestepped for `questRewardClaimable`/
+`HubMinimapMarkers`).
 
 Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
@@ -3344,9 +3407,12 @@ interaction were, and a bigger lift than spell casting/cycling turned out
 to be too). `paintUnknown_b()` (the one remaining unported-PIXEL paint
 method, the NPC/shop-portrait and Warden-compass icon painter -- gated on
 `unconfirmed_W`/`Player.questShopAtPendingTile()`, itself downstream of
-the Shop-economy gap above) is the last item in that bucket. The in-game
-pause/stats screen (Stats/Inventory/Skills/Spells/Save/Load/Help) belongs
-in this same bucket too -- M50's own `GameSave` gives it a real Save/Load
+the Shop-economy gap above, AND itself flagged LOW CONFIDENCE by the
+original transcription pass -- `questShopAtPendingTile()`'s own field
+mapping, `stateByteAb`/pendingTileX/Y, is unconfirmed, not just
+unported) is the last item in that bucket. The in-game pause/stats
+screen (Stats/Inventory/Skills/Spells/Save/Load/Help) belongs in this
+same bucket too -- M50's own `GameSave` gives it a real Save/Load
 backend to call into once it exists, but building the screen itself (and
 therefore a real Save TRIGGER -- "Continue Game" is wired and tested,
 M50, but still practically unreachable today with nothing yet writing
@@ -3354,5 +3420,5 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51
 already found.
