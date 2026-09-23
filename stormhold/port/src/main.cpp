@@ -661,31 +661,31 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // Checked here, OUTSIDE the shouldRunTick gate below, since the
             // whole point is dismissing the screen that gate is blocking
             // gameplay behind.
-            // M64/M65: shops 0-4 transition into ui/npc_choices_menu.h's
+            // M64/M65/M66: shops 0-5 transition into ui/npc_choices_menu.h's
             // own follow-up menu instead of closing straight back to
             // gameplay -- see ui/npc_dialogue.h's own class comment for
             // why that's now the port-only behavior (the real npcHelloUI
             // -> npcChoicesUI[npcId] transition is a confirmed softlock
-            // for every NPC). Shops 5/6 still just dismiss (Helga's own
-            // menu isn't built yet; Varus has no real menu content at all,
-            // see ui/npc_choices_menu.h's own class comment).
+            // for every NPC). Shop 6 (Varus) still just dismisses -- he
+            // has no real menu content at all, see ui/npc_choices_menu.h's
+            // own class comment.
             if (npcDialogue.active && KeyEdge(VK_RETURN)) {
                 int dialogueShopId = npcDialogue.shopId;
                 stormhold::NpcDialogue::Dismiss(npcDialogue);
-                if (dialogueShopId >= 0 && dialogueShopId <= 4) {
+                if (dialogueShopId >= 0 && dialogueShopId <= 5) {
                     stormhold::NpcChoicesMenu::Open(npcChoicesMenu, dialogueShopId);
                 }
             }
 
-            // M64/M65: while the NPC choices menu is open, Up/Down/Enter/
-            // Escape drive it exactly the way every other live-gameplay
-            // modal above already does. `levelLookup(1)` is the hub level
-            // (`ESGame.dungeons[0]`), needed only by the "Kill" action's
-            // own tile-bit clear (ShopInteraction::QuestShopDialogue's own
-            // `hub` parameter); `nextSpawnIdCounter` is needed only by
-            // Beneca's own "Take Crystal" action (a fresh item needs a
-            // fresh spawn id), same shared counter every other spawn site
-            // in this port already uses.
+            // M64/M65/M66: while the NPC choices menu is open, Up/Down/
+            // Enter/Escape drive it exactly the way every other live-
+            // gameplay modal above already does. `levelLookup(1)` is the
+            // hub level (`ESGame.dungeons[0]`), needed only by the "Kill"
+            // action's own tile-bit clear (ShopInteraction::
+            // QuestShopDialogue's own `hub` parameter); `nextSpawnIdCounter`
+            // is needed only by Beneca's own "Take Crystal" action (a
+            // fresh item needs a fresh spawn id), same shared counter
+            // every other spawn site in this port already uses.
             if (npcChoicesMenu.active) {
                 if (KeyEdge(VK_UP)) stormhold::NpcChoicesMenu::MoveSelection(npcChoicesMenu, -1, player);
                 if (KeyEdge(VK_DOWN)) stormhold::NpcChoicesMenu::MoveSelection(npcChoicesMenu, 1, player);
@@ -884,19 +884,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // calls `Shop.dialogue(player, npcId, 1, 0)` -- the
                 // "greeting" action -- dispatched here to whichever of
                 // M56-M59's four `ShopInteraction`/`Shop` methods actually
-                // owns `shopAhead`'s own NPC group. **M65: wires half of
-                // talkToNpc()'s own null-result fallback** -- Beneca
-                // (npcId 4) returns a null greeting on every visit after
-                // the first (`BenecaDialogue`'s own action==1 branch), and
-                // the real game re-shows `npcChoicesUI[4]` directly in
-                // that case rather than opening a greeting with nothing to
-                // say; now that ui/npc_choices_menu.h exists, this port
-                // does the same. Helga's (npcId 5) identical-shaped
-                // fallback remains NOT reproduced -- her own choices menu
-                // isn't built yet (see ui/npc_choices_menu.h's own class
-                // comment) -- same practical outcome talkToNpc() itself
-                // already has for shopId 0-3/6 (no fallback branch for
-                // those at all). collectChestItem()'s own confirmed-
+                // owns `shopAhead`'s own NPC group. **M65/M66: wires
+                // talkToNpc()'s own null-result fallback for both Beneca
+                // and Helga** -- both return a null greeting once there's
+                // nothing new to say (`BenecaDialogue`/`HelgaDialogue`'s
+                // own action==1 branches), and the real game re-shows
+                // `npcChoicesUI[npcId]` directly in that case rather than
+                // opening a greeting with nothing to say; now that
+                // ui/npc_choices_menu.h exists for both, this port does
+                // the same. Shops 0-3/6 have no such fallback in the
+                // original either. collectChestItem()'s own confirmed-
                 // unreachable `-1` ("locked") branch (M41's own finding)
                 // isn't reproduced here either -- CollectChestItem can
                 // only return 0 or 1.
@@ -917,8 +914,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     if (line.has_value()) {
                         stormhold::NpcDialogue::Show(npcDialogue, stormhold::Shop::kNames[static_cast<size_t>(shopAhead)],
                                                        *line, shopAhead);
-                    } else if (shopAhead == 4) {
-                        stormhold::NpcChoicesMenu::Open(npcChoicesMenu, 4);
+                    } else if (shopAhead == 4 || shopAhead == 5) {
+                        stormhold::NpcChoicesMenu::Open(npcChoicesMenu, shopAhead);
                     }
                 } else if (interactKeyEdge && chestAhead.has_value()) {
                     int result = stormhold::PlayerInventory::CollectChestItem(player, *chestAhead, items,

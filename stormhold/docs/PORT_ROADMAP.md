@@ -4440,29 +4440,120 @@ starts and stays up.
       mutating code path IS exercised against real asset data by the
       smoke test above, just not the live rendering/input itself.
 
+- [x] **M66 -- Helga's own choices menu, wired live (shop 5: Rumors/Give
+      Crystal/Enchant/Bless/Cure/Warp/Recovery)** (this session). Part 3,
+      the last and biggest, of the multi-part treatment M60's own "what's
+      next" note first predicted this system would need: `ui/npc_choices_
+      menu.h`/`.cpp` (still no new files) extends `NpcChoicesScreen` with
+      an `EnchantWhat` screen and teaches `Choices`/`GiveWhat`/`Cancel` to
+      branch on `shopId == 5` too, built entirely on M58's already-ported
+      `ShopInteraction::HelgaDialogue`. With this, EVERY shop's own
+      `npcChoicesUI` follow-up menu is now built.
+
+      **This milestone's own big finding, and a genuine CORRECTION to
+      M64's own work, both turned up by reading `commandAction()`'s full
+      dispatch chain once more for Helga's own Bless/Cure/Warp/Recovery
+      quartet:** of the 11 distinct RESULT-popup screenGroups this whole
+      3-part system produces (Train/Give/Befriend/Threaten/Kill/Beneca's
+      Take-Crystal/Helga's Enchant/Bless/Cure/Warp/Recovery), 9 are
+      confirmed genuine dead ends (explicitly excluded from every branch
+      of the dispatch chain that could reach them, same root cause M64's
+      own entry already documented) -- but **2 are NOT**. Kill's own
+      result (screenGroup 26) and Warp's own result (screenGroup 41) each
+      happen to reuse a screenGroup NUMBER that a real, WORKING handler
+      elsewhere in the dispatch chain already claims for an unrelated
+      purpose -- 26 is a bare, unconditional `showScreen(gameCanvas)`, and
+      41 is the real camp-mark-confirmation screen's own `if (cmd ==
+      cmdOk) { player.justMarkedCamp = false; showScreen(gameCanvas); }`.
+      Near-certainly accidental id reuse, not intentional design, but the
+      practical effect is real: **pressing Ok on Kill's or Warp's own
+      result screen genuinely, confirmedly closes straight back to
+      gameplay in the original, unlike every other result in this whole
+      system.** M64 had NOT caught this -- it treated Kill the same as
+      every other (correctly) confirmed-dead result, routing it back to
+      the Choices menu. **Fixed here:** `NpcChoicesMenuState::resultCloses`
+      (new) now tracks the distinction; Kill and Warp both set it true
+      (closing the whole menu on Confirm/Cancel), every other result
+      leaves it false (the pre-existing port-only "return to Choices"
+      mapping). Warp's own real side effect (`player.justMarkedCamp =
+      false`) is reproduced too, applied at Result-creation time rather
+      than dismissal time -- observably identical, since nothing reads
+      that flag in between.
+
+      **A second, related finding, the exact same root-cause bug breaking
+      a THIRD screen:** Helga's own "Rumors" popup (`rumorsUI`, choice 0,
+      screenGroup 360) sets `rumorsUI.nextScreen = npcChoicesUI[5]` -- but
+      screenGroup 360 is excluded from the dispatch chain in EXACTLY the
+      same way screenGroup 8 (`npcHelloUI`, M64's own original finding)
+      is, landing in the identical `backTarget`-reading catch-all, which
+      is ALSO never set for `rumorsUI`. So "Rumors" softlocks too, for the
+      identical reason -- reproduced the same way (opens as a Result
+      screen, port-only returns to Choices, honoring `nextScreen`'s real
+      intended target rather than the broken dispatch). Also confirmed
+      while reading `showRumors()` directly: its own `setItemText(0,
+      Shop.NAMES[5])` has the SAME dead-write-clobbered-by-setMessageBody
+      pattern M64 already documented for every other result popup, but
+      against a THIRD distinct leftover placeholder title this system
+      produces -- "Rumors" (`rumorsUI`'s own pre-built title), not "NPC
+      name here" or "Oracle". Confirmed with a real title check.
+
+      Also confirmed while building Enchant (`enchantWhatMenu`,
+      screenGroup 350): its own item list is the player's FULL inventory,
+      UNPREFIXED (no `IsEquippedSlot` check at all, unlike `giveWhatMenu`)
+      -- so the selected row is the slot index directly, same as GiveWhat,
+      new `BuildEnchantWhatList`. `HelgaDialogue`'s own action 12
+      (Recovery) is the one Helga action with NO `helgaPoints` gate at all
+      (confirmed by reading `Shop.java`'s own action==12 branch directly
+      -- no `if (helgaPoints < n)` check, unlike Bless/Cure/Warp/Enchant),
+      verified directly: a full heal succeeds even at 0 points.
+
+      Finally wires Helga's own half of `talkToNpc()`'s null-result
+      fallback (`main.cpp`), completing what M65 started for Beneca:
+      `HelgaDialogue`'s own action==1 branch returns null once there's
+      nothing new to say, and the real game re-shows `npcChoicesUI[5]`
+      directly in that case; this port now does the same for both NPCs.
+
+      Verified by a new `helga_choices_menu_smoke.exe` (56 smoke tests
+      total, kept separate from M64/M65's own test files): Helga's own
+      7-item Choices list; the M64 Kill-fix verified directly (`Confirm`
+      after Kill now closes the whole menu) alongside a contrast check
+      that Befriend's own result is still correctly a dead end; Rumors'
+      real title/body/port-only-return-to-Choices behavior; Give Crystal
+      sharing `HelgaDialogue`'s own action 4 (a real `helgaPoints`
+      increment); a full Enchant round trip (real equipment-category item,
+      `helgaPoints` spent by exactly 7, the item actually charged) plus
+      Cancel from EnchantWhat closing the whole menu (NOT Beneca's
+      TakeWhat-style exception); Bless/Cure producing real non-empty
+      dead-end results; Recovery's own confirmed no-gate full heal; and a
+      full Warp round trip (`justMarkedCamp` cleared, `helgaPoints` spent
+      by exactly 1, `resultCloses` confirmed true, Confirm closing the
+      whole menu). Full clean rebuild stayed at zero `/W4` warnings.
+      Manually launched the real windowed exe and confirmed it starts and
+      stays up. **Not independently re-verified this session** (same
+      disclosed gap M60's/M62's/M63's/M64's/M65's own entries already
+      have): actually walking up to Helga in a live play session and
+      navigating all 7 of her own choices via real keyboard input wasn't
+      attempted; every state-mutating code path IS exercised against real
+      asset data by the smoke test above, just not the live rendering/
+      input itself.
+
 ## What's next
 
-Helga (shop 5) still needs her own bespoke choices menu -- M64/M65's own
-entries above only cover the 4 quest shops' shared Train/Give/Befriend/
-Threaten/Kill shape and Beneca's own Give Item/Take Crystal. Helga's own
-menu (Rumors/Give Crystal/Enchant/Bless/Cure/Warp/Recovery, screenGroups
-14/350/352/353/41/355, `ShopInteraction::HelgaDialogue`'s 8 actions
-already ported at M58) is bigger than either prior part, with its own
-Enchant-item sub-screen on top of the shared Give-item one, and her own
-`talkToNpc()` null-result fallback (npcId 5, same shape M65 just wired for
-Beneca) still to close. `IsValidShopAction`/`ShopActionCode` (M56) only
-cover shops 0-3's own menu-choice mapping either way -- Helga has no
-equivalent confirmed selection-cost UI anywhere in `../src/`, an open
-question for whoever eventually builds her own Enchant-item picker
-specifically (Beneca's own Take-Crystal list needed no such thing, just
-`Item.specialItemNames()`'s own flat 13-item catalog). No bug-preservation
-dilemma blocks it -- see M53's own entry for the corrected `Shop.reset()`
-finding (it genuinely runs in the real game, via a static initializer);
-the one real surviving caveat is that `reset()` only ever runs ONCE per
-app launch there, not once per New Game, so quest-economy state carries
-over across a same-session death-restart -- not modeled by `ShopState`
-either way (this port has no live app-lifetime `Shop` instance to carry
-state between a
+With M66, every one of the 7 real NPCs' own `npcChoicesUI` interactive
+follow-up menus is built (Varus, shopId 6, is the sole exception -- he has
+no real menu content to build at all, per his own confirmed array-bounds
+crash finding, M64's own entry). `IsValidShopAction`/`ShopActionCode`
+(M56) still only cover shops 0-3's own menu-choice mapping, now confirmed
+moot for Beneca/Helga specifically -- neither needed an equivalent (Beneca
+never had one; Helga's own Enchant picker turned out to need nothing more
+than a plain full-inventory list, M66's own `BuildEnchantWhatList`). No
+bug-preservation dilemma blocks any of it -- see M53's own entry for the
+corrected `Shop.reset()` finding (it genuinely runs in the real game, via
+a static initializer); the one real surviving caveat is that `reset()`
+only ever runs ONCE per app launch there, not once per New Game, so
+quest-economy state carries over across a same-session death-restart --
+not modeled by `ShopState` either way (this port has no live app-lifetime
+`Shop` instance to carry state between a
 death-restart and the next), just worth keeping in mind for whoever
 eventually adds one.
 
@@ -4489,18 +4580,14 @@ the M52 Continue-Game-softlock note below (which IS newly reachable as of
 M63's real Save/Load wiring). "Help" (pause-menu item 6) is confirmed
 wired-but-inert -- see M63's own entry for why (the Java transcription
 itself stops short of full topic text past index 4) -- and remains the
-next thing to finish once that transcription gap is closed. **Also note
-for whoever builds Helga's own choices menu next (M64/M65's own "what's
-next" note above):** M64's own big finding -- the real `npcHelloUI` ->
-`npcChoicesUI[npcId]` transition being a confirmed softlock for every NPC
--- already covers shop 5 too (M65 already widened `main.cpp`'s own dismiss
-handling to `shopId >= 0 && shopId <= 4`, covering Beneca; Helga just needs
-that same range bumped to `<= 5` once her menu exists), same "honor
-`nextScreen`'s intended target" exception M64's own entry already
-established, not a new decision to make. Following dawnstar's own later
-milestones roughly but expecting further Stormhold-specific divergences
-the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63/M64/M65
+next thing to finish once that transcription gap is closed. M64's own
+`npcHelloUI`/`backTarget` softlock finding is now fully closed out end to
+end: M65 widened `main.cpp`'s own dismiss handling to cover Beneca and M66
+to cover Helga too (`shopId >= 0 && shopId <= 5`), each honoring
+`nextScreen`'s own intended target, the same exception M64's own entry
+first established. Following dawnstar's own later milestones roughly but
+expecting further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63/M64/M65/M66
 already found.
 
 **Resolved by M63 (was: "heads up for whoever eventually wires a real Save

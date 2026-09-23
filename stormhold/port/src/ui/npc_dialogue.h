@@ -9,26 +9,24 @@ namespace stormhold {
 // `npcHelloUI` (`new UIScreen(this, 4, 8)`, `talkToNpc()`'s own real
 // target) -- title (Shop.NAMES[npcId]) + word-wrapped dialogue body text.
 //
-// **M64 update:** dismissing this (Enter) now transitions into
-// `ui/npc_choices_menu.h`'s own interactive follow-up menu for shops 0-3
+// **M64/M65/M66 update:** dismissing this (Enter) now transitions into
+// `ui/npc_choices_menu.h`'s own interactive follow-up menu for shops 0-5
 // (`main.cpp`'s own dismiss handling, keyed on `shopId` below) rather than
 // closing straight back to gameplay -- see that file's own class comment
 // for the real, confirmed softlock this deliberately does NOT reproduce
 // (the original's own `npcHelloUI` -> `npcChoicesUI[npcId]` transition is
-// broken for every NPC, not just these 4). Shops 4/5/6 still just close
-// back to gameplay on dismiss, same as before M64 -- their own choices
-// menus (Beneca/Helga's bespoke ones, and Varus's own confirmed-crashing
-// array-bounds issue) remain deliberately unbuilt, per that same class
-// comment's own "what's next" scoping.
+// broken for every NPC). Shop 6 (Varus) still just closes back to
+// gameplay on dismiss -- he has no real choices-menu content at all
+// (his own confirmed array-bounds crash, same class comment).
 struct NpcDialogueState {
     bool active = false;
     std::string title;
     std::string body;
     // M64: which NPC this greeting was for -- `main.cpp`'s own Enter-key
     // dismiss handling reads this to decide whether to transition into
-    // `ui/npc_choices_menu.h`'s own follow-up menu (shops 0-3) or just
-    // close back to gameplay (shops 4/5/6, not built by any milestone
-    // yet -- see that file's own class comment).
+    // `ui/npc_choices_menu.h`'s own follow-up menu (shops 0-5 as of M66)
+    // or just close back to gameplay (shop 6, no real menu content
+    // exists for him -- see that file's own class comment).
     int shopId = -1;
 };
 

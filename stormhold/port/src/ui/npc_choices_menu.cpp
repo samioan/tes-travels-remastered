@@ -156,6 +156,21 @@ std::vector<std::string> BuildTakeWhatList(const ItemDatabase& items) {
     return out;
 }
 
+// enchantWhatMenu(shopId)'s own item list -- Helga's own catalog, the
+// player's full inventory UNPREFIXED (confirmed by reading
+// enchantWhatMenu() directly: unlike giveWhatMenu, it never checks
+// isEquippedSlot at all), so the selected row equals the slot index
+// directly, same as GiveWhat.
+std::vector<std::string> BuildEnchantWhatList(const PlayerState& p, const ItemDatabase& items) {
+    std::vector<std::string> out;
+    out.reserve(static_cast<size_t>(p.inventoryCount));
+    for (int i = 0; i < p.inventoryCount; i++) {
+        int8_t itemId = p.inventoryItemIds[static_cast<size_t>(i)];
+        out.push_back(items.name[static_cast<size_t>(std::abs(itemId) - 1)]);
+    }
+    return out;
+}
+
 }  // namespace
 
 void NpcChoicesMenu::Open(NpcChoicesMenuState& state, int shopId) {
@@ -163,6 +178,7 @@ void NpcChoicesMenu::Open(NpcChoicesMenuState& state, int shopId) {
     state.shopId = shopId;
     state.screen = NpcChoicesScreen::Choices;
     state.selectedIndex = 0;
+    state.resultCloses = false;
 }
 
 void NpcChoicesMenu::MoveSelection(NpcChoicesMenuState& state, int delta, const PlayerState& p) {
@@ -172,9 +188,11 @@ void NpcChoicesMenu::MoveSelection(NpcChoicesMenuState& state, int delta, const 
     switch (state.screen) {
         case NpcChoicesScreen::Choices:
             // Shops 0-3: Train/Give/Befriend/Threaten/Kill (5). Beneca
-            // (shopId 4): Give Item/Take Crystal (2), per her own
-            // separately-built `benecaItems` array.
-            count = state.shopId <= 3 ? 5 : 2;
+            // (shopId 4): Give Item/Take Crystal (2). Helga (shopId 5):
+            // Rumors/Give Crystal/Enchant/Bless/Cure/Warp/Recovery (7).
+            // Each count matches that shop's own separately-built items
+            // array exactly.
+            count = state.shopId <= 3 ? 5 : (state.shopId == 4 ? 2 : 7);
             break;
         case NpcChoicesScreen::TrainWhat:
             count = ValidSkillCount(state.shopId);
@@ -184,6 +202,9 @@ void NpcChoicesMenu::MoveSelection(NpcChoicesMenuState& state, int delta, const 
             break;
         case NpcChoicesScreen::TakeWhat:
             count = 13;
+            break;
+        case NpcChoicesScreen::EnchantWhat:
+            count = p.inventoryCount;
             break;
         case NpcChoicesScreen::Result:
             count = 0;
@@ -201,9 +222,9 @@ namespace {
 
 // giveWhatMenu is shared by every shop group, but the real dialogue()
 // call it feeds differs (QuestShopDialogue for shops 0-3, BenecaDialogue
-// for shop 4) -- both take the same (action=4, extra=slot) shape, just
-// through different functions, so this is the one place that dispatch
-// needs to branch by shopId.
+// for shop 4, HelgaDialogue for shop 5) -- all three take the same
+// (action=4, extra=slot) shape, just through different functions, so this
+// is the one place that dispatch needs to branch by shopId.
 std::optional<std::string> DialogueFor(int shopId, int action, int extra, PlayerState& p, ShopState& shop,
                                         const ShopDialogue& text, const CharacterData& charData,
                                         const ItemDatabase& items, GeneratedLevel& hub, JavaRandom& rng,
@@ -211,7 +232,10 @@ std::optional<std::string> DialogueFor(int shopId, int action, int extra, Player
     if (shopId <= 3) {
         return ShopInteraction::QuestShopDialogue(p, shop, text, charData, items, hub, rng, shopId, action, extra);
     }
-    return ShopInteraction::BenecaDialogue(p, shop, text, items, spawnIdCounter, action, extra);
+    if (shopId == 4) {
+        return ShopInteraction::BenecaDialogue(p, shop, text, items, spawnIdCounter, action, extra);
+    }
+    return ShopInteraction::HelgaDialogue(p, shop, text, items, action, extra);
 }
 
 }  // namespace
@@ -221,12 +245,18 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
                               JavaRandom& rng, int16_t& spawnIdCounter) {
     if (!state.active) return;
 
-    // Result's own single "Ok" -- see this file's own header comment for
-    // why "back to Choices" is a deliberate port-only mapping (the real
-    // result popups have no reachable nextScreen/backTarget at all).
+    // Result's own single "Ok" -- closes the whole menu for the 2
+    // confirmed-working real results (Kill, Warp -- `resultCloses`), or
+    // returns to Choices for every other, confirmed-dead result (the
+    // real result popups have no reachable nextScreen/backTarget at
+    // all). See this file's own header comment for the full breakdown.
     if (state.screen == NpcChoicesScreen::Result) {
-        state.screen = NpcChoicesScreen::Choices;
-        state.selectedIndex = 0;
+        if (state.resultCloses) {
+            state.active = false;
+        } else {
+            state.screen = NpcChoicesScreen::Choices;
+            state.selectedIndex = 0;
+        }
         return;
     }
 
@@ -237,6 +267,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
             ShopInteraction::QuestShopDialogue(p, shop, text, charData, items, hub, rng, state.shopId, 5, extra);
         state.resultTitle = "NPC name here";  // npcResponsePopup's own dead-write placeholder, see class comment.
         state.resultBody = result.value_or("");
+        state.resultCloses = false;  // screenGroup 21, a confirmed dead end.
         state.screen = NpcChoicesScreen::Result;
         state.selectedIndex = 0;
         return;
@@ -249,6 +280,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
             DialogueFor(state.shopId, 4, slot, p, shop, text, charData, items, hub, rng, spawnIdCounter);
         state.resultTitle = "NPC name here";
         state.resultBody = result.value_or("");
+        state.resultCloses = false;  // screenGroup 23, a confirmed dead end for every shop group.
         state.screen = NpcChoicesScreen::Result;
         state.selectedIndex = 0;
         return;
@@ -263,14 +295,31 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
             ShopInteraction::BenecaDialogue(p, shop, text, items, spawnIdCounter, 7, itemId);
         state.resultTitle = "NPC name here";
         state.resultBody = result.value_or("");
+        state.resultCloses = false;  // screenGroup 28, a confirmed dead end.
+        state.screen = NpcChoicesScreen::Result;
+        state.selectedIndex = 0;
+        return;
+    }
+
+    if (state.screen == NpcChoicesScreen::EnchantWhat) {
+        // HelgaDialogue's action 8: `extra` IS a slot here (confirmed by
+        // reading enchantWhatMenu()'s own selectedIndex-as-extra call
+        // site directly -- unlike BenecaDialogue's action 7, no naming
+        // trap this time).
+        int slot = state.selectedIndex;
+        if (slot < 0 || slot >= p.inventoryCount) return;
+        std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, slot);
+        state.resultTitle = "NPC name here";
+        state.resultBody = result.value_or("");
+        state.resultCloses = false;  // screenGroup 351, a confirmed dead end.
         state.screen = NpcChoicesScreen::Result;
         state.selectedIndex = 0;
         return;
     }
 
     // Choices screen: dispatchNpcChoice()'s own case 0/1/2/3 group (shops
-    // 0-3) or case 4 (Beneca) -- see class comment for the confirmed
-    // per-shop item-count difference (5 vs. 2).
+    // 0-3), case 4 (Beneca), or case 5 (Helga) -- see class comment for
+    // the confirmed per-shop item-count difference (5/2/7).
     if (state.shopId <= 3) {
         switch (state.selectedIndex) {
             case 0:  // Train
@@ -281,6 +330,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
                 if (p.inventoryCount <= 0) {
                     state.resultTitle = "Oracle";  // npcResponseUI's own leftover placeholder, see class comment.
                     state.resultBody = "You have nothing to give me!";
+                    state.resultCloses = false;
                     state.screen = NpcChoicesScreen::Result;
                 } else {
                     state.screen = NpcChoicesScreen::GiveWhat;
@@ -292,6 +342,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
                     ShopInteraction::QuestShopDialogue(p, shop, text, charData, items, hub, rng, state.shopId, 2, 0);
                 state.resultTitle = "NPC name here";
                 state.resultBody = result.value_or("");
+                state.resultCloses = false;  // screenGroup 24, a confirmed dead end.
                 state.screen = NpcChoicesScreen::Result;
                 state.selectedIndex = 0;
                 return;
@@ -301,6 +352,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
                     ShopInteraction::QuestShopDialogue(p, shop, text, charData, items, hub, rng, state.shopId, 3, 0);
                 state.resultTitle = "NPC name here";
                 state.resultBody = result.value_or("");
+                state.resultCloses = false;  // screenGroup 25, a confirmed dead end.
                 state.screen = NpcChoicesScreen::Result;
                 state.selectedIndex = 0;
                 return;
@@ -310,6 +362,10 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
                     ShopInteraction::QuestShopDialogue(p, shop, text, charData, items, hub, rng, state.shopId, 6, 0);
                 state.resultTitle = "NPC name here";
                 state.resultBody = result.value_or("");
+                // screenGroup 26 -- a real, WORKING, unconditional
+                // showScreen(gameCanvas) handler (see class comment's own
+                // corrected-M64-bug writeup). Closes the whole menu.
+                state.resultCloses = true;
                 state.screen = NpcChoicesScreen::Result;
                 state.selectedIndex = 0;
                 return;
@@ -319,32 +375,114 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
         }
     }
 
-    // Beneca (shopId 4): Give Item (0) / Take Crystal (1).
+    if (state.shopId == 4) {
+        // Beneca: Give Item (0) / Take Crystal (1).
+        switch (state.selectedIndex) {
+            case 0:  // Give Item
+                if (p.inventoryCount <= 0) {
+                    state.resultTitle = "Oracle";
+                    state.resultBody = "You have nothing to give me!";
+                    state.resultCloses = false;
+                    state.screen = NpcChoicesScreen::Result;
+                } else {
+                    state.screen = NpcChoicesScreen::GiveWhat;
+                }
+                state.selectedIndex = 0;
+                return;
+            case 1:  // Take Crystal
+                state.screen = NpcChoicesScreen::TakeWhat;
+                state.selectedIndex = 0;
+                return;
+            default:
+                return;
+        }
+    }
+
+    // Helga (shopId 5): Rumors (0) / Give Crystal (1) / Enchant (2) /
+    // Bless (3) / Cure (4) / Warp (5) / Recovery (6).
     switch (state.selectedIndex) {
-        case 0:  // Give Item
+        case 0: {  // Rumors -- showRumors()'s own dialogue(5, 13, 0) call.
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 13, 0);
+            state.resultTitle = "Rumors";  // rumorsUI's own dead-write placeholder, see class comment.
+            state.resultBody = result.value_or("No rumors!");  // showRumors()'s own real fallback text.
+            state.resultCloses = false;  // rumorsUI's own confirmed softlock, not reproduced -- see class comment.
+            state.screen = NpcChoicesScreen::Result;
+            state.selectedIndex = 0;
+            return;
+        }
+        case 1:  // Give Crystal
             if (p.inventoryCount <= 0) {
                 state.resultTitle = "Oracle";
                 state.resultBody = "You have nothing to give me!";
+                state.resultCloses = false;
                 state.screen = NpcChoicesScreen::Result;
             } else {
                 state.screen = NpcChoicesScreen::GiveWhat;
             }
             state.selectedIndex = 0;
-            break;
-        case 1:  // Take Crystal
-            state.screen = NpcChoicesScreen::TakeWhat;
+            return;
+        case 2:  // Enchant
+            state.screen = NpcChoicesScreen::EnchantWhat;
             state.selectedIndex = 0;
-            break;
+            return;
+        case 3: {  // Bless
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0);
+            state.resultTitle = "NPC name here";
+            state.resultBody = result.value_or("");
+            state.resultCloses = false;  // screenGroup 352, a confirmed dead end.
+            state.screen = NpcChoicesScreen::Result;
+            state.selectedIndex = 0;
+            return;
+        }
+        case 4: {  // Cure
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 10, 0);
+            state.resultTitle = "NPC name here";
+            state.resultBody = result.value_or("");
+            state.resultCloses = false;  // screenGroup 353, a confirmed dead end.
+            state.screen = NpcChoicesScreen::Result;
+            state.selectedIndex = 0;
+            return;
+        }
+        case 5: {  // Warp
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 11, 0);
+            // screenGroup 41's own real handler clears this on dismissal;
+            // applied here at result-creation time instead -- observably
+            // identical, since nothing else reads this flag in between
+            // (see class comment).
+            p.justMarkedCamp = false;
+            state.resultTitle = "NPC name here";
+            state.resultBody = result.value_or("");
+            // screenGroup 41 -- a real, WORKING `cmd == cmdOk` handler
+            // (reused from the camp-mark-confirmation screen, see class
+            // comment). Closes the whole menu.
+            state.resultCloses = true;
+            state.screen = NpcChoicesScreen::Result;
+            state.selectedIndex = 0;
+            return;
+        }
+        case 6: {  // Recovery
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 12, 0);
+            state.resultTitle = "NPC name here";
+            state.resultBody = result.value_or("");
+            state.resultCloses = false;  // screenGroup 355, a confirmed dead end.
+            state.screen = NpcChoicesScreen::Result;
+            state.selectedIndex = 0;
+            return;
+        }
         default:
-            break;
+            return;
     }
 }
 
 void NpcChoicesMenu::Cancel(NpcChoicesMenuState& state) {
     if (!state.active) return;
     if (state.screen == NpcChoicesScreen::Result) {
-        state.screen = NpcChoicesScreen::Choices;
-        state.selectedIndex = 0;
+        if (state.resultCloses) {
+            state.active = false;
+        } else {
+            state.screen = NpcChoicesScreen::Choices;
+            state.selectedIndex = 0;
+        }
         return;
     }
     if (state.screen == NpcChoicesScreen::TakeWhat) {
@@ -356,8 +494,8 @@ void NpcChoicesMenu::Cancel(NpcChoicesMenuState& state) {
         state.selectedIndex = 0;
         return;
     }
-    // Choices/TrainWhat/GiveWhat all real-target gameCanvas directly --
-    // see class comment's own Cancel doc.
+    // Choices/TrainWhat/GiveWhat/EnchantWhat all real-target gameCanvas
+    // directly -- see class comment's own Cancel doc.
     state.active = false;
 }
 
@@ -367,19 +505,27 @@ void NpcChoicesMenu::Render(Backbuffer& bb, const NpcChoicesMenuState& state, co
         case NpcChoicesScreen::Choices: {
             // Real per-shop-group point value (RefreshChoicesMenuGiftLabel's
             // own value computation) -- rewardsGiven for quest shops 0-3,
-            // benecaPoints for shop 4. This port always rebuilds this
-            // fresh rather than caching/patching a `tagTemplate`, same
-            // "port-only always fresh" choice M62/M63 already made.
-            int value = state.shopId <= 3 ? shop.rewardsGiven[static_cast<size_t>(state.shopId)] : shop.benecaPoints;
+            // benecaPoints for shop 4, helgaPoints for shop 5. This port
+            // always rebuilds this fresh rather than caching/patching a
+            // `tagTemplate`, same "port-only always fresh" choice
+            // M62/M63 already made.
+            int value = state.shopId <= 3 ? shop.rewardsGiven[static_cast<size_t>(state.shopId)]
+                        : state.shopId == 4 ? shop.benecaPoints
+                                            : shop.helgaPoints;
             std::string prompt = "Aid: " + std::to_string(value);
             // Title: literal "Name" for shops 0-3 (a real, confirmed
             // never-patched placeholder), the shop's own real name for
-            // Beneca (her own separate construction passes it correctly)
-            // -- see class comment's own "fourth finding".
+            // Beneca/Helga (their own separate constructions pass it
+            // correctly) -- see class comment's own "fourth finding".
             std::string title = state.shopId <= 3 ? "Name" : Shop::kNames[static_cast<size_t>(state.shopId)];
-            std::vector<std::string> items_ =
-                state.shopId <= 3 ? std::vector<std::string>{"Train", "Give", "Befriend", "Threaten", "Kill"}
-                                  : std::vector<std::string>{"Give Item", "Take Crystal"};
+            std::vector<std::string> items_;
+            if (state.shopId <= 3) {
+                items_ = {"Train", "Give", "Befriend", "Threaten", "Kill"};
+            } else if (state.shopId == 4) {
+                items_ = {"Give Item", "Take Crystal"};
+            } else {
+                items_ = {"Rumors", "Give Crystal", "Enchant", "Bless", "Cure", "Warp", "Recovery"};
+            }
             PaintList(bb, title, {prompt}, items_, state.selectedIndex);
             PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
             return;
@@ -397,6 +543,11 @@ void NpcChoicesMenu::Render(Backbuffer& bb, const NpcChoicesMenuState& state, co
         case NpcChoicesScreen::TakeWhat:
             PaintList(bb, Shop::kNames[static_cast<size_t>(state.shopId)], {"Take What?"}, BuildTakeWhatList(items),
                       state.selectedIndex);
+            PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
+            return;
+        case NpcChoicesScreen::EnchantWhat:
+            PaintList(bb, Shop::kNames[static_cast<size_t>(state.shopId)], {"Enchant What?"},
+                      BuildEnchantWhatList(p, items), state.selectedIndex);
             PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
             return;
         case NpcChoicesScreen::Result: {
