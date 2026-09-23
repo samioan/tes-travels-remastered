@@ -10,6 +10,7 @@
 #include "world/dungeon_generator.h"
 #include "world/game_advancement.h"
 #include "world/shop_state.h"
+#include "world/warden.h"
 
 namespace stormhold {
 
@@ -22,11 +23,12 @@ namespace stormhold {
 // - M56: `QuestShopDialogue`, shops 0-3 (the quest-turn-in shopkeepers:
 //   Arantamo/Celegil/Favela Dralor/Vander, `Shop::IsQuestShop`).
 // - M57: `BenecaDialogue`, shop 4.
-// - M58 (this milestone): `HelgaDialogue`, shop 5.
-// Shop 6 (Varus) is its own bespoke single-NPC branch, sharing no pattern
-// with any of the above (Shop.java's own header comment already says so)
-// -- still deliberately left for a later milestone. talkToNpc() can't be
-// wired for real into the live port until shop 6 exists too.
+// - M58: `HelgaDialogue`, shop 5.
+// - M59 (this milestone): `VarusDialogue`, shop 6 -- the last one, so
+//   talkToNpc() finally has all 7 NPCs' own dialogue logic available to
+//   wire into the live port (still not itself wired here, see this
+//   file's own "what's next" note in docs/PORT_ROADMAP.md -- a real
+//   NPC-interaction UI is its own separate, later step).
 //
 // Lives in stormhold_player, not alongside world/shop_state.h's own
 // `Shop` class (stormhold_world) -- this needs `PlayerState` directly,
@@ -122,6 +124,27 @@ public:
     // equally one-line original reads.
     static std::optional<std::string> HelgaDialogue(PlayerState& player, ShopState& shop, const ShopDialogue& text,
                                                       const ItemDatabase& items, int action, int extra);
+
+    // Shop.dialogue(player, 6, action, extra) -- shop 6 (Varus) only.
+    // Unlike every other shop, Varus's own branch ignores `action`/`extra`
+    // entirely -- it's a pure state machine over `WardenState::visitCount`
+    // (M8/M51) and `player.wardenLoreStep`, revealing one lore line per
+    // Warden visit. Returns std::nullopt wherever the original returns
+    // `null`.
+    //
+    // **A real, confirmed dead branch, preserved rather than removed --
+    // same documentation discipline as M6's dead chest-record byte and
+    // M10's dead `leftLevelZone`:** the original's own dialogue() has a
+    // 4th case for `wardenVisitCount == 4`, but `WardenState::ShouldVisit`
+    // (world/warden.h) only ever checks 3 escalating thresholds (13/26/
+    // 39), so `visitCount` can only ever reach 3 in the real game -- M8's
+    // own smoke test already confirmed this cap directly (`checked with an
+    // elapsedCounter of 100000`). The `visitCount == 4` branch here can
+    // therefore never actually fire; reproduced anyway rather than
+    // dropped, matching this project's "preserve unreachable original
+    // code as unreachable, don't silently prune it" precedent.
+    static std::optional<std::string> VarusDialogue(PlayerState& player, const WardenState& warden,
+                                                      const ShopDialogue& text);
 };
 
 }  // namespace stormhold

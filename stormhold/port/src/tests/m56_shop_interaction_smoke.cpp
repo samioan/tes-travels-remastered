@@ -1,8 +1,7 @@
-// M56/M57/M58 smoke test: ShopInteraction (player/shop_interaction.h) --
+// M56-M59 smoke test: ShopInteraction (player/shop_interaction.h) --
 // Shop.dialogue()'s dispatcher. M56: shops 0-3 (the quest-turn-in
-// shopkeepers). M57: shop 4 (Beneca). M58: shop 5 (Helga). Shop 6 (Varus)
-// is its own bespoke single-NPC branch, deliberately NOT covered here --
-// see shop_interaction.h's own class comment.
+// shopkeepers). M57: shop 4 (Beneca). M58: shop 5 (Helga). M59: shop 6
+// (Varus) -- the last one, see shop_interaction.h's own class comment.
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -17,6 +16,7 @@
 #include "player/player_inventory.h"
 #include "player/shop_interaction.h"
 #include "world/dungeon_generator.h"
+#include "world/warden.h"
 
 namespace {
 
@@ -756,6 +756,78 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
     }
 }
 
+// M59: shop 6 (Varus). action/extra are ignored entirely -- this is a pure
+// state machine over WardenState::visitCount and player.wardenLoreStep.
+void TestVarusDialogue(const PlayerState& baseline, const ShopDialogue& text) {
+    std::printf("-- Varus (shop 6): warden-lore-step progression, gated on WardenState::visitCount --\n");
+    const auto& lines = text.groups[6];
+
+    // No warden visit yet: always nullopt, regardless of loreStep.
+    {
+        WardenState warden;
+        PlayerState p = baseline;
+        auto result = ShopInteraction::VarusDialogue(p, warden, text);
+        Expect(!result.has_value(), "visitCount == 0 should always return std::nullopt");
+    }
+
+    // visitCount 1/2/3: each reveals exactly one new lore line, once.
+    {
+        WardenState warden;
+        warden.visitCount = 1;
+        PlayerState p = baseline;
+        auto first = ShopInteraction::VarusDialogue(p, warden, text);
+        Expect(first.has_value() && *first == lines[0], "visitCount 1, loreStep 0 should reveal line 0");
+        Expect(p.wardenLoreStep == 1, "loreStep should advance to 1");
+
+        auto repeat = ShopInteraction::VarusDialogue(p, warden, text);
+        Expect(!repeat.has_value(), "asking again at the same visitCount/loreStep should return std::nullopt");
+    }
+    {
+        WardenState warden;
+        warden.visitCount = 2;
+        PlayerState p = baseline;
+        p.wardenLoreStep = 1;
+        auto result = ShopInteraction::VarusDialogue(p, warden, text);
+        Expect(result.has_value() && *result == lines[1], "visitCount 2, loreStep <= 1 should reveal line 1");
+        Expect(p.wardenLoreStep == 2, "loreStep should advance to 2");
+    }
+    {
+        WardenState warden;
+        warden.visitCount = 3;
+        PlayerState p = baseline;
+        p.wardenLoreStep = 2;
+        auto result = ShopInteraction::VarusDialogue(p, warden, text);
+        Expect(result.has_value() && *result == lines[2], "visitCount 3, loreStep <= 2 should reveal line 2");
+        Expect(p.wardenLoreStep == 3, "loreStep should advance to 3");
+    }
+
+    // Already caught up: visitCount 2 but loreStep already at 2 (not <= 1).
+    {
+        WardenState warden;
+        warden.visitCount = 2;
+        PlayerState p = baseline;
+        p.wardenLoreStep = 2;
+        auto result = ShopInteraction::VarusDialogue(p, warden, text);
+        Expect(!result.has_value(), "an already-caught-up loreStep should return std::nullopt, not re-reveal");
+    }
+
+    // visitCount == 4: confirmed unreachable in the real game (WardenState::
+    // ShouldVisit only ever escalates visitCount to 3, see M8's own smoke
+    // test), but the branch is preserved -- exercised directly here since
+    // nothing else in this port can ever construct that WardenState by
+    // itself.
+    {
+        WardenState warden;
+        warden.visitCount = 4;
+        PlayerState p = baseline;
+        p.wardenLoreStep = 3;
+        auto result = ShopInteraction::VarusDialogue(p, warden, text);
+        Expect(result.has_value() && *result == lines[3] + "\n" + lines[4],
+               "the confirmed-unreachable visitCount == 4 branch should still behave exactly as ported");
+        Expect(p.wardenLoreStep == 4, "loreStep should advance to 4");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -781,6 +853,7 @@ int main(int argc, char** argv) {
         TestUnhandledAction(baseline, charData, text, items, hub);
         TestBenecaDialogue(baseline, items, text);
         TestHelgaDialogue(baseline, items, text);
+        TestVarusDialogue(baseline, text);
 
         if (!g_ok) {
             std::fprintf(stderr, "m56_shop_interaction_smoke: FAILED self-consistency checks\n");

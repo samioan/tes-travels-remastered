@@ -3788,19 +3788,59 @@ starts and stays up.
       stayed at zero `/W4` warnings. Manually launched the real windowed
       exe and confirmed it starts and stays up.
 
+- [x] **M59 -- `ShopInteraction::VarusDialogue`, shop 6** (this session).
+      Fourth and FINAL slice of the `Shop.dialogue()` dispatcher (see
+      M56's own entry for the "one NPC-group at a time" plan) -- all 7
+      NPCs' own dialogue logic is now ported. Unlike every other shop,
+      Varus's own branch ignores `action`/`extra` entirely: it's a pure
+      state machine over `WardenState::visitCount` (M8/M51) and
+      `player.wardenLoreStep`, revealing one lore line per Warden visit
+      (visitCount 1/2/3 each reveal exactly one new line, gated so a
+      repeat ask at the same visitCount/loreStep pair returns
+      `std::nullopt` instead of re-revealing).
+
+      **A real, confirmed dead branch, preserved rather than removed --
+      same documentation discipline as M6's dead chest-record byte and
+      M10's dead `leftLevelZone`:** the original's own `dialogue()` has a
+      4th case for `wardenVisitCount == 4`, but `WardenState::ShouldVisit`
+      (`world/warden.h`) only ever checks 3 escalating thresholds (13/26/
+      39) -- M8's own smoke test already confirmed `visitCount` caps at 3
+      in the real game (`checked with an elapsedCounter of 100000`). The
+      `visitCount == 4` branch can therefore never actually fire through
+      any real code path; ported anyway rather than dropped, and exercised
+      directly in the new smoke test (constructing that `WardenState` by
+      hand, since nothing else in this port can ever produce one) to prove
+      the port's own behavior matches the original exactly even though
+      the original's own game logic can never reach it.
+
+      Verified by extending `shop_interaction_smoke.exe` (same executable
+      as M56/M57/M58): `visitCount == 0` always `std::nullopt` regardless
+      of `loreStep`; each of visitCount 1/2/3 revealing its own line
+      exactly once, with a repeat ask at the same state returning
+      `std::nullopt`; an "already caught up" loreStep (ahead of what a
+      given visitCount would reveal) also returning `std::nullopt` rather
+      than re-revealing; and the confirmed-unreachable `visitCount == 4`
+      branch behaving exactly as ported. 49 smoke tests pass (same total
+      as M56/M57/M58); full clean rebuild stayed at zero `/W4` warnings.
+      Manually launched the real windowed exe and confirmed it starts and
+      stays up.
+
 ## What's next
 
-`talkToNpc()` is fully transcribed (M44), but still NOT wired into the
-C++ port -- M56/M57/M58 built the first three slices of `Shop.dialogue()`'s
-own dispatcher (shops 0-3's quest-turn-in pattern, shop 4/Beneca, shop
-5/Helga), but shop 6 (Varus)'s own bespoke branch is still unported, and
-even once all 7 are covered, wiring `ShopInteraction`/`Shop`'s dispatch into
-`main.cpp`'s own tick loop (unblocking the NPC-talk half of
-`resolveInteractInput()` and the NPC-nameplate half of
-`refreshNpcNameplateAndWardenLeave()`, M43's own "what's next" note) is
-its own separate step on top of that -- this port has no NPC-interaction
-UI at all yet (a blocking dialogue popup, same shape M40's `MenuFlow`
-already established for character creation's own screens). No
+`talkToNpc()` is fully transcribed (M44) and, as of M59, so is every one of
+`Shop.dialogue()`'s 7 NPC branches (`ShopInteraction::QuestShopDialogue`/
+`BenecaDialogue`/`HelgaDialogue`/`VarusDialogue`, M56-M59) -- but the
+dispatcher is still NOT wired into the live C++ port's tick loop. That
+wiring (unblocking the NPC-talk half of `resolveInteractInput()` and the
+NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()`, M43's own
+"what's next" note) is its own separate, still-open step: this port has no
+NPC-interaction UI at all yet (a blocking dialogue popup, same shape M40's
+`MenuFlow` already established for character creation's own screens, and
+-- for shops 0-3/Beneca/Helga specifically -- some way to choose WHICH
+action/extra to send, since `IsValidShopAction`/`ShopActionCode` only cover
+shops 0-3's own menu-choice mapping; shops 4/5's own action/extra choices
+have no equivalent confirmed selection UI ported anywhere in `../src/`
+either, an open question for whoever wires this in for real). No
 bug-preservation dilemma blocks any of it -- see M53's own entry for the
 corrected `Shop.reset()` finding (it genuinely runs in the real game, via
 a static initializer); the one real surviving caveat is that `reset()`
@@ -3830,7 +3870,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own

@@ -322,4 +322,33 @@ std::optional<std::string> ShopInteraction::HelgaDialogue(PlayerState& player, S
     return std::nullopt;
 }
 
+std::optional<std::string> ShopInteraction::VarusDialogue(PlayerState& player, const WardenState& warden,
+                                                            const ShopDialogue& text) {
+    const std::vector<std::string>& lines = text.groups[6];
+
+    if (warden.visitCount == 0) return std::nullopt;
+
+    if (warden.visitCount == 1 && player.wardenLoreStep == 0) {
+        player.wardenLoreStep = 1;
+        return lines[0];
+    }
+    if (warden.visitCount == 2 && player.wardenLoreStep <= 1) {
+        player.wardenLoreStep = 2;
+        return lines[1];
+    }
+    if (warden.visitCount == 3 && player.wardenLoreStep <= 2) {
+        player.wardenLoreStep = 3;
+        return lines[2];
+    }
+    // Confirmed unreachable in the real game -- WardenState::visitCount can
+    // never actually reach 4 (see this method's own declaration comment).
+    // Reproduced anyway rather than dropped.
+    if (warden.visitCount == 4 && player.wardenLoreStep <= 3) {
+        player.wardenLoreStep = 4;
+        return lines[3] + "\n" + lines[4];
+    }
+
+    return std::nullopt;
+}
+
 }  // namespace stormhold
