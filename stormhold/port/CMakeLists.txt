@@ -149,7 +149,9 @@ target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster
 # StatusBarPlan + GameRenderer::RenderStatusBars (paintStatusBars()) --
 # needs stormhold_player for PlayerCombatStats::EffectiveStat(), the only
 # reason this library now links it (no cycle: stormhold_player doesn't
-# depend on stormhold_render) -- see src/render/.
+# depend on stormhold_render). M60: ui/npc_dialogue.cpp, the blocking NPC-
+# greeting screen (npcHelloUI's own simplified port-only counterpart) --
+# see src/render/.
 add_library(stormhold_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -159,6 +161,7 @@ add_library(stormhold_render STATIC
   src/render/status_bar_plan.cpp
   src/render/visible_object_renderer.cpp
   src/ui/menu_flow.cpp
+  src/ui/npc_dialogue.cpp
 )
 target_include_directories(stormhold_render PUBLIC src)
 target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets stormhold_player)
@@ -454,5 +457,9 @@ target_link_libraries(shop_state_smoke PRIVATE stormhold_world)
 # M56 milestone smoke test -- see src/tests/m56_shop_interaction_smoke.cpp.
 add_executable(shop_interaction_smoke src/tests/m56_shop_interaction_smoke.cpp)
 target_link_libraries(shop_interaction_smoke PRIVATE stormhold_player)
+
+# M60 milestone smoke test -- see src/tests/m60_npc_dialogue_smoke.cpp.
+add_executable(npc_dialogue_smoke src/tests/m60_npc_dialogue_smoke.cpp)
+target_link_libraries(npc_dialogue_smoke PRIVATE stormhold_render stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST

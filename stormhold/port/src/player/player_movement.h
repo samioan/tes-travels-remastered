@@ -8,6 +8,7 @@
 #include "dungeon/dungeon_runtime.h"
 #include "player/player_state.h"
 #include "world/dungeon_generator.h"
+#include "world/shop_state.h"
 #include "world/warden.h"
 
 namespace stormhold {
@@ -118,6 +119,21 @@ public:
     // caught-exception stand-in for it.
     static std::optional<std::array<int8_t, 8>> ChestAheadOfPlayer(PlayerState& p, const LevelLookup& levels,
                                                                      const WorldRegistry& world);
+
+    // Player.shopAheadOfPlayer() (M60, phase-3 port; was decompiled/
+    // j.java's own overload distinct from MonsterInFront/ChestAheadOfPlayer's
+    // callees): the quest-shop-flag-gated NPC/shop id at the forward-facing
+    // look-ahead tile, via the SAME ComputeMoveTarget(1) MonsterInFront/
+    // ChestAheadOfPlayer already use -- but ALSO gated on `pendingLevel ==
+    // 1` (the hub town, the only level any of the 7 NPCs ever stand on) on
+    // top of the shared `pendingLevel <= 0` guard, then
+    // `Shop::QuestShopAt(shop, pendingTileX, pendingTileY)` (world/
+    // shop_state.h, M53/M56). Returns -1 (the original's own int sentinel,
+    // not std::optional -- matching `int shopAheadOfPlayer()`'s own real
+    // return type) wherever the original does: no neighbor to cross into,
+    // off the hub, or no shop tile with its own `questRewardClaimable`
+    // flag still set at that position.
+    static int ShopAheadOfPlayer(PlayerState& p, const LevelLookup& levels, const ShopState& shop);
 
     // Player.commitMove(dir) -- see class header comment for what's
     // deliberately not modeled. `world`/`items` are the M17 addition: once

@@ -3825,30 +3825,99 @@ starts and stays up.
       Manually launched the real windowed exe and confirmed it starts and
       stays up.
 
+- [x] **M60 -- the NPC greeting flow, wired live** (this session). Closes
+      the two gaps M43's own "what's next" note left open once M56-M59's
+      `ShopInteraction`/`Shop` dispatch existed to close them: `GameCanvas.
+      resolveInteractInput()`'s NPC-talk half and
+      `refreshNpcNameplateAndWardenLeave()`'s NPC-nameplate half. New
+      `PlayerMovement::ShopAheadOfPlayer` (`Player.shopAheadOfPlayer()`):
+      the SAME `ComputeMoveTarget(1)` look-ahead `MonsterInFront`/
+      `ChestAheadOfPlayer` already use, gated on `pendingLevel == 1` (every
+      NPC stands on the hub town only) then `Shop::QuestShopAt` (M53/M56).
+      New `Shop::kNames[7]` (`Shop.NAMES[]`, never ported before now). New
+      `ui/npc_dialogue.h`'s `NpcDialogue` -- a port-only blocking screen
+      standing in for `npcHelloUI`: title (the NPC's name) + word-wrapped
+      body text (a small, deliberate duplicate of `ui/menu_flow.cpp`'s own
+      file-local `WordWrap`, which isn't exported and belongs to a
+      genuinely separate pre-game state machine), dismissed on Enter.
+      `main.cpp`'s tick loop computes `shopAhead` ONCE per tick (reused for
+      BOTH the nameplate popup and the interact-key dispatch, a provably-
+      equivalent consolidation of the original's own two separate real
+      call sites -- see `ShopAheadOfPlayer`'s own declaration comment), and
+      dispatches the interact key ('F', shared with chest-opening, NPC-talk
+      taking priority same as the original's own if/else-if order) to
+      whichever of M56-M59's four dialogue methods owns the found shopId,
+      always with action=1/extra=0 -- exactly what `talkToNpc()` itself
+      always calls. While the dialogue screen is open, movement/attack/
+      spellcast/monster-AI all skip the tick, the same `shouldRunTick`-style
+      gate `Camping`/`DeathSequence` already established.
+
+      **Deliberately, substantially NOT modeled, flagged prominently rather
+      than silently simplified:** the real `npcChoicesUI[npcId]` follow-up
+      screen -- the INTERACTIVE menu a player reaches after the greeting
+      (Train/Give/Befriend/Threaten/Kill for the quest shops, or Beneca/
+      Helga's own item-donation/point-spending choices), `ESGame.java`'s
+      own screenGroups 9-14/20/22/27/350, each with their own item-
+      selection sub-screens and result popups. Reading that dispatch web
+      directly (while scoping this milestone) confirmed it's a
+      substantially bigger lift than this one -- likely dawnstar's own
+      M46 (`NpcMenu` and every sub-screen) in size -- so this milestone
+      only wires the GREETING (`talkToNpc()`'s own single hardcoded
+      `action=1` call), matching the "one coherent slice at a time"
+      discipline M56-M59's own quartet already used for the dialogue TEXT
+      side of this same gap. Also not reproduced: `talkToNpc()`'s own
+      null-result fallback for npcId 4/5 (re-showing THEIR OWN choices
+      screen with a "has nothing more to say" message + point-total
+      substitution) -- needs that same deferred choices-screen text; a
+      null result here just doesn't open the dialogue screen at all, the
+      same practical outcome shopId 0-3/6 already have (no fallback branch
+      for those in the original either).
+
+      Verified by a new `npc_dialogue_smoke.exe`: `ShopAheadOfPlayer`
+      against a real `BuildHubLevel` output for all 7 real shop positions
+      (each resolving to its own real shopId), a cleared
+      `questRewardClaimable` flag making the same position resolve to -1,
+      a non-hub `currentLevel` always resolving to -1, and an empty tile
+      resolving to -1; `Shop::kNames` against the real 7 names; `NpcDialogue
+      ::Show`/`Dismiss`'s own state transitions; and an end-to-end
+      integration check mirroring `main.cpp`'s own exact by-shopId
+      dispatch for all 7 real NPCs against a freshly created character,
+      confirming `ShopAheadOfPlayer` finds the right id AND dispatching
+      through it produces a real first-visit greeting line that actually
+      opens `NpcDialogue` with that NPC's own real name as the title. 50
+      smoke tests pass; full clean rebuild stayed at zero `/W4` warnings.
+      Manually launched the real windowed exe and confirmed it starts and
+      stays up. **Not independently re-verified this session:** walking up
+      to a real NPC in a live play session and visually confirming the
+      dialogue screen renders/word-wraps/dismisses correctly -- that would
+      need navigating the Main Menu/character-creation flow and the hub
+      town's own corridor layout via live keyboard input, which wasn't
+      attempted; every state-mutating code path IS exercised against real
+      asset data by the smoke test above, just not the live rendering
+      itself.
+
 ## What's next
 
-`talkToNpc()` is fully transcribed (M44) and, as of M59, so is every one of
-`Shop.dialogue()`'s 7 NPC branches (`ShopInteraction::QuestShopDialogue`/
-`BenecaDialogue`/`HelgaDialogue`/`VarusDialogue`, M56-M59) -- but the
-dispatcher is still NOT wired into the live C++ port's tick loop. That
-wiring (unblocking the NPC-talk half of `resolveInteractInput()` and the
-NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()`, M43's own
-"what's next" note) is its own separate, still-open step: this port has no
-NPC-interaction UI at all yet (a blocking dialogue popup, same shape M40's
-`MenuFlow` already established for character creation's own screens, and
--- for shops 0-3/Beneca/Helga specifically -- some way to choose WHICH
-action/extra to send, since `IsValidShopAction`/`ShopActionCode` only cover
-shops 0-3's own menu-choice mapping; shops 4/5's own action/extra choices
-have no equivalent confirmed selection UI ported anywhere in `../src/`
-either, an open question for whoever wires this in for real). No
-bug-preservation dilemma blocks any of it -- see M53's own entry for the
-corrected `Shop.reset()` finding (it genuinely runs in the real game, via
-a static initializer); the one real surviving caveat is that `reset()`
-only ever runs ONCE per app launch there, not once per New Game, so
-quest-economy state carries over across a same-session death-restart --
-not modeled by `ShopState` either way (this port has no live app-lifetime
-`Shop` instance to carry state between a death-restart and the next),
-just worth keeping in mind for whoever eventually adds one.
+`talkToNpc()`'s own "greeting" action is wired end to end as of M60, but
+the real `npcChoicesUI[npcId]` interactive follow-up menu (Train/Give/
+Befriend/Threaten/Kill for shops 0-3, Beneca/Helga's own item-donation/
+point-spending choices) is NOT -- see M60's own entry for why that's a
+substantially bigger, separate lift (its own item-selection sub-screens
+and result popups, `ESGame.java`'s own screenGroups 9-14/20/22/27/350),
+likely worth its own dawnstar-M46-sized multi-part treatment rather than
+one milestone. `IsValidShopAction`/`ShopActionCode` (M56) only cover
+shops 0-3's own menu-choice mapping either way -- shops 4/5's own action/
+extra choices have no equivalent confirmed selection UI ported anywhere
+in `../src/`, an open question for whoever eventually builds that screen.
+No bug-preservation dilemma blocks any of it -- see M53's own entry for
+the corrected `Shop.reset()` finding (it genuinely runs in the real game,
+via a static initializer); the one real surviving caveat is that
+`reset()` only ever runs ONCE per app launch there, not once per New
+Game, so quest-economy state carries over across a same-session
+death-restart -- not modeled by `ShopState` either way (this port has no
+live app-lifetime `Shop` instance to carry state between a death-restart
+and the next), just worth keeping in mind for whoever eventually adds
+one.
 
 Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
@@ -3870,7 +3939,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own

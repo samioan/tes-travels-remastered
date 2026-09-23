@@ -140,13 +140,28 @@
 // `GameCanvas.checkChestAhead()`'s "Chest" popup and
 // `resolveInteractInput()`'s chest-opening half (M41) -- NOT its NPC-talk
 // half, which still needs `Shop.questShopAt()`/`talkToNpc()`, both
-// unported. Bound to a new 'F' key. Also wires the OTHER half of
-// `refreshNpcNameplateAndWardenLeave()` (M41): the Warden-leaving
+// unported at the time. Bound to a new 'F' key. Also wires the OTHER half
+// of `refreshNpcNameplateAndWardenLeave()` (M41): the Warden-leaving
 // trigger, via the already-ported `WardenState::Leave` (M8) and
 // `DungeonRuntime::ViewGridAt` (M21) against the player's own
 // `corridorView` -- the NPC-nameplate half (gated on the SAME
-// `Shop.questShopAt()` gap) stays unported too, flagged at its own
-// omission point below rather than silently dropped.
+// `Shop.questShopAt()` gap) stayed unported too, at the time.
+//
+// **M60 closes both of those gaps**, now that M56-M59's `ShopInteraction`/
+// `Shop` dispatch exists: new `PlayerMovement::ShopAheadOfPlayer` (Player.
+// shopAheadOfPlayer()), `Shop::kNames`, and a new port-only blocking
+// screen (`ui/npc_dialogue.h`'s `NpcDialogue`, standing in for
+// `npcHelloUI`) let the interact key ('F', shared with chest-opening,
+// NPC-talk taking priority same as the original's own if/else-if order)
+// open a real greeting from whichever of the 7 NPCs is ahead, and the
+// nameplate popup show their real name. **Deliberately still NOT
+// modeled:** the deeper interactive choices menu (`npcChoicesUI[npcId]`'s
+// own Train/Give/Befriend/Threaten/Kill -- or Beneca/Helga's own item-
+// donation/point-spending -- sub-screens, `ESGame.java`'s own
+// screenGroups 9-14/20/22/27/350) -- a substantially bigger lift than
+// this milestone's own scope, its own separate future milestone (see
+// docs/PORT_ROADMAP.md's own "what's next" note and `ui/npc_dialogue.h`'s
+// own class comment).
 //
 // M45 layers in `FlashOverlay`/`FlashOverlayState` (render/flash_
 // overlay.h, new this session) -- GameCanvas.paintFlashOverlays()'s 3
@@ -212,6 +227,7 @@
 #include "player/player_inventory.h"
 #include "player/player_creation.h"
 #include "player/player_movement.h"
+#include "player/shop_interaction.h"
 #include "player/visible_objects.h"
 #include "render/corridor_assets.h"
 #include "render/flash_overlay.h"
@@ -223,6 +239,7 @@
 #include "render/visible_object_assets.h"
 #include "render/visible_object_renderer.h"
 #include "ui/menu_flow.h"
+#include "ui/npc_dialogue.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
 #include "world/game_advancement.h"
@@ -462,6 +479,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // (DeathSequence::Tick, below).
     stormhold::DeathState death;
     stormhold::MessagePopupState messagePopup;
+    // M60: GameCanvas.talkToNpc()'s own port-only blocking-screen stand-in
+    // (npcHelloUI) -- see ui/npc_dialogue.h's own class comment for what's
+    // deliberately not modeled (the deeper interactive choices menu).
+    stormhold::NpcDialogueState npcDialogue;
     // M38: GameCanvas.targetMonster -- refreshed every tick by
     // PlayerMovement::MonsterInFront below.
     std::optional<stormhold::MonsterState> targetMonster;
@@ -600,6 +621,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             if (KeyEdge('3')) spellCastRequested = true;
             if (KeyEdge('5')) spellCycleRequested = true;
 
+            // M60: dismisses the NPC dialogue screen -- a port-only "Ok"
+            // stand-in for the original's own real command-bar button
+            // (UIScreen.cmdOk), reusing the same key MenuFlow's own
+            // Confirm() already binds VK_RETURN to elsewhere in this file.
+            // Checked here, OUTSIDE the shouldRunTick gate below, since the
+            // whole point is dismissing the screen that gate is blocking
+            // gameplay behind.
+            if (npcDialogue.active && KeyEdge(VK_RETURN)) {
+                stormhold::NpcDialogue::Dismiss(npcDialogue);
+            }
+
             gameTimeMs += stormhold::GameClock::kTickInterval.count();
             stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
 
@@ -653,8 +685,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     messagePopup, stormhold::DeathSequence::RespawnMessageLines(player, dungeonNames), 1, gameTimeMs);
             }
 
+            // M60: while the NPC dialogue screen is open, movement/attack/
+            // spellcast/target-monster-refresh/monster-AI all skip the
+            // tick, the same class of gate Camping/DeathSequence's own
+            // StillWaiting/Waiting results already use -- matching
+            // npcHelloUI fully taking over the display in the original
+            // (GameCanvas.run() itself doesn't even execute while a
+            // different UIScreen is the active displayable).
             bool shouldRunTick = campResult != stormhold::CampTickResult::StillWaiting &&
-                                  deathResult != stormhold::DeathTickResult::Waiting;
+                                  deathResult != stormhold::DeathTickResult::Waiting && !npcDialogue.active;
             if (shouldRunTick) {
                 bool moveKeyPressed = up || down || left || right;
                 int8_t inventoryCountBeforeMove = player.inventoryCount;
@@ -687,6 +726,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     }
                 }
 
+                // M60: Player.shopAheadOfPlayer() -- computed once here and
+                // reused below for BOTH the interact-key dispatch and the
+                // nameplate popup, the same "compute the look-ahead once,
+                // reuse for popup + action" shape `chestAhead` right below
+                // already established (rather than the original's own two
+                // separate real call sites, resolveInteractInput() and
+                // refreshNpcNameplateAndWardenLeave(), each recomputing it
+                // independently -- provably the same tile either way, see
+                // player/player_movement.h's own ShopAheadOfPlayer comment).
+                int shopAhead = stormhold::PlayerMovement::ShopAheadOfPlayer(player, levelLookup, shop);
+
                 // M43: GameCanvas.checkChestAhead() (was decompiled/
                 // e.java's `h()` no-arg, M41): polls the look-ahead tile
                 // for a chest every tick, showing "Chest" the moment one
@@ -697,16 +747,44 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     stormhold::MessagePopup::Show(messagePopup, {"Chest", ""}, 1, gameTimeMs);
                 }
 
-                // M43: GameCanvas.resolveInteractInput()'s chest-opening
-                // half (M41, was decompiled/e.java's `f(long)`) -- its
-                // NPC-talk half (Player.shopAheadOfPlayer()>=0) is NOT
-                // wired here, see this file's own header comment. Bound
-                // to a new 'F' key, the same "no hotbar system exists"
-                // stand-in pattern as 'C' for camp/rest above.
+                // M43/M60: GameCanvas.resolveInteractInput() -- the NPC-talk
+                // half (Player.shopAheadOfPlayer()>=0) takes priority over
+                // the chest-opening half, matching the original's own
+                // if/else-if order exactly. talkToNpc() itself only ever
+                // calls `Shop.dialogue(player, npcId, 1, 0)` -- the
+                // "greeting" action -- dispatched here to whichever of
+                // M56-M59's four `ShopInteraction`/`Shop` methods actually
+                // owns `shopAhead`'s own NPC group. **Deliberately NOT
+                // reproduced:** talkToNpc()'s own null-result fallback for
+                // npcId 4/5 (re-showing THEIR OWN choices screen with a
+                // "has nothing more to say" message) -- that needs the
+                // choices-screen text this port doesn't render at all yet
+                // (see ui/npc_dialogue.h's own class comment); a null
+                // result here just doesn't open the dialogue screen, same
+                // practical outcome talkToNpc() itself already has for
+                // shopId 0-3/6 (no fallback branch for those at all).
                 // collectChestItem()'s own confirmed-unreachable `-1`
                 // ("locked") branch (M41's own finding) isn't reproduced
                 // here either -- CollectChestItem can only return 0 or 1.
-                if (interactKeyEdge && chestAhead.has_value()) {
+                if (interactKeyEdge && shopAhead >= 0) {
+                    std::optional<std::string> line;
+                    if (shopAhead <= 3) {
+                        line = stormhold::ShopInteraction::QuestShopDialogue(player, shop, dialogue, charData, items,
+                                                                               levelLookup(1), combatRng, shopAhead, 1,
+                                                                               0);
+                    } else if (shopAhead == 4) {
+                        line = stormhold::ShopInteraction::BenecaDialogue(player, shop, dialogue, items,
+                                                                            nextSpawnIdCounter, 1, 0);
+                    } else if (shopAhead == 5) {
+                        line = stormhold::ShopInteraction::HelgaDialogue(player, shop, dialogue, items, 1, 0);
+                    } else {
+                        line = stormhold::ShopInteraction::VarusDialogue(player, warden, dialogue);
+                    }
+                    if (line.has_value()) {
+                        stormhold::NpcDialogue::Show(npcDialogue, stormhold::Shop::kNames[static_cast<size_t>(shopAhead)],
+                                                       *line);
+                    }
+                } else if (interactKeyEdge && chestAhead.has_value()) {
                     int result = stormhold::PlayerInventory::CollectChestItem(player, *chestAhead, items,
                                                                                 currentLevelMutable, world,
                                                                                 levelLookup);
@@ -744,25 +822,26 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     warden.Arrive(levelLookup(1));
                 }
 
-                // M43: GameCanvas.refreshNpcNameplateAndWardenLeave()'s
-                // Warden-leaving half (M41, was decompiled/e.java's `c()`
-                // no-arg) -- the OTHER half (an NPC-nameplate popup when
-                // the tile ahead IS a shop tile) needs
-                // Player.shopAheadOfPlayer()/Shop.questShopAt(), not
-                // wired here either, see this file's own header comment.
-                // WardenState::Leave (M8) finally gets a real caller.
-                {
-                    uint8_t tileAhead = stormhold::DungeonRuntime::ViewGridAt(player.corridorView, 0, 1);
-                    if (!(tileAhead & 0x20)) {  // bit 32 clear -- not looking at a shop tile
-                        std::optional<stormhold::TargetMonsterInfo> npcCheckTarget;
-                        if (targetMonster.has_value()) {
-                            npcCheckTarget = stormhold::TargetMonsterInfo{targetMonster->tileX, targetMonster->tileY,
-                                                                            targetMonster->typeIndex};
-                        }
-                        bool dialogueDue = stormhold::IsNpcDialogueDue(player, npcCheckTarget);
-                        if (!dialogueDue && warden.present && player.wardenLoreStep == warden.visitCount) {
-                            warden.Leave(levelLookup(1), levelLookup(2));
-                        }
+                // M43/M60: GameCanvas.refreshNpcNameplateAndWardenLeave() --
+                // both halves now wired. The nameplate half (M60) reuses
+                // `shopAhead`, already computed above, instead of the
+                // original's own separate `viewGridAt(0, 1, corridorView)`
+                // bit-32 test -- see `shopAhead`'s own declaration comment
+                // for why that's a provably-equivalent consolidation, not a
+                // behavior change. The Warden-leaving half (M43) is
+                // unchanged.
+                if (shopAhead >= 0) {
+                    stormhold::MessagePopup::Show(
+                        messagePopup, {stormhold::Shop::kNames[static_cast<size_t>(shopAhead)], ""}, 1, gameTimeMs);
+                } else {
+                    std::optional<stormhold::TargetMonsterInfo> npcCheckTarget;
+                    if (targetMonster.has_value()) {
+                        npcCheckTarget = stormhold::TargetMonsterInfo{targetMonster->tileX, targetMonster->tileY,
+                                                                        targetMonster->typeIndex};
+                    }
+                    bool dialogueDue = stormhold::IsNpcDialogueDue(player, npcCheckTarget);
+                    if (!dialogueDue && warden.present && player.wardenLoreStep == warden.visitCount) {
+                        warden.Leave(levelLookup(1), levelLookup(2));
                     }
                 }
 
@@ -921,37 +1000,45 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             stormhold::VisibleObjects::Refresh(player, world, /*includeWarden=*/false, warden);
 
             backbuffer.Fill(stormhold::PackRGB565(0, 0, 0));
-            stormhold::GameRenderer::RenderCorridorView(
-                backbuffer, corridorAssets, player.corridorView,
-                /*ailment3Active=*/stormhold::PlayerCombatStats::HasAilment(player, 3),
-                /*ailment4Active=*/stormhold::PlayerCombatStats::HasAilment(player, 4));
-            stormhold::VisibleObjectRenderer::RenderObjects(backbuffer, objectAssets, player);
-            monsterRenderedLastFrame = stormhold::VisibleObjectRenderer::RenderMonsters(backbuffer, objectAssets, player);
-            stormhold::GameRenderer::RenderStatusBars(backbuffer, stormhold::StatusBarPlan::Plan(player, charData));
-            std::optional<stormhold::TargetMonsterInfo> targetMonsterInfo;
-            if (targetMonster.has_value()) {
-                targetMonsterInfo = stormhold::TargetMonsterInfo{targetMonster->tileX, targetMonster->tileY,
-                                                                  targetMonster->typeIndex};
-            }
-            int iconSet = stormhold::ResolveHudIconSet(hudState, player, targetMonsterInfo);
-            stormhold::GameRenderer::RenderHud(backbuffer, hotbarAssets, iconSet);
-
-            if (minimapZoomedOut) {
-                stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
-                    currentLevelMutable, world, player.tileX, player.tileY, player.facing, 7, levelLookup);
-                stormhold::GameRenderer::RenderMinimapZoomedOut(backbuffer, grid, player.facing);
+            if (npcDialogue.active) {
+                // M60: fully replaces the normal game view, matching
+                // `npcHelloUI` taking over `Display.setCurrent()` in the
+                // original rather than overlaying the corridor view.
+                stormhold::NpcDialogue::Render(backbuffer, npcDialogue);
             } else {
-                stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
-                    currentLevelMutable, world, player.tileX, player.tileY, player.facing, 17, levelLookup);
-                stormhold::GameRenderer::RenderMinimapNormal(backbuffer, grid, player.facing);
+                stormhold::GameRenderer::RenderCorridorView(
+                    backbuffer, corridorAssets, player.corridorView,
+                    /*ailment3Active=*/stormhold::PlayerCombatStats::HasAilment(player, 3),
+                    /*ailment4Active=*/stormhold::PlayerCombatStats::HasAilment(player, 4));
+                stormhold::VisibleObjectRenderer::RenderObjects(backbuffer, objectAssets, player);
+                monsterRenderedLastFrame =
+                    stormhold::VisibleObjectRenderer::RenderMonsters(backbuffer, objectAssets, player);
+                stormhold::GameRenderer::RenderStatusBars(backbuffer, stormhold::StatusBarPlan::Plan(player, charData));
+                std::optional<stormhold::TargetMonsterInfo> targetMonsterInfo;
+                if (targetMonster.has_value()) {
+                    targetMonsterInfo = stormhold::TargetMonsterInfo{targetMonster->tileX, targetMonster->tileY,
+                                                                      targetMonster->typeIndex};
+                }
+                int iconSet = stormhold::ResolveHudIconSet(hudState, player, targetMonsterInfo);
+                stormhold::GameRenderer::RenderHud(backbuffer, hotbarAssets, iconSet);
+
+                if (minimapZoomedOut) {
+                    stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
+                        currentLevelMutable, world, player.tileX, player.tileY, player.facing, 7, levelLookup);
+                    stormhold::GameRenderer::RenderMinimapZoomedOut(backbuffer, grid, player.facing);
+                } else {
+                    stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
+                        currentLevelMutable, world, player.tileX, player.tileY, player.facing, 17, levelLookup);
+                    stormhold::GameRenderer::RenderMinimapNormal(backbuffer, grid, player.facing);
+                }
+                stormhold::MessagePopup::Paint(backbuffer, messagePopup);
+                // M45: paintGameView()'s own call order has this directly
+                // after paintMessagePopup() (see this file's own header
+                // comment) -- combatRng reused for the jitter, see
+                // FlashOverlay's own header comment on why that's not a new
+                // RNG-stream divergence.
+                stormhold::FlashOverlay::Paint(backbuffer, flashOverlay, flashOverlayAssets, combatRng);
             }
-            stormhold::MessagePopup::Paint(backbuffer, messagePopup);
-            // M45: paintGameView()'s own call order has this directly
-            // after paintMessagePopup() (see this file's own header
-            // comment) -- combatRng reused for the jitter, see
-            // FlashOverlay's own header comment on why that's not a new
-            // RNG-stream divergence.
-            stormhold::FlashOverlay::Paint(backbuffer, flashOverlay, flashOverlayAssets, combatRng);
         }
         window.Present(backbuffer);
     });

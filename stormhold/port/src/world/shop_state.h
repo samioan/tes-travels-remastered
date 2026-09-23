@@ -90,6 +90,12 @@ public:
     static constexpr int kShopX[7] = {12, 3, 15, 6, 7, 12, 9};
     static constexpr int kShopY[7] = {3, 7, 7, 13, 2, 13, 9};
 
+    // Shop.NAMES[] -- the 7 NPCs' display names, in shop-index order.
+    // GameCanvas.npcNameLines[]/talkToNpc()'s own `Shop.NAMES[npcId]`
+    // title read (M60) are this array's only real consumers so far.
+    static constexpr const char* kNames[7] = {"Arantamo", "Celegil", "Favela Dralor", "Vander",
+                                               "Beneca",   "Helga",   "Varus"};
+
     // Shop.SHOP_CATEGORY[] -- 1 = quest-turn-in shopkeeper (shops 0-3),
     // 2 = bespoke single-NPC (Beneca/Helga, shops 4-5), 3 = Varus/
     // Warden-tied (shop 6).

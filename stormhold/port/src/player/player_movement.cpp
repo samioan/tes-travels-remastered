@@ -138,6 +138,18 @@ std::optional<std::array<int8_t, 8>> PlayerMovement::ChestAheadOfPlayer(PlayerSt
     return it->second;
 }
 
+int PlayerMovement::ShopAheadOfPlayer(PlayerState& p, const LevelLookup& levels, const ShopState& shop) {
+    try {
+        ComputeMoveTarget(p, 1, levels);
+    } catch (const std::runtime_error&) {
+        return -1;  // Same no-neighbor edge case as MonsterInFront/ChestAheadOfPlayer.
+    }
+    if (p.pendingLevel <= 0) return -1;
+    if (p.pendingLevel != 1) return -1;  // Every NPC stands on the hub town only.
+
+    return Shop::QuestShopAt(shop, p.pendingTileX, p.pendingTileY);
+}
+
 bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& levels, WorldRegistry& world,
                                  const ItemDatabase& items, const MonsterDatabase& monsterDb, WardenState& warden) {
     if (p.coreStats[6] <= 0) return false;
