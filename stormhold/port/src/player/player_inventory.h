@@ -74,6 +74,31 @@ public:
     // Player.unequipSlot(slot).
     static void UnequipSlot(PlayerState& p, int slot, const ItemDatabase& items);
 
+    // M62: Player.isEquippedSlot(slot) -- true iff slot's item is currently
+    // equipped (negative id) AND `ItemDatabase::IsEquipmentCategory` (1-10).
+    // **A real, confirmed pair of confusingly-similar-named but DISTINCT
+    // methods in the original, easy to conflate:** this is NOT the same
+    // predicate as `IsSlotEquipped` above (M47, `Player.isSlotEquipped`),
+    // whose gate is `ItemDatabase::IsEquippable` (the equipSlot column)
+    // instead. `newInventoryItemUI()`'s own Equip/Unequip label picker
+    // (`ui/inventory_ui.cpp`) calls THIS one specifically -- confirmed by
+    // reading `ESGame.java`'s own call site directly
+    // (`this.player.isEquippedSlot(slot)`), not inferred from the already-
+    // ported `isSlotEquipped`. Since `EquipItem` itself also gates on
+    // `IsEquipmentCategory` (categories 1-10 only, NOT 17), a category-17
+    // item can never actually become negative in the first place -- so
+    // this method always returns false for one, meaning `newInventoryItemUI`
+    // would show "Equip" (never "Unequip") for a category-17 item
+    // regardless of its real state, AND pressing "Equip" on one is a
+    // complete no-op (`EquipItem`'s own category gate silently rejects it)
+    // even though `CanEquipOrUnequip` (M61) says the option should be
+    // offered at all -- a confirmed dead/misleading menu entry, same class
+    // of finding as this project's other confirmed dead-branch/dead-code
+    // discoveries. Not reachable with real `itemsin.dat` data either way:
+    // M61's own `TestCanEquipOrUnequip` already found no real category-17
+    // item exists in the extracted assets.
+    static bool IsEquippedSlot(const PlayerState& p, int slot, const ItemDatabase& items);
+
     // Player.equipItem(slot, allowSwap) -- see player_creation.h's own
     // header comment and ../../../src/Player.java's equipItem() header
     // comment for the real phase-1 renaming bug this replaces (equip-slot

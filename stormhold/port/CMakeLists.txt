@@ -154,7 +154,9 @@ target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster
 # reason this library now links it (no cycle: stormhold_player doesn't
 # depend on stormhold_render). M60: ui/npc_dialogue.cpp, the blocking NPC-
 # greeting screen (npcHelloUI's own simplified port-only counterpart) --
-# see src/render/.
+# see src/render/. M62: ui/inventory_ui.cpp, the item-list + per-slot
+# action-menu screens (openInventory's own dispatch, the last branch of
+# M41's dispatch web).
 add_library(stormhold_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -163,6 +165,7 @@ add_library(stormhold_render STATIC
   src/render/message_popup.cpp
   src/render/status_bar_plan.cpp
   src/render/visible_object_renderer.cpp
+  src/ui/inventory_ui.cpp
   src/ui/menu_flow.cpp
   src/ui/npc_dialogue.cpp
 )
@@ -468,5 +471,9 @@ target_link_libraries(npc_dialogue_smoke PRIVATE stormhold_render stormhold_play
 # M61 milestone smoke test -- see src/tests/m61_inventory_actions_smoke.cpp.
 add_executable(inventory_actions_smoke src/tests/m61_inventory_actions_smoke.cpp)
 target_link_libraries(inventory_actions_smoke PRIVATE stormhold_player)
+
+# M62 milestone smoke test -- see src/tests/m62_inventory_ui_smoke.cpp.
+add_executable(inventory_ui_smoke src/tests/m62_inventory_ui_smoke.cpp)
+target_link_libraries(inventory_ui_smoke PRIVATE stormhold_render stormhold_player)
 
 endif()  # NOT STORMHOLD_DIST

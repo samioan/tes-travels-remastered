@@ -3994,6 +3994,133 @@ starts and stays up.
       path at all -- nothing calls any of these 7 new methods yet -- so
       this launch check is a basic regression guard, not a feature check).
 
+- [x] **M62 -- the inventory screens, wired live (`newInventoryUI`/
+      `newInventoryItemUI`/`openInventory`)** (this session). Closes the
+      LAST branch of M41's own dispatch web: new `ui/inventory_ui.h`/`.cpp`
+      (`InventoryUiState`/`InventoryUi`, `stormhold_render`) is a two-
+      screen state machine standing in for `ESGame.java`'s `newInventoryUI()`
+      (screenGroup 5/33, the item list) and `newInventoryItemUI()`
+      (screenGroup 5/34, the per-slot Drop/Equip-or-Unequip/Learn/Use
+      action menu) plus `GameCanvas.openInventory()`'s own hotkey dispatch,
+      the same "port-only screen state machine" shape `ui/npc_dialogue.h`
+      (M60) already used, built entirely on M61's already-ported
+      `PlayerInventory` action logic. Wired into `main.cpp`'s live tick
+      loop on a new 'I' hotkey stand-in (same pragmatic class as 'C'/'F'
+      from M39/M41 -- this port still has no real hotbarActionSet-driven
+      numeral-key system, an already-documented M29/M31 gap); Up/Down move
+      the cursor, Enter is "Ok", Escape is "Back", all edge-triggered and
+      checked outside the `shouldRunTick` gate the same way M60's own NPC-
+      dialogue dismiss key already is, since the whole point is driving
+      the screen that gate blocks live gameplay behind. `shouldRunTick`
+      itself now also excludes `inventoryUi.active`, matching
+      `npcHelloUI`/`inventoryUI` both fully taking over
+      `Display.setCurrent()` in the original rather than overlaying the
+      corridor view.
+
+      One new `PlayerInventory` method needed discovering along the way:
+      **`IsEquippedSlot` (`Player.isEquippedSlot`) -- a real, confirmed,
+      easy-to-conflate DISTINCT method from the already-ported
+      `IsSlotEquipped` (M47, `Player.isSlotEquipped`).** Both look almost
+      identical and both return "is this slot's item currently equipped",
+      but they gate on different columns: `isSlotEquipped` (M47) checks
+      `ItemDatabase::IsEquippable` (the equipSlot column), while
+      `isEquippedSlot` (M62, needed by `newInventoryItemUI`'s own Equip/
+      Unequip label picker) checks `ItemDatabase::IsEquipmentCategory`
+      (categories 1-10). Confirmed by reading `ESGame.java`'s own call site
+      directly (`this.player.isEquippedSlot(slot)`) rather than assuming
+      the already-ported method was the right one -- an easy mistake to
+      make given the near-identical names. Since `EquipItem` itself also
+      gates on `IsEquipmentCategory` (1-10 only, not 17), a category-17
+      item can never actually become negative in the first place, so
+      `IsEquippedSlot` always returns false for one -- a **second real,
+      confirmed dead/misleading menu entry**: `newInventoryItemUI` would
+      show "Equip" (never "Unequip") for a category-17 item regardless of
+      its true state, AND pressing it is a complete no-op, even though
+      `CanEquipOrUnequip` (M61) says the option should be offered at all.
+      Not reachable with real `itemsin.dat` data either way -- M61's own
+      `TestCanEquipOrUnequip` already found no real category-17 item
+      exists in the extracted assets. `UnequipSlot` was refactored to call
+      `IsEquippedSlot` internally instead of re-inlining the same check,
+      matching `Player.unequipSlot()`'s own real call structure exactly
+      (a small correctness improvement, not a behavior change).
+
+      **The big finding this milestone turned up, and a deliberate,
+      clearly-labeled port-only exception -- this project's first (see
+      the "what's next" section's own prior note that no such precedent
+      existed yet):** the real `GameCanvas.openInventory()` does NOT call
+      `newInventoryUI()` at all. It only does
+      `this.game.showScreen(this.game.inventoryUI)` -- showing whatever's
+      CACHED in that field. Exhaustive grep of every `inventoryUI =`
+      assignment in `ESGame.java` found exactly 5: the in-game pause
+      screen's own "Inventory" menu item (screenGroup 31 case 1, itself
+      not built anywhere in this port -- see this section's own prior
+      "what's next" note) and the 4 action-menu branches that refresh it
+      after Drop/Equip/Learn/Use. `openInventory()`'s hotkey path is NOT
+      one of the 5. So in the real game, pressing the inventory hotkey
+      BEFORE ever opening the pause screen's Inventory tab at least once
+      that session leaves `game.inventoryUI == null`, and
+      `ESGame.showScreen(null)` falls through every one of its own
+      `instanceof` branches -- pausing the game thread and disabling
+      auto-repaint with no screen shown and no path back. A real softlock,
+      reachable from a completely ordinary fresh New Game, on par with
+      M52's own confirmed Continue-Game-past-zone-0 softlock. Reproducing
+      it faithfully in this port would require first building the whole
+      not-yet-existing pause/stats menu AND its own "populates a cache the
+      hotkey path skips" quirk on top of it -- out of scope for this
+      milestone, the same "deliberately not reproduced, needs machinery
+      this port doesn't have" call `ui/npc_dialogue.h`'s own class comment
+      already made for its un-built `npcChoicesUI` fallback. Instead,
+      `InventoryUi::Open` always builds the list fresh -- which is also
+      what 4 of the real game's own 5 `inventoryUI =` call sites already
+      do (only the buggy hotkey entry point skips it), so this is the
+      DOMINANT real behavior being reproduced, not an invented one. Fully
+      documented in `ui/inventory_ui.h`'s own class comment for whoever
+      eventually builds the pause menu and has to decide whether to revisit
+      this call, the same "conscious decision point, not a silent default"
+      framing this section's own M52 heads-up already uses.
+
+      Also confirmed (not a finding needing preservation, just worth
+      recording): `Player.endOfGameTriggered` -- already flagged as
+      declared-but-never-set by the original transcription pass itself
+      (`Player.java`'s own comment on the field) and by M61's own `UseItem`
+      doc comment -- gates a real branch in `ESGame.java`'s screenGroup 34
+      "Use" handler (close the whole screen back to live gameplay instead
+      of refreshing the list). Since the field is confirmed dead,
+      `InventoryUi::Confirm` always takes the other (live, reachable)
+      branch: rebuild the list and stay on it. Not a fork this port needs
+      to model, just documented here for anyone auditing the dispatch.
+
+      Verified by a new `inventory_ui_smoke.exe`: `Open`/`Cancel`'s own
+      state transitions (including List-screen Cancel closing the whole
+      view, the deliberate port-only mapping for the real game's
+      not-yet-built `optionsUI` fallback); `MoveSelection`'s clamp-not-wrap
+      behavior at both ends and its no-op on an inactive/empty state;
+      selecting a slot off the List screen building an action menu whose
+      Drop/Equip-or-Unequip/Learn/Use membership is cross-checked directly
+      against `CanEquipOrUnequip`/`CanLearnSpellFromScroll`/`CanUseItem`
+      for a real starting item, plus an out-of-range slot selection being a
+      no-op; Drop actually consuming the slot and registering a real
+      dropped-item record via `DungeonRuntime::AddDroppedItem`; a full
+      Equip-then-Unequip round trip on a real starting item, checking both
+      the resulting `IsEquippedSlot` state AND that the label flips from
+      "Equip" to "Unequip" in between; Learn against a real category-12
+      item (skill-rank gate, `knownSpellsMask` bit-set, slot-consume); Use
+      against real item id 92 (confirming `Confirm`'s dispatch actually
+      reaches `UseItem` with `target=nullptr`, not re-deriving each of the
+      87-99 cases' own effects -- M61's own test already covers those in
+      isolation); Cancel from the ItemAction screen returning to the List
+      screen without closing the whole view; and both screens' own
+      `Render` at least running end to end without crashing against real
+      asset data. 52 smoke tests pass; full clean rebuild stayed at zero
+      `/W4` warnings. Manually launched the real windowed exe and confirmed
+      it starts and stays up. **Not independently re-verified this
+      session** (same disclosed gap M60's own entry already has): actually
+      pressing 'I' in a live play session and walking through Drop/Equip/
+      Learn/Use via real keyboard input -- that would need navigating the
+      Main Menu/character-creation flow first, which wasn't attempted;
+      every state-mutating code path IS exercised against real asset data
+      by the smoke test above, just not the live rendering/input itself.
+
 ## What's next
 
 `talkToNpc()`'s own "greeting" action is wired end to end as of M60, but
@@ -4017,18 +4144,8 @@ live app-lifetime `Shop` instance to carry state between a death-restart
 and the next), just worth keeping in mind for whoever eventually adds
 one.
 
-Beyond that, M41's dispatch web now has only ONE branch left unwired:
-opening the inventory screen (`openInventory` -- needs a real inventory UI
-this port doesn't have at all yet, a bigger lift than camp/rest or chest
-interaction were, and a bigger lift than spell casting/cycling turned out
-to be too). M61 ported the LOGIC that screen will eventually call
-(`itemTooltip`/`canEquipOrUnequip`/`isScrollCategory`/
-`canLearnSpellFromScroll`/`learnSpellFromScroll`/`canUseItem`/`useItem`),
-same "logic first, wiring later" split as the M56-then-M60 shop-dialogue
-pair -- what's left for `openInventory` itself is purely the UI/screen-
-state-machine side: `newInventoryUI`'s item-list screen, `newInventoryItemUI`'s
-per-slot action menu, and `tickPlayerAction()`'s own dispatch out of
-`unconfirmed_Z`. `paintUnknown_b()` (the one remaining unported-PIXEL paint
+Beyond that, M41's dispatch web is now FULLY wired -- M62 closed the last
+branch (`openInventory`). `paintUnknown_b()` (the one remaining unported-PIXEL paint
 method, the NPC/shop-portrait and Warden-compass icon painter -- gated on
 `unconfirmed_W`/`Player.questShopAtPendingTile()`, itself downstream of
 the Shop-economy gap above, AND itself flagged LOW CONFIDENCE by the
@@ -4040,11 +4157,16 @@ same bucket too -- M50's own `GameSave` gives it a real Save/Load
 backend to call into once it exists, but building the screen itself (and
 therefore a real Save TRIGGER -- "Continue Game" is wired and tested,
 M50, but still practically unreachable today with nothing yet writing
-`savegame.dat`) is its own separate lift, same size class as
-`openInventory`. Beyond that: Help topics (the Java transcription itself
-stops at topic index 4). Following dawnstar's own later milestones
-roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61
+`savegame.dat`) is its own separate lift, same size class `openInventory`
+(M62) just was. Whoever builds it should also revisit M62's own
+`ui/inventory_ui.h` class comment -- the real `openInventory()`'s
+"populates a cache the hotkey path doesn't" softlock bug it deliberately
+didn't reproduce becomes reproducible for the first time once a real
+`inventoryUI` cache field (i.e. this pause screen) exists to be skipped.
+Beyond that: Help topics (the Java transcription itself stops at topic
+index 4). Following dawnstar's own later milestones roughly but expecting
+further Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own
@@ -4058,7 +4180,8 @@ real bug" choice already made (see M52's own entry above), not an
 oversight -- but it's worth a conscious decision point, not a silent
 default, whenever a real Save UI makes it player-reachable: keep it
 faithful (do nothing further, the current default), or make a clearly-
-labeled, deliberate port-only exception (this project has no precedent
-for one yet -- every "not modeled"/"not fixed" note elsewhere in this
-doc stays faithful) and call it out explicitly as such if that's ever
-the call.
+labeled, deliberate port-only exception -- M62's own `openInventory`
+softlock call is this project's first precedent for that second path
+(see its own entry above), though every OTHER "not modeled"/"not fixed"
+note elsewhere in this doc still stays faithful -- and call it out
+explicitly as such if that's ever the call.

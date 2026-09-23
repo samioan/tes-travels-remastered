@@ -238,6 +238,7 @@
 #include "render/status_bar_plan.h"
 #include "render/visible_object_assets.h"
 #include "render/visible_object_renderer.h"
+#include "ui/inventory_ui.h"
 #include "ui/menu_flow.h"
 #include "ui/npc_dialogue.h"
 #include "util/java_random.h"
@@ -483,6 +484,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // (npcHelloUI) -- see ui/npc_dialogue.h's own class comment for what's
     // deliberately not modeled (the deeper interactive choices menu).
     stormhold::NpcDialogueState npcDialogue;
+    // M62: GameCanvas.openInventory()'s own port-only dispatch -- see
+    // ui/inventory_ui.h's own class comment for the real "openInventory
+    // shows a screen that's only ever populated by the not-yet-built
+    // pause menu" bug this deliberately does NOT reproduce.
+    stormhold::InventoryUiState inventoryUi;
     // M38: GameCanvas.targetMonster -- refreshed every tick by
     // PlayerMovement::MonsterInFront below.
     std::optional<stormhold::MonsterState> targetMonster;
@@ -615,6 +621,20 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             bool mDown = (GetAsyncKeyState('M') & 0x8000) != 0;
             bool campKeyEdge = KeyEdge('C');
             bool interactKeyEdge = KeyEdge('F');
+            // M62: GameCanvas.tickPlayerAction()'s own unconfirmed_Z branch
+            // (real key '7', unconditional -- no hotbarActionSet gate).
+            // 'I' is a new pragmatic stand-in key, same class as 'C'/'F'
+            // above (this port has no hotbarActionSet-driven numeral-key
+            // system, an already-documented M29/M31 gap). Bound to its own
+            // independent key rather than folded into tickPlayerAction()'s
+            // real exclusive if/else-if chain (camp/interact/spellcast/
+            // spellcycle/attack all outrank inventory-open there, which
+            // itself outranks movement) -- same "each action gets its own
+            // dedicated key, checked independently" simplification M39/
+            // M41/M46 already established for camp/interact/attack/
+            // spellcast/spellcycle, not a new deviation this milestone
+            // introduces.
+            bool inventoryKeyEdge = KeyEdge('I');
             if (GetAsyncKeyState(VK_SPACE) & 0x8000) attackRequested = true;
             // M46: real key codes ('3'/'5'), not stand-ins -- see
             // spellCastRequested/spellCycleRequested's own comment above.
@@ -634,6 +654,26 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
             gameTimeMs += stormhold::GameClock::kTickInterval.count();
             stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
+
+            // M62: while the inventory screen is open, Up/Down move the
+            // cursor, Enter is the single "Ok" action (screenGroup 33/34's
+            // own dispatch, ui/inventory_ui.h's own Confirm), and Escape is
+            // "Back" -- all checked here, OUTSIDE the shouldRunTick gate
+            // below, same reasoning as npcDialogue's own dismiss check
+            // above (the whole point is driving the screen that gate is
+            // blocking gameplay behind). Edge-triggered (KeyEdge), not
+            // held-based, matching MenuFlow's own pre-game list navigation
+            // rather than the raw GetAsyncKeyState held-reads movement
+            // uses below.
+            if (inventoryUi.active) {
+                if (KeyEdge(VK_UP)) stormhold::InventoryUi::MoveSelection(inventoryUi, -1, player);
+                if (KeyEdge(VK_DOWN)) stormhold::InventoryUi::MoveSelection(inventoryUi, 1, player);
+                if (KeyEdge(VK_RETURN)) {
+                    stormhold::InventoryUi::Confirm(inventoryUi, player, items, spells, monsters,
+                                                     currentLevelMutable, world, combatRng);
+                }
+                if (KeyEdge(VK_ESCAPE)) stormhold::InventoryUi::Cancel(inventoryUi);
+            }
 
             // M42: GameCanvas.tickPlayerAction()'s own unconfirmed_I
             // branch, gated there on unconfirmed_A -- "Cannot Camp!"
@@ -693,8 +733,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // (GameCanvas.run() itself doesn't even execute while a
             // different UIScreen is the active displayable).
             bool shouldRunTick = campResult != stormhold::CampTickResult::StillWaiting &&
-                                  deathResult != stormhold::DeathTickResult::Waiting && !npcDialogue.active;
+                                  deathResult != stormhold::DeathTickResult::Waiting && !npcDialogue.active &&
+                                  !inventoryUi.active;
             if (shouldRunTick) {
+                // M62: GameCanvas.openInventory() -- see ui/inventory_ui.h's
+                // own class comment for the real bug (openInventory shows a
+                // screen only the not-yet-built pause menu ever populates)
+                // this deliberately does NOT reproduce; opens straight to a
+                // freshly-built item list instead.
+                if (inventoryKeyEdge) {
+                    stormhold::InventoryUi::Open(inventoryUi);
+                }
+
                 bool moveKeyPressed = up || down || left || right;
                 int8_t inventoryCountBeforeMove = player.inventoryCount;
                 if (up) {
@@ -1005,6 +1055,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // `npcHelloUI` taking over `Display.setCurrent()` in the
                 // original rather than overlaying the corridor view.
                 stormhold::NpcDialogue::Render(backbuffer, npcDialogue);
+            } else if (inventoryUi.active) {
+                // M62: fully replaces the normal game view, matching
+                // `inventoryUI`/`inventoryActionUI` taking over
+                // `Display.setCurrent()` in the original.
+                stormhold::InventoryUi::Render(backbuffer, inventoryUi, player, items, spells, charData);
             } else {
                 stormhold::GameRenderer::RenderCorridorView(
                     backbuffer, corridorAssets, player.corridorView,

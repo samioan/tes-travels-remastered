@@ -17,12 +17,16 @@ bool PlayerInventory::AddInventoryItemRaw(PlayerState& p, int itemId, int packed
     return true;
 }
 
-void PlayerInventory::UnequipSlot(PlayerState& p, int slot, const ItemDatabase& items) {
+bool PlayerInventory::IsEquippedSlot(const PlayerState& p, int slot, const ItemDatabase& items) {
     int8_t id = p.inventoryItemIds[static_cast<size_t>(slot)];
-    bool isEquipped = items.IsEquipmentCategory(static_cast<int>(std::abs(id))) && id < 0;
-    if (!isEquipped) return;
+    if (!items.IsEquipmentCategory(static_cast<int>(std::abs(id)))) return false;
+    return id < 0;
+}
 
-    id = static_cast<int8_t>(std::abs(id));
+void PlayerInventory::UnequipSlot(PlayerState& p, int slot, const ItemDatabase& items) {
+    if (!IsEquippedSlot(p, slot, items)) return;
+
+    int8_t id = static_cast<int8_t>(std::abs(p.inventoryItemIds[static_cast<size_t>(slot)]));
     p.inventoryItemIds[static_cast<size_t>(slot)] = id;
     for (int i = 0; i < 7; i++) {
         if (p.equippedItems[static_cast<size_t>(i)] == id) {
