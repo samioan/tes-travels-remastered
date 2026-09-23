@@ -84,12 +84,16 @@ target_include_directories(stormhold_monster PUBLIC src)
 target_link_libraries(stormhold_monster PUBLIC stormhold_assets stormhold_world)
 
 # M16: the live per-level Monster/chest/dropped-item registry
-# (WorldRegistry) plus Dungeon.java's own registry-management methods --
-# see docs/PORT_ROADMAP.md and src/dungeon/. Depends on stormhold_monster/
-# stormhold_world only -- stormhold_player/stormhold_combat depend on THIS
-# module (M17), never the other way, so there's no cycle.
+# (WorldRegistry) plus Dungeon.java's own registry-management methods.
+# M49: world_save.cpp (ESGame.writeAllLevelRegistries()/
+# readPerLevelRecords(), the WorldRegistry half of the real save format)
+# -- see docs/PORT_ROADMAP.md and src/dungeon/. Depends on
+# stormhold_monster/stormhold_world only -- stormhold_player/
+# stormhold_combat depend on THIS module (M17), never the other way, so
+# there's no cycle.
 add_library(stormhold_dungeon STATIC
   src/dungeon/dungeon_runtime.cpp
+  src/dungeon/world_save.cpp
 )
 target_include_directories(stormhold_dungeon PUBLIC src)
 target_link_libraries(stormhold_dungeon PUBLIC stormhold_monster stormhold_world)
@@ -419,5 +423,9 @@ target_link_libraries(death_sequence_smoke PRIVATE stormhold_player)
 # M48 milestone smoke test -- see src/tests/m48_movement_messages_smoke.cpp.
 add_executable(movement_messages_smoke src/tests/m48_movement_messages_smoke.cpp)
 target_link_libraries(movement_messages_smoke PRIVATE stormhold_player)
+
+# M49 milestone smoke test -- see src/tests/m49_world_save_smoke.cpp.
+add_executable(world_save_smoke src/tests/m49_world_save_smoke.cpp)
+target_link_libraries(world_save_smoke PRIVATE stormhold_dungeon)
 
 endif()  # NOT STORMHOLD_DIST

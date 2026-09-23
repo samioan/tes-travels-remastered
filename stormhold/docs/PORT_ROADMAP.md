@@ -3168,6 +3168,71 @@ read-through.
       Manually launched the real windowed exe and confirmed it starts and
       stays up.
 
+- [x] **M49 -- `WorldRegistry` save/load format** (this session). New
+      `dungeon/world_save.h`/`.cpp` (`stormhold_dungeon`, alongside
+      `dungeon_runtime.h`): `WorldSave::ToBytes`/`FromBytes`
+      (`ESGame.writeAllLevelRegistries()`/`readPerLevelRecords()`), the
+      `monsters[]`/`chests[]`/`droppedItems[]` half of the real
+      "RecordStore-based save format" (`ESGame.java`'s own header
+      comment) -- the piece M47/M48's own "what's next" note flagged as
+      still missing after M20's `PlayerSave`. `MonsterRuntime::ReadFrom`/
+      `WriteTo` and `BinaryReader`/`BinaryWriter` (both already added at
+      M20) do all the real per-record work; this milestone is the
+      "count, then N records, per level" framing loop around them.
+
+      **Deliberately NOT ported here, two confirmed, separate gaps:**
+      `writeMasterLists()`/`readMasterLists()` (`Item.nextSpawnId`/
+      `Monster.nextSpawnIdCounter` plus most of `Shop`'s own static
+      per-shop quest-economy state) -- blocked on the not-yet-built
+      Shop-economy C++ model, since most of what it writes
+      (`questRewardClaimable`/`interactionCount`/`rewardsGiven`/
+      `questState1`/`questState2`/`benecaPoints`/`helgaPoints`) has no
+      live port-side state to read from at all yet. And the
+      RecordStore-equivalent file I/O itself (multi-save-slot naming/
+      discovery/deletion) -- this port needs its own plain-file save
+      mechanism, not a MIDP `RecordStore`, a later milestone's job
+      together with wiring `main.cpp`'s Main Menu "Continue Game" item
+      (still always takes the no-saved-game branch, M40) to any of this.
+
+      **A real, confirmed dead-code finding, NOT mechanically re-ported:**
+      `ESGame.java` declares TWO near-identical methods for reading this
+      data -- `readPerLevelRecords` (confirmed, by reading
+      `loadGameState()` directly, the ACTUAL one it calls) and
+      `readAllLevelRegistries` (grepped: declared, with no caller
+      anywhere in the whole file -- `loadGameState()`'s own header
+      comment even NAMES `readAllLevelRegistries` as what it calls, but
+      its real body calls `readPerLevelRecords` instead, a stale/
+      copy-pasted comment, not a second real call site). `FromBytes`
+      ports `readPerLevelRecords`'s real logic only -- hand-duplicating
+      an entire dead METHOD with zero callers would just be dead weight,
+      a real difference from this port's usual "preserve a dead BRANCH
+      inside a live method" treatment (M40/M46/M47/M48's own findings).
+
+      **NOT modeled: tile-flag resync**, matching the original exactly --
+      neither `writeAllLevelRegistries` nor `readPerLevelRecords` touches
+      `Dungeon`'s own tile bits at all. The real load path's own next
+      step, `Dungeon.refreshTileFlagsFromRegistries()`, is ALREADY ported
+      (`DungeonRuntime::RefreshTileFlags`, M16 -- its own doc comment
+      already names "after a save/load" as its intended use) -- the
+      caller is expected to run that, once per level, right after
+      `FromBytes`, same "caller supplies/owns world state" pattern this
+      whole port already uses throughout.
+
+      Not wired into `main.cpp` -- no file I/O layer exists yet to call
+      `ToBytes`/`FromBytes` from (see the gaps above).
+
+      Verified with a new `world_save_smoke.exe`: a fully empty
+      `WorldRegistry` round-trips to all-empty; the hub (index 0) is
+      proven to be genuinely SKIPPED by the format for monsters/chests
+      but INCLUDED for dropped items (by manually stuffing a record into
+      index 0 and confirming which ones survive the round trip, not just
+      asserting the loop bounds); and real spawned-monster/chest/
+      dropped-item data (including a negative scratch byte, a real
+      64-bit timestamp, and negative dropped-item record bytes) round-
+      trips byte-exact, with every untouched level confirmed to stay
+      empty. 45 smoke tests now pass in total; full clean rebuild stayed
+      at zero `/W4` warnings.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but NOT wired into the C++
@@ -3177,9 +3242,11 @@ port -- doing so needs a real `Shop`-economy C++ model first
 `Shop.dialogue()`'s own large per-action switch), which would also
 finally unblock the NPC-talk half of `resolveInteractInput()` and the
 NPC-nameplate half of `refreshNpcNameplateAndWardenLeave()` (M43's own
-"what's next" note) in the live port. That's a substantially bigger lift
-than camp/rest or chest interaction were, likely worth its own multi-part
-treatment rather than one milestone.
+"what's next" note) in the live port, AND `writeMasterLists()`/
+`readMasterLists()`'s own missing half of the save format (M49's own
+"what's next" note). That's a substantially bigger lift than camp/rest or
+chest interaction were, likely worth its own multi-part treatment rather
+than one milestone.
 
 Beyond that, M41's dispatch web now has only ONE branch left unwired:
 opening the inventory screen (`openInventory` -- needs a real inventory UI
@@ -3189,11 +3256,11 @@ to be too). `paintUnknown_b()` (the one remaining unported-PIXEL paint
 method, the NPC/shop-portrait and Warden-compass icon painter -- gated on
 `unconfirmed_W`/`Player.questShopAtPendingTile()`, itself downstream of
 the Shop-economy gap above) is the last item in that bucket. Beyond that:
-a real save/load system (`PlayerSave` exists, M20, but there's no
-`WorldRegistry`/master-list save format, and `main.cpp`'s own Main Menu
-"Continue Game" item always takes the no-saved-game branch until one
-exists, M40); Help topics (the Java transcription itself stops at topic
-index 4). Following dawnstar's own later milestones roughly but expecting
-further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48
+the RecordStore-equivalent file I/O layer + multi-save-slot management +
+Main Menu "Continue Game" wiring (M49's own "what's next" note -- the
+DATA format itself, for the WorldRegistry half anyway, is now ready for
+it); Help topics (the Java transcription itself stops at topic index 4).
+Following dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49
 already found.
