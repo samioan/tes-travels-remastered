@@ -47,4 +47,31 @@ void PlayerLeveling::ApplyLevelUpAttributeChoices(PlayerState& p, int firstChoic
     ConsumeLevelExp(p, shop);
 }
 
+std::vector<std::string> PlayerLeveling::SkillSummaryList(const PlayerState& p, const CharacterData& charData) {
+    std::vector<std::string> out;
+    for (int i = 0; i < 14; i++) {
+        if (p.skills[static_cast<size_t>(i)][0] <= 0) continue;
+        out.push_back(charData.skillNames[static_cast<size_t>(i)] + ": " +
+                      std::to_string(p.skills[static_cast<size_t>(i)][0]));
+    }
+    return out;
+}
+
+int PlayerLeveling::NthLearnedSkillIndex(const PlayerState& p, int n) {
+    int seen = 0;
+    for (int i = 0; i < 14; i++) {
+        if (p.skills[static_cast<size_t>(i)][0] > 0) {
+            if (seen == n) return i;
+            seen++;
+        }
+    }
+    return -1;
+}
+
+std::string PlayerLeveling::SkillTooltip(const PlayerState& p, const CharacterData& charData, int skillIndex) {
+    return charData.skillNames[static_cast<size_t>(skillIndex)] + '\n' +
+           "Rank: " + std::to_string(p.skills[static_cast<size_t>(skillIndex)][0]) + '\n' +
+           "Exp: " + std::to_string(p.skills[static_cast<size_t>(skillIndex)][2]) + "/10";
+}
+
 }  // namespace stormhold

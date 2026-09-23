@@ -4121,6 +4121,132 @@ starts and stays up.
       every state-mutating code path IS exercised against real asset data
       by the smoke test above, just not the live rendering/input itself.
 
+- [x] **M63 -- the in-game pause/Options menu, wired live (`optionsUI`:
+      Stats/Inventory/Skills/Spells/Save Game/Load Game), plus a real Save
+      trigger** (this session). New `ui/pause_menu.h`/`.cpp`
+      (`PauseMenuState`/`PauseMenu`, `stormhold_render`) is a multi-screen
+      state machine covering `ESGame.java`'s `optionsUI` (screenGroup 31,
+      the 8-item list) and everything it opens onto: `newStatsUI`
+      (screenGroup 32, via a new `PlayerCombatStats::CharacterSheetText`),
+      `newSkillsListUI`/`newSkillInfoUI` (screenGroups 35/36, via two new
+      `PlayerLeveling` methods, `SkillSummaryList`/`NthLearnedSkillIndex`/
+      `SkillTooltip`), and `newSpellsListUI`/`newSpellInfoUI` (screenGroups
+      37/38, via three new `SpellCasting` methods --
+      `KnownSpellsSummary`/`SpellTooltip`, plus `NthKnownSpellId` itself
+      PROMOTED from a file-local helper inside `combat/spell_casting.cpp`
+      to a public static method, since `ui/pause_menu.cpp` needed it too
+      and it already carries real game-rule content worth a single source
+      of truth, unlike the trivial palette/WordWrap helpers this port's UI
+      files otherwise duplicate on purpose). "Inventory" (item 1) hands
+      off directly to the already-live M62 `InventoryUi` rather than
+      duplicating it. "Save Game"/"Load Game" (items 4/5) finally give
+      M50's `GameSave` its first live call site: both run synchronously,
+      no progress screen, the same simplification `player/game_save.h`'s
+      own class comment already committed to; a successful Load reports a
+      new `PauseMenuAction::GameLoaded` so `main.cpp` can run the exact
+      same tile-flag-refresh + `RefreshCorridorView` fixup the "Continue
+      Game" main-menu path already runs, since `PauseMenu` itself has no
+      access to `levels`/`levelLookup` (same "caller supplies/owns state"
+      pattern as everywhere else in this port). Wired on a new 'P' hotkey
+      stand-in (same pragmatic class as 'C'/'F'/'I'); Up/Down/Enter/Escape,
+      all edge-triggered outside the `shouldRunTick` gate, exactly matching
+      M62's own inventory-key wiring shape; `shouldRunTick` now also
+      excludes `pauseMenu.active`.
+
+      **The big finding this milestone turned up, bigger than any single
+      screen's own content, and a second deliberate, clearly-labeled
+      port-only exception in the same category M62's own `openInventory`
+      softlock call established:** the real in-game pause menu is not
+      merely under-wired -- it is **completely unreachable** in the
+      original game. `ESGame` declares `cmdMenu` (a `Command("Menu", ...)`)
+      clearly meant to open it, but grep confirms that `Command` is never
+      once passed to `addCommand` anywhere in `ESGame.java` OR
+      `GameCanvas.java` (`GameCanvas` never calls `addCommand` at all), and
+      `keyPressed()`'s own numeral-hotkey dispatch has no branch for it
+      either. The ONLY confirmed code path that ever calls
+      `showScreen(optionsUI)` is the Stats screen's OWN "Ok" button
+      (screenGroup 32) -- which requires already being on Stats, which is
+      only ever reached FROM the Options menu. A closed loop with no real
+      entry point: Stats/Skills/Spells/Save Game/Load Game are all
+      confirmed unreachable during real gameplay in the shipped original,
+      almost certainly a missing one-line `gameCanvas.addCommand(cmdMenu)`
+      call, not a deliberately cut feature (the screens are all fully
+      built and functional, and `GameSave` has existed since M50 with
+      nothing calling it). Rather than reproduce total unreachability --
+      which would make this entire milestone permanently dead code,
+      including the only real Save trigger this port will ever have -- the
+      new 'P' hotkey opens it directly, following the same "faithful
+      reproduction would require machinery this port doesn't have" logic
+      M62's own exception used, even though this is a different flavor of
+      it: M62 declined to reproduce a real, harmful bug; here there is no
+      real behavior to reproduce at all, so making it reachable is closer
+      to restoring a one-line-missing wire-up than overriding a confirmed
+      design -- still flagged explicitly either way, per this project's own
+      "conscious decision point, not a silent default" discipline.
+
+      **A second, real, CONFIRMED bug, preserved exactly:** `optionsItems`
+      (the menu's own 8-entry label array, ending in "Quit Game" at index
+      7) is one short of screenGroup 31's own `switch (choice)`, which
+      has a 9th case (`case 8`, a leftover debug-form opener) --  meaning
+      "Quit Game" itself actually runs `case 7`'s body, which shows
+      `newCreditsUI(...)`, the SAME developer-credits screen the main
+      menu's own "Credits" item uses, built from `ESGame.creditsText()` (a
+      fuller dev-team/legal string than `ui/menu_flow.cpp`'s own
+      `kCreditsText`, which comes from a different real source,
+      `UIScreen.creditsLines`). Selecting "Quit Game" from the pause menu
+      **never quits the game** -- it shows the credits screen instead
+      (`nextScreen = optionsUI`, matching `newCreditsUI`'s `backTarget`
+      parameter always being whatever screen was active when it's called),
+      and the real "quit"/debug case (index 8) can never be reached at all
+      with only 8 real menu items. `PauseMenu` reproduces this exactly --
+      "Quit Game" shows `PauseScreen::Credits` (with `ESGame.creditsText()`'s
+      own real text, including its own "Vir2L Studos" typo, preserved
+      verbatim, not corrected) -- rather than "fixed" to actually quit.
+
+      **Deliberately NOT wired this milestone, a clean, explicitly-flagged
+      boundary (same shape as M60's own un-built `npcChoicesUI` follow-up
+      menu):** "Help" (item 6) is a confirmed no-op. `helpTopicTitles`/
+      `helpTopicBodies` hold 12 topic slots each, but the Java
+      TRANSCRIPTION itself only fills in bodies for topics 0-4 -- a real
+      gap in this project's own decompilation work (already flagged in the
+      prior "what's next" section), not something this port could resolve
+      either way. Also mapped to a port-only fallback, same "machinery
+      doesn't exist yet" grounds: the real `noSavedGameUI` (Load Game, no
+      save file) targets `mainMenuUI` and `saveErrorUI` (a save I/O
+      failure) sets no `nextScreen` at all (a likely real, never-confirmed
+      softlock) -- this port has no "return from live gameplay to the main
+      menu" transition at all (`ui/menu_flow.h`'s state machine only runs
+      BEFORE `gameStarted`), so both port-only map back to Options instead.
+
+      Verified by a new `pause_menu_smoke.exe`: `Open`/`Cancel` from
+      Options (Cancel closes the whole menu back to gameplay, matching the
+      real screenGroup 31 `cmdBack` branch); `MoveSelection` clamping on
+      the 8-item Options list and no-op on inactive/message-only screens;
+      Stats round-tripping through `CharacterSheetText` and back; "Inventory"
+      correctly closing `PauseMenu` and opening `InventoryUi`; Skills ->
+      SkillInfo resolving the same index `NthLearnedSkillIndex` gives, with
+      a real non-empty tooltip, and Cancel/Confirm both returning the right
+      way; Spells -> SpellInfo -> "Ready Spell" actually setting
+      `selectedSpellId` (checked via the "R: " prefix appearing in
+      `KnownSpellsSummary` afterward) with the right 0-based/1-based
+      conversion; Help staying a no-op on Options; "Quit Game" showing
+      Credits and both Confirm/Cancel returning to Options from there; a
+      full Save-then-Load round trip against a real temp file (`GameSave::
+      Exists`/`Save`/`Load` all exercised for real, including the
+      NoSavedGame path when no file exists yet, and confirming a successful
+      Load reports `PauseMenuAction::GameLoaded`); and `Render` running
+      every one of the 9 `PauseScreen` values at least once without
+      crashing against real asset data. 53 smoke tests pass; full clean
+      rebuild stayed at zero `/W4` warnings. Manually launched the real
+      windowed exe and confirmed it starts and stays up. **Not
+      independently re-verified this session** (same disclosed gap M60's
+      and M62's own entries already have): actually pressing 'P' in a live
+      play session and navigating Stats/Skills/Spells/Save/Load via real
+      keyboard input wasn't attempted; every state-mutating code path IS
+      exercised against real asset data by the smoke test above, including
+      a real file-system Save/Load round trip, just not the live
+      rendering/input itself.
+
 ## What's next
 
 `talkToNpc()`'s own "greeting" action is wired end to end as of M60, but
@@ -4145,43 +4271,55 @@ and the next), just worth keeping in mind for whoever eventually adds
 one.
 
 Beyond that, M41's dispatch web is now FULLY wired -- M62 closed the last
-branch (`openInventory`). `paintUnknown_b()` (the one remaining unported-PIXEL paint
-method, the NPC/shop-portrait and Warden-compass icon painter -- gated on
-`unconfirmed_W`/`Player.questShopAtPendingTile()`, itself downstream of
-the Shop-economy gap above, AND itself flagged LOW CONFIDENCE by the
-original transcription pass -- `questShopAtPendingTile()`'s own field
-mapping, `stateByteAb`/pendingTileX/Y, is unconfirmed, not just
-unported) is the last item in that bucket. The in-game pause/stats
-screen (Stats/Inventory/Skills/Spells/Save/Load/Help) belongs in this
-same bucket too -- M50's own `GameSave` gives it a real Save/Load
-backend to call into once it exists, but building the screen itself (and
-therefore a real Save TRIGGER -- "Continue Game" is wired and tested,
-M50, but still practically unreachable today with nothing yet writing
-`savegame.dat`) is its own separate lift, same size class `openInventory`
-(M62) just was. Whoever builds it should also revisit M62's own
-`ui/inventory_ui.h` class comment -- the real `openInventory()`'s
-"populates a cache the hotkey path doesn't" softlock bug it deliberately
-didn't reproduce becomes reproducible for the first time once a real
-`inventoryUI` cache field (i.e. this pause screen) exists to be skipped.
-Beyond that: Help topics (the Java transcription itself stops at topic
-index 4). Following dawnstar's own later milestones roughly but expecting
-further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62
+branch (`openInventory`), and M63 built and wired the in-game pause/
+Options menu (Stats/Inventory/Skills/Spells/Save Game/Load Game) plus a
+real Save/Load trigger against M50's `GameSave`. `paintUnknown_b()` (the
+one remaining unported-PIXEL paint method, the NPC/shop-portrait and
+Warden-compass icon painter -- gated on `unconfirmed_W`/`Player.
+questShopAtPendingTile()`, itself downstream of the Shop-economy gap
+above, AND itself flagged LOW CONFIDENCE by the original transcription
+pass -- `questShopAtPendingTile()`'s own field mapping,
+`stateByteAb`/pendingTileX/Y, is unconfirmed, not just unported) is now
+the only item left in that bucket. **Note for whoever eventually revisits
+M62's own `ui/inventory_ui.h` class comment:** the real `openInventory()`
+softlock it deliberately didn't reproduce is STILL not reproduced now
+that the pause menu exists -- `PauseMenu`'s own "Inventory" entry
+(`ui/pause_menu.cpp`) calls `InventoryUi::Open` directly too, the same
+"always build fresh" choice M62 made, rather than introducing an
+`inventoryUI`-style cache field the hotkey path could skip. This port
+simply has no equivalent construct at all, by design, not by oversight --
+so that particular real bug remains permanently out of reach here, unlike
+the M52 Continue-Game-softlock note below (which IS newly reachable as of
+M63's real Save/Load wiring). "Help" (pause-menu item 6) is confirmed
+wired-but-inert -- see M63's own entry for why (the Java transcription
+itself stops short of full topic text past index 4) -- and remains the
+next thing to finish once that transcription gap is closed. Following
+dawnstar's own later milestones roughly but expecting further
+Stormhold-specific divergences the way
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63
 already found.
 
-**Heads up for whoever eventually wires a real Save trigger (M52's own
-finding):** now that `savegame.dat` actually gets written once the
-in-game pause screen exists, the confirmed real softlock M52 documented
-(`world/game_advancement.h`'s own class comment) becomes reachable for
-the first time in THIS PORT specifically -- a Continue Game resumed past
-zone 0 leaves the player unable to move at all, faithfully matching the
-original engine's own confirmed bug. This is a deliberate "preserve the
-real bug" choice already made (see M52's own entry above), not an
-oversight -- but it's worth a conscious decision point, not a silent
-default, whenever a real Save UI makes it player-reachable: keep it
-faithful (do nothing further, the current default), or make a clearly-
-labeled, deliberate port-only exception -- M62's own `openInventory`
-softlock call is this project's first precedent for that second path
-(see its own entry above), though every OTHER "not modeled"/"not fixed"
-note elsewhere in this doc still stays faithful -- and call it out
-explicitly as such if that's ever the call.
+**Resolved by M63 (was: "heads up for whoever eventually wires a real Save
+trigger", M52's own finding):** `savegame.dat` now actually gets written,
+via the in-game pause menu's own "Save Game"/"Load Game" items
+(`ui/pause_menu.cpp`), so the confirmed real softlock M52 documented
+(`world/game_advancement.h`'s own class comment) is reachable for the
+first time in THIS PORT specifically -- a Continue Game (main menu) OR
+Load Game (pause menu, same `GameSave::Load` underneath) resumed past
+zone 0 leaves the player **completely unable to move, not even in place**
+(M52's own words), faithfully matching the original engine's own confirmed
+bug. **The conscious decision this section already called for was made,
+and the answer is: stay faithful, no exception.** This is a narrower call
+than it first looks: M52's own entry already rejected building the fix (a
+load-time zone catch-up into `GameSave::Load`) on its OWN terms, before
+Load had any real trigger at all -- reasoning it would make this port
+STRICTLY MORE correct than the shipped original ever was, "the same
+'behavioral gain, not reimplementation' trap M51's own note already warns
+future work away from." M63 doesn't reopen that decision; it just makes
+the already-accepted consequence reachable for the first time. That's a
+different situation from M62's own `openInventory` exception, which
+existed BECAUSE the necessary machinery (a pause menu) didn't exist yet --
+here the machinery (a `GameAdvancement::OpenUpTo`-equivalent) was always a
+choice, deliberately declined on principle, not blocked on anything M63
+just built. Every OTHER "not modeled"/"not fixed" note elsewhere in this
+doc likewise stays faithful, unaffected by this resolution.

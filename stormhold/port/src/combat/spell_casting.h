@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "assets/character_data.h"
 #include "assets/item_database.h"
@@ -190,6 +192,41 @@ public:
     // rather than assumed dead, matching resolveSpellCycleInput()'s own
     // header comment). Always clears `cycleRequested`.
     static int ResolveSpellCycleInput(PlayerState& player, bool& cycleRequested, const SpellDatabase& spells);
+
+    // M63: Player.nthKnownSpellId(n) -- the n-th known spell (0-based scan
+    // over knownSpellsMask), as a 0-based index into `spells.all`. **A real
+    // dead local, preserved as behavior not as code:** the original's own
+    // body computes `spellId = i + 1` inside the loop but only ever
+    // returns the loop index `i` itself -- that local is never read.
+    // Reproducing the dead computation would trip this port's own /W4
+    // unused-value bar for no observable benefit, so only the returned
+    // value's real behavior (0-based index) is kept, same treatment
+    // GameCanvas.java's own tickPlayerAction header comment already
+    // documents for its analogous dead `|| this.v` term. Was a file-local
+    // helper inside spell_casting.cpp until M63 needed it from
+    // ui/pause_menu.cpp too; promoted here rather than duplicated, since
+    // (unlike the small palette/WordWrap helpers UI files duplicate) this
+    // one already has real game-rule content worth a single source of
+    // truth. Returns -1 if `n` is out of range (fewer than n+1 spells
+    // known), matching the original's own fall-through return.
+    static int NthKnownSpellId(const PlayerState& p, const SpellDatabase& spells, int n);
+
+    // Player.knownSpellsSummary(): every known spell's name, "R: "
+    // prefixed for whichever one is currently `p.selectedSpellId`.
+    static std::vector<std::string> KnownSpellsSummary(const PlayerState& p, const SpellDatabase& spells);
+
+    // Player.spellTooltip(spellId): **NAMING WARNING, confirmed by reading
+    // the whole method body** -- despite the parameter's name, this treats
+    // it as a 0-based index straight into `spells.all` (`Spell.all[i]`),
+    // NOT a real 1-based spell id (`SpellDatabase::ById` would be the
+    // 1-based accessor). This is self-consistent with `NthKnownSpellId`
+    // above, whose OWN return value (a 0-based index, per its own dead-
+    // local finding) is exactly what the one real call site
+    // (newSpellInfoUI) feeds straight into this parameter -- so despite
+    // the pair of confusing names, there is no real bug here, just two
+    // methods that agree on "0-based index" while each looking, in
+    // isolation, like it should mean "1-based id".
+    static std::string SpellTooltip(const SpellDatabase& spells, const CharacterData& charData, int spellIndex0Based);
 };
 
 }  // namespace stormhold

@@ -241,6 +241,7 @@
 #include "ui/inventory_ui.h"
 #include "ui/menu_flow.h"
 #include "ui/npc_dialogue.h"
+#include "ui/pause_menu.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
 #include "world/game_advancement.h"
@@ -489,6 +490,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // shows a screen that's only ever populated by the not-yet-built
     // pause menu" bug this deliberately does NOT reproduce.
     stormhold::InventoryUiState inventoryUi;
+    // M63: GameCanvas's own optionsUI pause menu -- see ui/pause_menu.h's
+    // own class comment for the confirmed "completely unreachable in the
+    // original" finding this deliberately does NOT reproduce, and for the
+    // separate confirmed "Quit Game" credits-screen bug this DOES.
+    stormhold::PauseMenuState pauseMenu;
     // M38: GameCanvas.targetMonster -- refreshed every tick by
     // PlayerMovement::MonsterInFront below.
     std::optional<stormhold::MonsterState> targetMonster;
@@ -635,6 +641,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // spellcast/spellcycle, not a new deviation this milestone
             // introduces.
             bool inventoryKeyEdge = KeyEdge('I');
+            // M63: see the shouldRunTick-gated dispatch below for why this
+            // is checked there rather than immediately here.
+            bool pauseKeyEdge = KeyEdge('P');
             if (GetAsyncKeyState(VK_SPACE) & 0x8000) attackRequested = true;
             // M46: real key codes ('3'/'5'), not stand-ins -- see
             // spellCastRequested/spellCycleRequested's own comment above.
@@ -673,6 +682,33 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                                      currentLevelMutable, world, combatRng);
                 }
                 if (KeyEdge(VK_ESCAPE)) stormhold::InventoryUi::Cancel(inventoryUi);
+            }
+
+            // M63: while the pause menu is open, Up/Down/Enter/Escape drive
+            // it exactly the way the inventory screen's own block above
+            // does (same edge-triggered convention). A successful "Load
+            // Game" runs the SAME post-load fixup the "Continue Game"
+            // main-menu path runs above (`if (!gameStarted)` block) --
+            // refresh every level's tile flags, then RefreshCorridorView --
+            // since PauseMenu itself has no access to `levels`/
+            // `levelLookup` (see ui/pause_menu.h's own PauseMenuAction
+            // comment).
+            if (pauseMenu.active) {
+                if (KeyEdge(VK_UP)) stormhold::PauseMenu::MoveSelection(pauseMenu, -1, player, spells);
+                if (KeyEdge(VK_DOWN)) stormhold::PauseMenu::MoveSelection(pauseMenu, 1, player, spells);
+                if (KeyEdge(VK_RETURN)) {
+                    stormhold::PauseMenuAction action = stormhold::PauseMenu::Confirm(
+                        pauseMenu, player, spells, inventoryUi, savePath, levels.size(), world, shop, warden);
+                    if (action == stormhold::PauseMenuAction::GameLoaded) {
+                        for (stormhold::GeneratedLevel& level : levels) {
+                            ClearTransientTileFlags(level);
+                            stormhold::DungeonRuntime::RefreshTileFlags(level, world);
+                        }
+                        stormhold::PlayerMovement::RefreshCorridorView(player, levelLookup(player.currentLevel),
+                                                                        levelLookup);
+                    }
+                }
+                if (KeyEdge(VK_ESCAPE)) stormhold::PauseMenu::Cancel(pauseMenu);
             }
 
             // M42: GameCanvas.tickPlayerAction()'s own unconfirmed_I
@@ -734,7 +770,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // different UIScreen is the active displayable).
             bool shouldRunTick = campResult != stormhold::CampTickResult::StillWaiting &&
                                   deathResult != stormhold::DeathTickResult::Waiting && !npcDialogue.active &&
-                                  !inventoryUi.active;
+                                  !inventoryUi.active && !pauseMenu.active;
             if (shouldRunTick) {
                 // M62: GameCanvas.openInventory() -- see ui/inventory_ui.h's
                 // own class comment for the real bug (openInventory shows a
@@ -743,6 +779,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // freshly-built item list instead.
                 if (inventoryKeyEdge) {
                     stormhold::InventoryUi::Open(inventoryUi);
+                }
+
+                // M63: GameCanvas's own optionsUI -- see ui/pause_menu.h's
+                // own class comment for the confirmed "the real Command
+                // that would open this is declared but never wired to any
+                // Displayable" finding; 'P' is a new pragmatic stand-in
+                // key, same class as 'C'/'F'/'I' above.
+                if (pauseKeyEdge) {
+                    stormhold::PauseMenu::Open(pauseMenu);
                 }
 
                 bool moveKeyPressed = up || down || left || right;
@@ -1060,6 +1105,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // `inventoryUI`/`inventoryActionUI` taking over
                 // `Display.setCurrent()` in the original.
                 stormhold::InventoryUi::Render(backbuffer, inventoryUi, player, items, spells, charData);
+            } else if (pauseMenu.active) {
+                // M63: fully replaces the normal game view, matching
+                // `optionsUI` and everything it opens onto taking over
+                // `Display.setCurrent()` in the original.
+                stormhold::PauseMenu::Render(backbuffer, pauseMenu, player, charData, spells);
             } else {
                 stormhold::GameRenderer::RenderCorridorView(
                     backbuffer, corridorAssets, player.corridorView,

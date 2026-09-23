@@ -344,4 +344,37 @@ void PlayerCombatStats::TickFatigueRegen(PlayerState& p, int64_t deltaMs) {
     }
 }
 
+std::string PlayerCombatStats::CharacterSheetText(const PlayerState& p, const CharacterData& charData) {
+    // Player.java's own ailmentNames -- a plain string-literal constant,
+    // not loaded from any asset file (see this method's own header
+    // comment).
+    static constexpr const char* kAilmentNames[8] = {"Stone Blood",    "Delusions", "Blind",   "Vampirism",
+                                                       "Mana Burn",     "Grievous Harm", "Terrified", "Haunted"};
+
+    std::string out = p.name + '\n';
+    out += charData.classNames[static_cast<size_t>(p.classIndex)] + '\n';
+    out += "Level " + std::to_string(p.coreStats[0]) + " (" + std::to_string(p.coreStats[1]) + "/10)\n";
+    out += "Health: " + std::to_string(EffectiveStat(p, charData, 2)) + '/' + std::to_string(p.coreStats[3]) + '\n';
+    out += "Magic: " + std::to_string(EffectiveStat(p, charData, 4)) + '/' + std::to_string(p.coreStats[5]) + '\n';
+    out += "Fatigue: " + std::to_string(EffectiveStat(p, charData, 6)) + '/' + std::to_string(p.coreStats[7]) + "\n\n";
+
+    out += "Status ailments: ";
+    int shown = 0;
+    for (int i = 1; i <= 8; i++) {
+        if (HasAilment(p, i)) {
+            out += '\n';
+            out += kAilmentNames[i - 1];
+            shown++;
+        }
+    }
+    if (shown == 0) out += "\nNone";
+
+    out += "\n\nGift points found: " + std::to_string(p.giftPointsFound) + "\n\nAttributes:\n";
+    for (int i = 0; i < 8; i++) {
+        int a = 2 * i;
+        out += charData.attributeNames[static_cast<size_t>(a)] + ": " + std::to_string(p.attributes[static_cast<size_t>(a)]) + '\n';
+    }
+    return out;
+}
+
 }  // namespace stormhold

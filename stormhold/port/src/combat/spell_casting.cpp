@@ -10,30 +10,6 @@
 
 namespace stormhold {
 
-namespace {
-
-// Player.nthKnownSpellId(n): the original's own body computes a local
-// `spellId = i + 1` inside the loop but never returns it -- only `i`
-// (0-based) is ever returned, confirmed by reading the whole method
-// directly. A genuine dead local in the original, elided here rather than
-// reproduced literally (an unused local would trip this port's own /W4
-// warnings bar) -- same "write out the equivalent behavior, don't
-// mechanically reproduce a provably dead expression" treatment
-// GameCanvas.java's own tickPlayerAction header comment documents for its
-// analogous dead `|| this.v` tautology term.
-int NthKnownSpellId(const PlayerState& p, const SpellDatabase& spells, int n) {
-    int seen = 0;
-    for (int i = 0; i < spells.Count(); i++) {
-        if ((p.knownSpellsMask & (1u << i)) != 0) {
-            if (seen == n) return i;
-            seen++;
-        }
-    }
-    return -1;
-}
-
-}  // namespace
-
 int SpellCasting::SpellSkillIndexFor(int spellId) {
     if (spellId <= 5) return 1;
     if (spellId <= 10) return 3;
@@ -391,6 +367,39 @@ int SpellCasting::ResolveSpellCycleInput(PlayerState& player, bool& cycleRequest
 
     cycleRequested = false;
     return spellId;
+}
+
+int SpellCasting::NthKnownSpellId(const PlayerState& p, const SpellDatabase& spells, int n) {
+    int seen = 0;
+    for (int i = 0; i < spells.Count(); i++) {
+        if ((p.knownSpellsMask & (1u << i)) != 0) {
+            if (seen == n) return i;
+            seen++;
+        }
+    }
+    return -1;
+}
+
+std::vector<std::string> SpellCasting::KnownSpellsSummary(const PlayerState& p, const SpellDatabase& spells) {
+    std::vector<std::string> out;
+    for (int i = 0; i < spells.Count(); i++) {
+        if ((p.knownSpellsMask & (1u << i)) == 0) continue;
+        int spellId = i + 1;
+        std::string name = spells.all[static_cast<size_t>(i)].name;
+        if (spellId == p.selectedSpellId) name = "R: " + name;
+        out.push_back(std::move(name));
+    }
+    return out;
+}
+
+std::string SpellCasting::SpellTooltip(const SpellDatabase& spells, const CharacterData& charData,
+                                        int spellIndex0Based) {
+    const Spell& spell = spells.all[static_cast<size_t>(spellIndex0Based)];
+    std::string out = spell.name + '\n';
+    out += charData.skillNames[static_cast<size_t>(spell.skillRequired)] + '\n';
+    out += "Cost: " + std::to_string(spell.magickaCost) + '\n';
+    out += spell.description;
+    return out;
 }
 
 }  // namespace stormhold

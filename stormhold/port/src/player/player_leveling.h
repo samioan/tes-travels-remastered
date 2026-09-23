@@ -87,6 +87,22 @@ public:
     // method or any other confirmed call site in Player.java.
     static void ApplyLevelUpAttributeChoices(PlayerState& p, int firstChoice, int secondChoice, int thirdChoice,
                                               ShopState& shop);
+
+    // M63: Player.skillSummaryList() -- "<name>: <rank>" for every one of
+    // the 14 skills whose rank (skills[i][0]) is > 0 (i.e. actually
+    // trained at least once), in skill-index order.
+    static std::vector<std::string> SkillSummaryList(const PlayerState& p, const CharacterData& charData);
+
+    // Player.nthLearnedSkillIndex(n): the n-th trained skill (rank > 0),
+    // as a 0-based skill index -- same "row in the summary list ->
+    // underlying index" role SpellCasting::NthKnownSpellId plays for
+    // spells. -1 if out of range.
+    static int NthLearnedSkillIndex(const PlayerState& p, int n);
+
+    // Player.skillTooltip(skillIndex): name/rank/exp-toward-next-rank,
+    // "<n>/10" (exp toward rank-up, matching TryRankUpSkills's own
+    // "exp >= 10" threshold).
+    static std::string SkillTooltip(const PlayerState& p, const CharacterData& charData, int skillIndex);
 };
 
 }  // namespace stormhold

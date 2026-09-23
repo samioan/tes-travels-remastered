@@ -156,7 +156,12 @@ target_link_libraries(stormhold_combat PUBLIC stormhold_player stormhold_monster
 # greeting screen (npcHelloUI's own simplified port-only counterpart) --
 # see src/render/. M62: ui/inventory_ui.cpp, the item-list + per-slot
 # action-menu screens (openInventory's own dispatch, the last branch of
-# M41's dispatch web).
+# M41's dispatch web). M63: ui/pause_menu.cpp, the in-game Options/pause
+# menu (Stats/Inventory/Skills/Spells/Save/Load) -- the first thing in this
+# library to need stormhold_combat (SpellCasting::KnownSpellsSummary/
+# NthKnownSpellId/SpellTooltip, the Spells screen's own view-model
+# builders), no cycle since stormhold_combat never depends back on
+# stormhold_render.
 add_library(stormhold_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
@@ -168,9 +173,10 @@ add_library(stormhold_render STATIC
   src/ui/inventory_ui.cpp
   src/ui/menu_flow.cpp
   src/ui/npc_dialogue.cpp
+  src/ui/pause_menu.cpp
 )
 target_include_directories(stormhold_render PUBLIC src)
-target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets stormhold_player)
+target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets stormhold_player stormhold_combat)
 
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
@@ -475,5 +481,9 @@ target_link_libraries(inventory_actions_smoke PRIVATE stormhold_player)
 # M62 milestone smoke test -- see src/tests/m62_inventory_ui_smoke.cpp.
 add_executable(inventory_ui_smoke src/tests/m62_inventory_ui_smoke.cpp)
 target_link_libraries(inventory_ui_smoke PRIVATE stormhold_render stormhold_player)
+
+# M63 milestone smoke test -- see src/tests/m63_pause_menu_smoke.cpp.
+add_executable(pause_menu_smoke src/tests/m63_pause_menu_smoke.cpp)
+target_link_libraries(pause_menu_smoke PRIVATE stormhold_render stormhold_player stormhold_combat)
 
 endif()  # NOT STORMHOLD_DIST

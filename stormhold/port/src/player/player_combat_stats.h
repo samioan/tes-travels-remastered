@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 
 #include "assets/character_data.h"
 #include "assets/item_database.h"
@@ -235,6 +236,15 @@ public:
     // model (same already-documented gap combat/spell_casting.h's own
     // ResolveSpellCastInput flags for its own read of the same field).
     static void TickFatigueRegen(PlayerState& p, int64_t deltaMs);
+
+    // M63: Player.characterSheetText() -- the pause menu's "Stats" screen
+    // body. Name/class/level/HP/Magicka/Fatigue (the latter 3 via
+    // EffectiveStat, matching every other status-bar-shaped read in this
+    // port), every currently-active ailment (HasAilment, 8 hardcoded
+    // names -- ailmentNames is a plain Player.java string constant, not
+    // asset data, so it's a local literal here rather than a CharacterData
+    // field), giftPointsFound, then all 8 base+bonus attribute pairs.
+    static std::string CharacterSheetText(const PlayerState& p, const CharacterData& charData);
 };
 
 }  // namespace stormhold
