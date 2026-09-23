@@ -220,4 +220,106 @@ std::optional<std::string> ShopInteraction::BenecaDialogue(PlayerState& player, 
     return std::nullopt;
 }
 
+std::optional<std::string> ShopInteraction::HelgaDialogue(PlayerState& player, ShopState& shop,
+                                                            const ShopDialogue& text, const ItemDatabase& items,
+                                                            int action, int extra) {
+    const std::vector<std::string>& lines = text.groups[5];
+
+    if (action == 1) {
+        if (shop.firstVisit[5]) {
+            shop.firstVisit[5] = false;
+            player.rumorRevealStep = 0;
+            if (shop.showSpecialGreeting) {
+                shop.showSpecialGreeting = false;
+                return lines[21] + "\n" + lines[0] + "\n" + lines[2];
+            }
+            return lines[0] + "\n" + lines[2];
+        }
+
+        int advancement = GameAdvancement::Level(player.giftPointsFound);
+        if (advancement > player.rumorRevealStep) {
+            player.rumorRevealStep++;
+            if (shop.showSpecialGreeting) {
+                shop.showSpecialGreeting = false;
+                return lines[21] + "\n" + lines[static_cast<size_t>(2 + player.rumorRevealStep)];
+            }
+            return lines[static_cast<size_t>(2 + player.rumorRevealStep)];
+        }
+
+        if (shop.showSpecialGreeting) {
+            shop.showSpecialGreeting = false;
+            return lines[21];
+        }
+        return std::nullopt;
+    }
+
+    if (action == 13) {
+        return lines[static_cast<size_t>(2 + player.rumorRevealStep)];
+    }
+
+    if (action == 4) {
+        int slot = extra;
+        int itemId = std::abs(static_cast<int>(player.inventoryItemIds[static_cast<size_t>(slot)]));
+        if (items.category[static_cast<size_t>(itemId - 1)] == 13) {
+            // Player.itemSubtypeAtSlot(slot): Item.column(2, itemId),
+            // inlined here -- see this method's own class-level comment.
+            int quality = items.subtype[static_cast<size_t>(itemId - 1)];
+            if (quality > 3) {
+                shop.helgaPoints = static_cast<int16_t>(shop.helgaPoints + 5);
+            } else {
+                shop.helgaPoints = static_cast<int16_t>(shop.helgaPoints + 3);
+            }
+            PlayerInventory::RemoveInventorySlot(player, slot, items);
+            return lines[11];
+        }
+        return lines[12];
+    }
+
+    if (action == 8) {
+        if (shop.helgaPoints < 7) return lines[1];
+        int slot = extra;
+        int itemId = std::abs(static_cast<int>(player.inventoryItemIds[static_cast<size_t>(slot)]));
+        // Both conditions must hold -- see this method's own class-level
+        // comment on why InitializeItemCharge's own internal gate alone
+        // isn't equivalent to the original's real double-check.
+        if (items.IsEquipmentCategory(itemId) && !PlayerInventory::IsItemCharged(player, slot)) {
+            shop.helgaPoints = static_cast<int16_t>(shop.helgaPoints - 7);
+            PlayerInventory::InitializeItemCharge(player, slot, items);
+            return lines[13];
+        }
+        return lines[14];
+    }
+
+    if (action == 9) {
+        if (shop.helgaPoints < 2) return lines[1];
+        if (player.safeCampingBuff) return lines[15];
+        player.safeCampingBuff = true;
+        shop.helgaPoints = static_cast<int16_t>(shop.helgaPoints - 2);
+        return lines[16];
+    }
+
+    if (action == 10) {
+        if (shop.helgaPoints < 1) return lines[1];
+        player.ailmentMask = 0;
+        shop.helgaPoints--;
+        return lines[17];
+    }
+
+    if (action == 11) {
+        if (shop.helgaPoints < 1) return lines[1];
+        if (!PlayerInventory::HasCampMark(player)) return lines[18];
+        shop.helgaPoints--;
+        PlayerInventory::WarpToCampMark(player);
+        return lines[19];
+    }
+
+    if (action == 12) {
+        player.coreStats[2] = player.coreStats[3];
+        player.coreStats[4] = player.coreStats[5];
+        return lines[20];
+    }
+
+    return std::nullopt;
+}
+
 }  // namespace stormhold

@@ -8,6 +8,7 @@
 #include "player/player_state.h"
 #include "util/java_random.h"
 #include "world/dungeon_generator.h"
+#include "world/game_advancement.h"
 #include "world/shop_state.h"
 
 namespace stormhold {
@@ -20,12 +21,12 @@ namespace stormhold {
 // M53/M54/M55 trio already used for ShopState itself):
 // - M56: `QuestShopDialogue`, shops 0-3 (the quest-turn-in shopkeepers:
 //   Arantamo/Celegil/Favela Dralor/Vander, `Shop::IsQuestShop`).
-// - M57 (this milestone): `BenecaDialogue`, shop 4.
-// Shops 5 (Helga)/6 (Varus) are each their own bespoke single-NPC branch,
-// sharing no pattern with shop 4 or each other (Shop.java's own header
-// comment already says so) -- still deliberately left for later
-// milestones. talkToNpc() can't be wired for real into the live port
-// until all of shops 4-6 exist too.
+// - M57: `BenecaDialogue`, shop 4.
+// - M58 (this milestone): `HelgaDialogue`, shop 5.
+// Shop 6 (Varus) is its own bespoke single-NPC branch, sharing no pattern
+// with any of the above (Shop.java's own header comment already says so)
+// -- still deliberately left for a later milestone. talkToNpc() can't be
+// wired for real into the live port until shop 6 exists too.
 //
 // Lives in stormhold_player, not alongside world/shop_state.h's own
 // `Shop` class (stormhold_world) -- this needs `PlayerState` directly,
@@ -92,6 +93,35 @@ public:
     static std::optional<std::string> BenecaDialogue(PlayerState& player, ShopState& shop, const ShopDialogue& text,
                                                        const ItemDatabase& items, int16_t& spawnIdCounter, int action,
                                                        int extra);
+
+    // Shop.dialogue(player, 5, action, extra) -- shop 5 (Helga) only.
+    // Returns std::nullopt wherever the original returns `null`. By far the
+    // busiest single-NPC branch in the original (8 distinct actions: greet/
+    // rumor-reveal, a repeat-rumor query, item-quality turn-in, item-charge
+    // init, a one-shot safe-camping buff, ailment cure, camp-mark warp, and
+    // a full HP/Magicka heal) -- no shared pattern with `BenecaDialogue` or
+    // `QuestShopDialogue` at all, confirmed by reading the whole branch
+    // directly, matching `Shop.java`'s own header comment that Helga is her
+    // own bespoke economy.
+    //
+    // **A real double-gate, easy to flatten into a single call by mistake:**
+    // action 8's item-charge branch checks `Item.isEquipmentCategory(itemId)
+    // && !player.isItemCharged(slot)` BEFORE calling `initializeItemCharge`
+    // -- `PlayerInventory::InitializeItemCharge` (M12) already re-checks the
+    // equipment-category half internally and would happily re-stamp an
+    // ALREADY-charged item's charge back to the same value 3, silently
+    // masking the "already charged" case if this method only checked
+    // `InitializeItemCharge`'s own return value instead of replicating both
+    // original conditions explicitly.
+    //
+    // `Player.itemSubtypeAtSlot(slot)` (action 4's own "quality tier" read)
+    // is a one-line `Item.column(2, itemId)` in the original -- inlined
+    // directly here as `items.subtype[itemId - 1]` rather than given its own
+    // wrapper method, matching how `QuestShopDialogue`/`BenecaDialogue`
+    // already read `items.category`/`items.questFlags` directly for
+    // equally one-line original reads.
+    static std::optional<std::string> HelgaDialogue(PlayerState& player, ShopState& shop, const ShopDialogue& text,
+                                                      const ItemDatabase& items, int action, int extra);
 };
 
 }  // namespace stormhold

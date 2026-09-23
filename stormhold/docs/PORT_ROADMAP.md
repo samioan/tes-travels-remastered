@@ -3721,12 +3721,79 @@ starts and stays up.
       at zero `/W4` warnings. Manually launched the real windowed exe and
       confirmed it starts and stays up.
 
+- [x] **M58 -- `ShopInteraction::HelgaDialogue`, shop 5** (this session).
+      Third slice of the `Shop.dialogue()` dispatcher (see M56's own entry
+      for the "one NPC-group at a time" plan) -- by far the busiest single
+      NPC branch in the original: greet/rumor-reveal (first-visit resets
+      `rumorRevealStep` to 0 and returns two concatenated lines; a
+      subsequent visit reveals the next rumor fragment once
+      `GameAdvancement::Level(giftPointsFound)`, M52, has advanced past
+      `rumorRevealStep`, else nothing new), a repeat-rumor query (action
+      13), a category-13 "quality" item turn-in (`itemSubtypeAtSlot` > 3
+      pays 5 points, else 3), item-charge initialization (action 8), a
+      one-shot safe-camping buff (action 9), an ailment cure (action 10),
+      a camp-mark warp (action 11), and a full HP/Magicka heal (action
+      12) -- 8 distinct actions, no shared pattern with `BenecaDialogue`
+      or `QuestShopDialogue` at all, confirmed by reading the whole branch
+      directly. `showSpecialGreeting` (`ShopState`, M53 -- "no assignment
+      site found in this file, producer lives elsewhere") gets its own
+      confirmed CONSUMER here for the first time: it prefixes the greet
+      branch's return value with `dialogue[5][21]` exactly once, in all
+      three of the greet branch's own sub-cases (first visit, a new rumor
+      reveal, and "nothing new to reveal"), then clears -- still no
+      confirmed producer anywhere in this port, same "consumer exists,
+      producer doesn't yet" situation `GeneratedLevel::visited`'s own M10
+      note already carried for a different field.
+
+      **A real double-gate, easy to flatten into a single call by
+      mistake, documented rather than silently simplified:** action 8's
+      item-charge branch checks `Item.isEquipmentCategory(itemId) &&
+      !player.isItemCharged(slot)` BEFORE calling `initializeItemCharge`
+      -- `PlayerInventory::InitializeItemCharge` (M12) already re-checks
+      the equipment-category half internally, and would happily re-stamp
+      an ALREADY-charged item's charge back to the same value (3) if this
+      method called it based on its own return value alone, silently
+      masking the "already charged" case (`dialogue[5][14]`) behind the
+      "success" case (`dialogue[5][13]`). `HelgaDialogue` replicates both
+      original conditions explicitly instead of trusting
+      `InitializeItemCharge`'s own internal gate to be sufficient.
+      `Player.itemSubtypeAtSlot(slot)` (action 4's own "quality tier"
+      read) is a one-line `Item.column(2, itemId)` in the original --
+      inlined directly as `items.subtype[itemId - 1]` rather than given
+      its own wrapper method, matching how `QuestShopDialogue`/
+      `BenecaDialogue` already read `items.category`/`items.questFlags`
+      directly for equally one-line original reads.
+
+      Verified by extending `shop_interaction_smoke.exe` (same executable
+      as M56/M57) against real `itemsin.dat` data and a real created
+      character: the plain and special-greeting-prefixed first-visit
+      pair; the advancement-reveal and no-new-advancement pairs (each
+      with and without a pending special greeting); the repeat-rumor
+      query's own no-state-change guarantee; category-13 turn-ins for a
+      real high-quality (subtype > 3) and a real low-quality (subtype <=
+      3) item, both found by scanning real `itemsin.dat`, plus a real
+      non-category-13 item's refusal (kept, not removed); the item-charge
+      double-gate (a real equipment item charging successfully, spending
+      exactly 7 points and setting the charge flag, THEN being refused on
+      a second attempt without spending any more points -- the exact
+      scenario the double-gate finding above is about -- and separately a
+      real non-equipment item's refusal, found by scanning for
+      `!IsEquipmentCategory`); the safe-camping buff's one-shot gate (an
+      already-buffed refusal spending nothing, vs. a fresh success
+      spending exactly 2 points); the ailment cure clearing `ailmentMask`
+      entirely and spending exactly 1 point; the camp-mark warp's
+      no-camp-mark refusal; the full-heal action's curHP/curMagicka
+      assignment; and the no-matching-action `std::nullopt` fallthrough.
+      49 smoke tests pass (same total as M56/M57); full clean rebuild
+      stayed at zero `/W4` warnings. Manually launched the real windowed
+      exe and confirmed it starts and stays up.
+
 ## What's next
 
 `talkToNpc()` is fully transcribed (M44), but still NOT wired into the
-C++ port -- M56/M57 built the first two slices of `Shop.dialogue()`'s own
-dispatcher (shops 0-3's quest-turn-in pattern, then shop 4/Beneca), but
-shops 5 (Helga)/6 (Varus)'s own bespoke branches are still unported, and
+C++ port -- M56/M57/M58 built the first three slices of `Shop.dialogue()`'s
+own dispatcher (shops 0-3's quest-turn-in pattern, shop 4/Beneca, shop
+5/Helga), but shop 6 (Varus)'s own bespoke branch is still unported, and
 even once all 7 are covered, wiring `ShopInteraction`/`Shop`'s dispatch into
 `main.cpp`'s own tick loop (unblocking the NPC-talk half of
 `resolveInteractInput()` and the NPC-nameplate half of
@@ -3763,7 +3830,7 @@ M50, but still practically unreachable today with nothing yet writing
 `openInventory`. Beyond that: Help topics (the Java transcription itself
 stops at topic index 4). Following dawnstar's own later milestones
 roughly but expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57
+M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58
 already found.
 
 **Heads up for whoever eventually wires a real Save trigger (M52's own
