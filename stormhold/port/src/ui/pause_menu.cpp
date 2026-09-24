@@ -32,6 +32,38 @@ constexpr int kMargin = 8;
 const std::vector<std::string> kOptionsItems = {"Stats",     "Inventory", "Skills", "Spells",
                                                  "Save Game", "Load Game", "Help",   "Quit Game"};
 
+// ESGame.loadHelpTopicTitles()/loadHelpTopicBodies(): 12 help topics, each
+// a single title row plus a 1-5-row body span, all into `ShopDialogue`
+// group 7 (the 41-entry generic/rumor pool -- see assets/shop_dialogue.h's
+// own class comment). Transcribed verbatim from `decompiled/ESGame.java`'s
+// `private void a()` (M69) -- `src/ESGame.java`'s own copy of the same
+// method previously stopped partway through topic 5, flagged as a
+// transcription gap; the decompiled bytecode itself was never actually
+// incomplete, just not fully hand-copied yet.
+constexpr int kHelpTitleRow[12] = {6, 8, 11, 13, 19, 21, 24, 29, 31, 34, 37, 39};
+const std::vector<std::vector<int>> kHelpBodyRows = {
+    {7}, {9, 10}, {12}, {14, 15, 16, 17, 18}, {20}, {22, 23}, {25, 26, 27, 28}, {30}, {32, 33}, {35, 36}, {38}, {40},
+};
+
+std::string HelpTopicTitle(const ShopDialogue& dialogue, int topicIndex) {
+    return dialogue.groups[7][static_cast<size_t>(kHelpTitleRow[topicIndex])];
+}
+
+std::string HelpTopicBody(const ShopDialogue& dialogue, int topicIndex) {
+    std::string body;
+    for (int row : kHelpBodyRows[static_cast<size_t>(topicIndex)]) {
+        body += dialogue.groups[7][static_cast<size_t>(row)];
+    }
+    return body;
+}
+
+std::vector<std::string> HelpTopicTitles(const ShopDialogue& dialogue) {
+    std::vector<std::string> titles;
+    titles.reserve(12);
+    for (int i = 0; i < 12; i++) titles.push_back(HelpTopicTitle(dialogue, i));
+    return titles;
+}
+
 // ESGame.creditsText() verbatim, including its own real "Studos" typo --
 // preserved exactly, not "corrected" (see this file's own header comment
 // for why this is a DIFFERENT string than ui/menu_flow.cpp's own
@@ -127,7 +159,7 @@ void PaintMessage(Backbuffer& bb, const std::string& title, const std::string& b
 // all of them, matching there being nothing to move a cursor over.
 bool IsMessageScreen(PauseScreen s) {
     return s == PauseScreen::Stats || s == PauseScreen::SkillInfo || s == PauseScreen::NoSavedGame ||
-           s == PauseScreen::SaveError || s == PauseScreen::Credits;
+           s == PauseScreen::SaveError || s == PauseScreen::Credits || s == PauseScreen::HelpTopic;
 }
 
 // Confirm()'s and Cancel()'s shared "go back" target for every screen
@@ -141,6 +173,14 @@ void GoBack(PauseMenuState& state) {
             break;
         case PauseScreen::SpellInfo:
             state.screen = PauseScreen::Spells;
+            break;
+        // M69: NOT `PauseScreen::Help` -- `newHelpTopicUI(topicIndex).
+        // nextScreen = this.statsUI` in the original, a real, confirmed
+        // quirk (leaving a help topic body goes to Stats, not back to the
+        // topic list), faithfully preserved rather than "corrected" to the
+        // more intuitive Help -- see this file's own class comment.
+        case PauseScreen::HelpTopic:
+            state.screen = PauseScreen::Stats;
             break;
         default:
             state.screen = PauseScreen::Options;
@@ -183,6 +223,9 @@ void PauseMenu::MoveSelection(PauseMenuState& state, int delta, const PlayerStat
         case PauseScreen::SpellInfo:
             count = 1;  // "Ready Spell", the screen's own sole action.
             break;
+        case PauseScreen::Help:
+            count = 12;  // Fixed topic count, not data-dependent.
+            break;
         default:
             count = 0;  // Message-only screens: nothing to move over.
             break;
@@ -219,6 +262,13 @@ PauseMenuAction PauseMenu::Confirm(PauseMenuState& state, PlayerState& p, const 
         if (spellIndex0Based < 0) return PauseMenuAction::None;
         state.spellIndex0Based = spellIndex0Based;
         state.screen = PauseScreen::SpellInfo;
+        state.selectedIndex = 0;
+        return PauseMenuAction::None;
+    }
+
+    if (state.screen == PauseScreen::Help) {
+        state.helpTopicIndex = state.selectedIndex;
+        state.screen = PauseScreen::HelpTopic;
         state.selectedIndex = 0;
         return PauseMenuAction::None;
     }
@@ -266,8 +316,9 @@ PauseMenuAction PauseMenu::Confirm(PauseMenuState& state, PlayerState& p, const 
             }
             state.screen = PauseScreen::NoSavedGame;
             return PauseMenuAction::None;
-        case 6:  // Help -- deliberately not wired, see this file's own
-                 // header comment (the transcription itself stops short).
+        case 6:  // Help -- wired M69, see this file's own header comment.
+            state.screen = PauseScreen::Help;
+            state.selectedIndex = 0;
             return PauseMenuAction::None;
         case 7:  // "Quit Game" -- a confirmed real bug, faithfully
                  // reproduced: this shows the credits screen, not a real
@@ -290,7 +341,7 @@ void PauseMenu::Cancel(PauseMenuState& state) {
 }
 
 void PauseMenu::Render(Backbuffer& bb, const PauseMenuState& state, const PlayerState& p, const CharacterData& charData,
-                        const SpellDatabase& spells) {
+                        const SpellDatabase& spells, const ShopDialogue& dialogue) {
     switch (state.screen) {
         case PauseScreen::Options:
             PaintList(bb, "Options", {}, kOptionsItems, state.selectedIndex);
@@ -337,6 +388,19 @@ void PauseMenu::Render(Backbuffer& bb, const PauseMenuState& state, const Player
         case PauseScreen::Credits:
             PaintMessage(bb, "Credits", kPauseCreditsText);
             PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
+            return;
+        case PauseScreen::Help:
+            PaintList(bb, "Help", {}, HelpTopicTitles(dialogue), state.selectedIndex);
+            PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
+            return;
+        case PauseScreen::HelpTopic:
+            // M69: matches screenGroup 206's own dispatch -- any command
+            // (not just Ok) leaves to Stats (GoBack's own HelpTopic case),
+            // so the bottom bar only ever advertises one action, same as
+            // Stats/SkillInfo/SaveError above.
+            PaintMessage(bb, state.helpTopicIndex >= 0 ? HelpTopicTitle(dialogue, state.helpTopicIndex) : "Help",
+                         state.helpTopicIndex >= 0 ? HelpTopicBody(dialogue, state.helpTopicIndex) : "");
+            PaintBottomBar(bb, "Enter: Ok", "");
             return;
     }
 }

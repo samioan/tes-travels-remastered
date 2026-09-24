@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "assets/character_data.h"
+#include "assets/shop_dialogue.h"
 #include "assets/spell_database.h"
 #include "dungeon/dungeon_runtime.h"
 #include "graphics/backbuffer.h"
@@ -90,18 +91,26 @@ namespace stormhold {
 // discipline as `player/game_save.h`'s own `Continue Game` neighbors and
 // every other confirmed-real-bug entry in `docs/PORT_ROADMAP.md`.
 //
-// **NOT wired this milestone, a clean, explicitly-flagged boundary (same
-// shape as M60's own un-built `npcChoicesUI` follow-up menu):** the
-// "Help" menu item is a confirmed no-op here. `ESGame.java`'s own
-// `helpTopicTitles`/`helpTopicBodies` arrays hold 12 topic slots, but the
-// Java TRANSCRIPTION itself only fills in bodies for topics 0-4 (its own
-// header comment at the point the initializer stops: "finished past this
-// point in this pass") -- a real gap in this project's own decompilation
-// work, not a display/logic decision this port could resolve either way.
-// Building a Help screen against 7 topics with no known body text isn't
-// possible yet; whoever eventually finishes that transcription pass
-// should come back and wire this the same way Stats/Skills/Spells are
-// wired here.
+// **WIRED, M69 (this session; was "NOT wired... the Java TRANSCRIPTION
+// itself stops short"):** the `src/ESGame.java` transcription gap this
+// class comment used to flag turned out to be exactly that -- a stalled
+// hand-transcription, not a genuine decompiler/obfuscation gap.
+// `decompiled/ESGame.java`'s own `private void a()` (the real
+// `loadHelpTopicBodies()`) was always fully present and unambiguous past
+// the point the Java reference tree had stopped copying it; finishing the
+// copy (`helpTopicBodies[5..11]`, `Shop.dialogue[7][22..40]`) was the
+// whole gap. `PauseScreen::Help` (the 12-topic list, screenGroup 203) and
+// `PauseScreen::HelpTopic` (one topic's body, screenGroup 206) mirror
+// Skills/SkillInfo's own list-then-detail shape, with one real, faithfully
+// preserved quirk: `newHelpTopicUI(topicIndex).nextScreen = this.statsUI`
+// -- leaving a help topic body (Ok OR Cancel, screenGroup 206's dispatch
+// doesn't distinguish) goes to the STATS screen, not back to the topic
+// list and not to Options either, the same "confirmed real bug, keep it"
+// treatment "Quit Game" showing Credits instead of quitting already got
+// above. Topic titles/bodies are real `ShopDialogue` (npcstrings.dat)
+// text, group 7's own 41-entry pool, not literals -- `Render` now takes a
+// `const ShopDialogue&` for them, the one public signature change this
+// milestone makes.
 //
 // **Also NOT modeled, another same-category machinery gap:** the real
 // `noSavedGameUI` (Load Game with no save file) and `saveErrorUI` (a
@@ -125,6 +134,8 @@ enum class PauseScreen : uint8_t {
     NoSavedGame,
     SaveError,
     Credits,
+    Help,
+    HelpTopic,
 };
 
 // What `PauseMenu::Confirm` just did, so `main.cpp` can run the same
@@ -151,6 +162,10 @@ struct PauseMenuState {
     // method's own doc comment).
     int skillIndex = -1;
     int spellIndex0Based = -1;
+    // M69: set once by Confirm() when entering HelpTopic from Help (a row
+    // index into the fixed 12-topic table, NOT a `ShopDialogue` row --
+    // see pause_menu.cpp's own `kHelpTitleRow`/`kHelpBodyRows`).
+    int helpTopicIndex = -1;
 };
 
 class PauseMenu {
@@ -182,8 +197,12 @@ public:
     // branch: `showScreen(gameCanvas)`.
     static void Cancel(PauseMenuState& state);
 
+    // M69: `dialogue` is only read for PauseScreen::Help/HelpTopic (the
+    // topic titles/bodies, real `ShopDialogue` group-7 text) -- every
+    // other screen ignores it, same as `spells` already goes unused
+    // outside Spells/SpellInfo.
     static void Render(Backbuffer& bb, const PauseMenuState& state, const PlayerState& p, const CharacterData& charData,
-                        const SpellDatabase& spells);
+                        const SpellDatabase& spells, const ShopDialogue& dialogue);
 };
 
 }  // namespace stormhold

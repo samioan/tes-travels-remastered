@@ -2380,12 +2380,31 @@ public class ESGame extends ngame.midlet.RegisteredMIDlet implements Runnable, C
       buf.delete(0, 1200);
       buf.append(Shop.dialogue[7][22]);
       buf.append(Shop.dialogue[7][23]);
-      // TODO: original transcription of loadHelpTopicBodies() was not
-      // finished past this point in this pass -- helpTopicBodies[5..11]
-      // still need their remaining dialogue[7] index lists transcribed
-      // from decompiled/ESGame.java (private void a(), continues past the
-      // point this file's own read-through stopped). Left as a real gap
-      // rather than guessed at.
+      helpTopicBodies[5] = buf.toString();
+      buf.delete(0, 1200);
+      buf.append(Shop.dialogue[7][25]);
+      buf.append(Shop.dialogue[7][26]);
+      buf.append(Shop.dialogue[7][27]);
+      buf.append(Shop.dialogue[7][28]);
+      helpTopicBodies[6] = buf.toString();
+      buf.delete(0, 1200);
+      buf.append(Shop.dialogue[7][30]);
+      helpTopicBodies[7] = buf.toString();
+      buf.delete(0, 1200);
+      buf.append(Shop.dialogue[7][32]);
+      buf.append(Shop.dialogue[7][33]);
+      helpTopicBodies[8] = buf.toString();
+      buf.delete(0, 1200);
+      buf.append(Shop.dialogue[7][35]);
+      buf.append(Shop.dialogue[7][36]);
+      helpTopicBodies[9] = buf.toString();
+      buf.delete(0, 1200);
+      buf.append(Shop.dialogue[7][38]);
+      helpTopicBodies[10] = buf.toString();
+      buf.delete(0, 1200);
+      buf.append(Shop.dialogue[7][40]);
+      helpTopicBodies[11] = buf.toString();
+      buf.delete(0, 1200);
    }
 
    private String creditsText() {

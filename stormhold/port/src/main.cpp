@@ -1192,7 +1192,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // M63: fully replaces the normal game view, matching
                 // `optionsUI` and everything it opens onto taking over
                 // `Display.setCurrent()` in the original.
-                stormhold::PauseMenu::Render(backbuffer, pauseMenu, player, charData, spells);
+                stormhold::PauseMenu::Render(backbuffer, pauseMenu, player, charData, spells, dialogue);
             } else if (npcChoicesMenu.active) {
                 // M64: fully replaces the normal game view, matching
                 // `npcChoicesUI[shopId]` and everything it opens onto

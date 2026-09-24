@@ -4688,6 +4688,52 @@ starts and stays up.
       grounds (a direct, narrow instance of an already-documented M25 gap)
       and smoke-test coverage only.
 
+- [x] **M69 -- Help (pause-menu item 6) wired live: 12 topics, list-then-body,
+      closing the transcription gap M63's own entry flagged.** The gap
+      turned out to be smaller than it looked: `decompiled/ESGame.java`'s
+      own `private void a()` (the real `loadHelpTopicBodies()`) was always
+      fully present and unambiguous in the decompiled bytecode --
+      `src/ESGame.java`'s own hand-transcription had just stopped partway
+      through copying it (topics 0-4 done, a `TODO` past that point). Read
+      the rest of `private void a()` directly and finished the copy:
+      `helpTopicBodies[5..11]`, each a `Shop.dialogue[7][N..M]` row-span
+      concatenation exactly like topics 0-4, up through topic 11's single
+      row at index 40 (group 7's own last real row, `ShopDialogue`'s
+      41-entry span -- confirmed in range, not a guess).
+
+      C++ side: `ui/pause_menu.h`/`.cpp` gain `PauseScreen::Help` (the
+      12-topic list, screenGroup 203) and `PauseScreen::HelpTopic` (one
+      topic's body, screenGroup 206), mirroring Skills/SkillInfo's own
+      list-then-detail shape. `Render` gains one new parameter, `const
+      ShopDialogue& dialogue` (titles/bodies are real `ShopDialogue`
+      group-7 text, not literals) -- the only public signature change.
+      One real, confirmed original quirk preserved rather than
+      "corrected": `newHelpTopicUI(topicIndex).nextScreen = this.statsUI`
+      -- leaving a help topic body (Ok OR Cancel; screenGroup 206's real
+      dispatch doesn't distinguish) lands on the STATS screen, not back on
+      the topic list and not on Options either. Same "confirmed shipped
+      bug, keep it" treatment `ui/pause_menu.h`'s own "Quit Game" finding
+      (shows Credits, doesn't quit) already established.
+
+      Verified: rewrote M63's own `TestHelpIsNotWired` as `TestHelpNavigation`
+      (Options -> Help -> a topic -> Stats via the real quirk, plus both
+      Cancel paths -- topic-body Cancel also lands on Stats, topic-LIST
+      Cancel lands on Options like Skills/Spells' own list screens), and
+      added `TestHelpTopicTextIsReal` (all 12 topics render against real
+      loaded `ShopDialogue` data without throwing -- the actual proof every
+      `kHelpTitleRow`/`kHelpBodyRows` index lands inside group 7's real
+      41-row span, not just inside array bounds in the abstract). All 57
+      smoke tests pass, full clean rebuild, zero `/W4` warnings. **NOT
+      independently re-verified live this session** -- attempted via the
+      same scripted-`SendKeys` approach M67/M68 used, but window-focus
+      targeting (`SetForegroundWindow`/`AppActivate`) failed silently
+      partway through and a screenshot meant to confirm the Help screen
+      instead captured an unrelated window, so the live-GUI verification
+      approach was abandoned for the rest of this session rather than
+      continue blind desktop capture. The dispatch/render logic IS
+      exercised directly by the two tests above, just not the live
+      keyboard-input/window-focus path end to end.
+
 ## What's next
 
 With M66, every one of the 7 real NPCs' own `npcChoicesUI` interactive
@@ -4746,10 +4792,10 @@ that the pause menu exists -- `PauseMenu`'s own "Inventory" entry
 simply has no equivalent construct at all, by design, not by oversight --
 so that particular real bug remains permanently out of reach here, unlike
 the M52 Continue-Game-softlock note below (which IS newly reachable as of
-M63's real Save/Load wiring). "Help" (pause-menu item 6) is confirmed
-wired-but-inert -- see M63's own entry for why (the Java transcription
-itself stops short of full topic text past index 4) -- and remains the
-next thing to finish once that transcription gap is closed. M64's own
+M63's real Save/Load wiring). "Help" (pause-menu item 6) is now fully
+wired -- see M69's own entry above; the transcription gap M63 flagged
+turned out to be a stalled hand-copy, not a real decompiler gap, and is
+closed. M64's own
 `npcHelloUI`/`backTarget` softlock finding is now fully closed out end to
 end: M65 widened `main.cpp`'s own dismiss handling to cover Beneca and M66
 to cover Helga too (`shopId >= 0 && shopId <= 5`), each honoring

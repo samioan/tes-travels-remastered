@@ -14,6 +14,7 @@
 #include "assets/character_data.h"
 #include "assets/item_database.h"
 #include "assets/monster_database.h"
+#include "assets/shop_dialogue.h"
 #include "assets/spell_database.h"
 #include "combat/spell_casting.h"
 #include "dungeon/dungeon_runtime.h"
@@ -178,17 +179,43 @@ void TestSpellsAndSpellInfo(const CharacterData& charData, const ItemDatabase& i
     Expect(state.screen == PauseScreen::Options, "Cancel on Spells should return to Options");
 }
 
-void TestHelpIsNotWired(PlayerState p, const SpellDatabase& spells, InventoryUiState& inventoryUi,
+void TestHelpNavigation(PlayerState p, const SpellDatabase& spells, InventoryUiState& inventoryUi,
                          const std::string& savePath, WorldRegistry& world, ShopState& shop, WardenState& warden) {
-    std::printf("-- PauseMenu::Confirm: Help (deliberately not wired) --\n");
+    std::printf("-- PauseMenu::Confirm: Help -> topic list -> topic body -> Stats (M69) --\n");
     PauseMenuState state;
     PauseMenu::Open(state);
     state.selectedIndex = 6;  // "Help"
-    PauseMenuAction action =
-        PauseMenu::Confirm(state, p, spells, inventoryUi, savePath, 1, world, shop, warden);
+    PauseMenuAction action = PauseMenu::Confirm(state, p, spells, inventoryUi, savePath, 1, world, shop, warden);
     Expect(action == PauseMenuAction::None, "Help should not report a load");
-    Expect(state.screen == PauseScreen::Options, "Help should stay on Options -- confirmed not wired this milestone");
-    Expect(state.active, "Help should not close the pause menu either");
+    Expect(state.screen == PauseScreen::Help, "Help should open the 12-topic list");
+    Expect(state.active, "Help should not close the pause menu");
+
+    state.selectedIndex = 3;  // Some topic other than 0, to prove the index actually threads through.
+    action = PauseMenu::Confirm(state, p, spells, inventoryUi, savePath, 1, world, shop, warden);
+    Expect(action == PauseMenuAction::None, "picking a topic should not report a load");
+    Expect(state.screen == PauseScreen::HelpTopic, "picking a topic should open its body");
+    Expect(state.helpTopicIndex == 3, "helpTopicIndex should be the row that was picked, not reset");
+
+    // decompiled/ESGame.java's own newHelpTopicUI(topicIndex).nextScreen =
+    // this.statsUI -- a real, confirmed quirk: leaving a help topic body
+    // (Ok, exercised here) goes to Stats, not back to the topic list.
+    action = PauseMenu::Confirm(state, p, spells, inventoryUi, savePath, 1, world, shop, warden);
+    Expect(action == PauseMenuAction::None, "leaving a help topic should not report a load");
+    Expect(state.screen == PauseScreen::Stats,
+           "leaving a help topic should land on Stats, matching the original's own real quirk -- not Help, and not "
+           "Options");
+
+    // Cancel from the topic body should do the exact same thing (screenGroup
+    // 206's real dispatch doesn't distinguish cmdOk from anything else).
+    state.screen = PauseScreen::HelpTopic;
+    PauseMenu::Cancel(state);
+    Expect(state.screen == PauseScreen::Stats, "Cancel from a help topic body should also land on Stats");
+
+    // But Cancel from the TOPIC LIST itself (not yet in a topic body) goes
+    // to Options, same as Skills/Spells' own list screens.
+    state.screen = PauseScreen::Help;
+    PauseMenu::Cancel(state);
+    Expect(state.screen == PauseScreen::Options, "Cancel from the Help topic list itself should return to Options");
 }
 
 void TestQuitGameShowsCreditsBug(PlayerState p, const SpellDatabase& spells, InventoryUiState& inventoryUi,
@@ -262,18 +289,39 @@ void TestSaveAndLoad(PlayerState p, const SpellDatabase& spells, InventoryUiStat
     std::filesystem::remove(savePath, ec);
 }
 
-void TestRenderDoesNotCrash(const PlayerState& p, const CharacterData& charData, const SpellDatabase& spells) {
+void TestRenderDoesNotCrash(const PlayerState& p, const CharacterData& charData, const SpellDatabase& spells,
+                             const ShopDialogue& dialogue) {
     std::printf("-- PauseMenu::Render (every screen) --\n");
     Backbuffer bb;
-    for (PauseScreen screen : {PauseScreen::Options, PauseScreen::Stats, PauseScreen::Skills, PauseScreen::SkillInfo,
-                                PauseScreen::Spells, PauseScreen::SpellInfo, PauseScreen::NoSavedGame,
-                                PauseScreen::SaveError, PauseScreen::Credits}) {
+    for (PauseScreen screen :
+         {PauseScreen::Options, PauseScreen::Stats, PauseScreen::Skills, PauseScreen::SkillInfo, PauseScreen::Spells,
+          PauseScreen::SpellInfo, PauseScreen::NoSavedGame, PauseScreen::SaveError, PauseScreen::Credits,
+          PauseScreen::Help, PauseScreen::HelpTopic}) {
         PauseMenuState state;
         PauseMenu::Open(state);
         state.screen = screen;
         state.skillIndex = 0;
         state.spellIndex0Based = 0;
-        PauseMenu::Render(bb, state, p, charData, spells);
+        state.helpTopicIndex = 0;
+        PauseMenu::Render(bb, state, p, charData, spells, dialogue);
+    }
+}
+
+void TestHelpTopicTextIsReal(const PlayerState& p, const CharacterData& charData, const SpellDatabase& spells,
+                              const ShopDialogue& dialogue) {
+    std::printf("-- PauseMenu Help: all 12 topics resolve to non-empty real ShopDialogue text --\n");
+    Backbuffer bb;
+    for (int i = 0; i < 12; i++) {
+        PauseMenuState state;
+        PauseMenu::Open(state);
+        state.screen = PauseScreen::HelpTopic;
+        state.helpTopicIndex = i;
+        // No direct title/body accessor is exposed outside pause_menu.cpp
+        // (they're file-local helpers) -- rendering every topic without
+        // throwing (an out-of-range ShopDialogue group/row index would)
+        // is what actually proves all 12 kHelpTitleRow/kHelpBodyRows
+        // entries land inside group 7's real 41-row span.
+        PauseMenu::Render(bb, state, p, charData, spells, dialogue);
     }
 }
 
@@ -288,6 +336,7 @@ int main(int argc, char** argv) {
         ItemDatabase items = ItemDatabase::Load(assets);
         SpellDatabase spells = SpellDatabase::Load(assets);
         MonsterDatabase monsters = MonsterDatabase::Load(assets);
+        ShopDialogue dialogue = ShopDialogue::Load(assets);
         (void)monsters;
 
         PlayerState freshPlayer = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
@@ -303,10 +352,11 @@ int main(int argc, char** argv) {
         TestInventoryHandoff(freshPlayer, spells, savePath, world, shop, warden);
         TestSkillsAndSkillInfo(freshPlayer, charData, spells, inventoryUi, savePath, world, shop, warden);
         TestSpellsAndSpellInfo(charData, items, spells, inventoryUi, savePath, world, shop, warden);
-        TestHelpIsNotWired(freshPlayer, spells, inventoryUi, savePath, world, shop, warden);
+        TestHelpNavigation(freshPlayer, spells, inventoryUi, savePath, world, shop, warden);
         TestQuitGameShowsCreditsBug(freshPlayer, spells, inventoryUi, savePath, world, shop, warden);
         TestSaveAndLoad(freshPlayer, spells, inventoryUi);
-        TestRenderDoesNotCrash(freshPlayer, charData, spells);
+        TestRenderDoesNotCrash(freshPlayer, charData, spells, dialogue);
+        TestHelpTopicTextIsReal(freshPlayer, charData, spells, dialogue);
 
         if (!g_ok) {
             std::fprintf(stderr, "m63_pause_menu_smoke: FAILED self-consistency checks\n");
