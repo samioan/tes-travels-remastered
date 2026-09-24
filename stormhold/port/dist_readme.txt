@@ -15,11 +15,26 @@ Bethesda's. You supply your own copy.
      build is named). The launcher unpacks it for you -- you don't need
      to extract it yourself first.
 
+  2. Optional, but it's how the game really looked: the phone's own
+     fonts, Ceurope.gdr and Browsereur.gdr. Stormhold ran on Nokia's
+     Series 60 phones (the 3650 and its siblings), and drew all of its
+     text in those phones' built-in fonts. They are Nokia's, so they
+     can't be included here either. Without them the game uses stand-in
+     letters that look close, but not the same.
+
+     You'll find them in the System\Fonts folder of any Series 60 1st
+     Edition phone (Nokia 7650, 3650, 3660, N-Gage), in an EKA2L1
+     emulator setup for one of those phones, or in Nokia's own Series 60
+     MIDP SDK. The launcher looks in EKA2L1's and the SDK's usual places
+     by itself; otherwise pick Ceurope.gdr and it takes Browsereur.gdr
+     from the same folder.
+
 
 HOW TO PLAY
 -----------
 
-Run Stormhold.exe. Choose your .jar file. Press Play.
+Run Stormhold.exe. Choose your .jar file. Optionally, choose
+Ceurope.gdr for the phone's own fonts. Press Play.
 
 Everything you add is copied into this folder, so you can delete or move
 your original download afterwards and nothing breaks.
@@ -63,6 +78,7 @@ WHERE YOUR FILES GO
 --------------------
 
   data\    the game files you supplied (unpacked from your .jar)
+  fonts\   the phone fonts, if you supplied them
   user\    your saved games and the log
   bin\     the game engine itself
 

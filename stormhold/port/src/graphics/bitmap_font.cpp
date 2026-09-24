@@ -5,11 +5,19 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
+#include <cstdio>
+#include <filesystem>
+
+#include "assets/gdr_font.h"
 
 namespace stormhold {
 
 namespace {
+
+// ---- The GDI stand-in (M74), used for any face the device fonts don't
+// cover -- see bitmap_font.h. ----
 
 // Logical (GDI) pixel height requested from CreateFont -- identical to
 // dawnstar's own M58 choice (same "ngame" engine, same 176x208 canvas, and
@@ -122,13 +130,122 @@ private:
     void* bits_ = nullptr;
 };
 
+// M78: the device faces, one slot per BitmapFont::Face (enum order).
+constexpr int kFaceCount = 6;
+
+GdrFont& DeviceSlot(BitmapFont::Face face) {
+    static GdrFont slots[kFaceCount];
+    return slots[static_cast<int>(face)];
+}
+
+// Which loaded GdrFont draws `face`, or nullptr for the GDI stand-in.
+// LargeItalic and MediumPlain live in the optional Browsereur.gdr; without
+// it the nearest face the player does have stands in (LargeBold, same
+// size; LatinPlain12, same weight and nearly the same size) rather than
+// dropping all the way to GDI.
+const GdrFont* DeviceFont(BitmapFont::Face face) {
+    const GdrFont& font = DeviceSlot(face);
+    if (font.IsLoaded()) return &font;
+    if (face == BitmapFont::Face::LargeItalic) {
+        const GdrFont& bold = DeviceSlot(BitmapFont::Face::LargeBold);
+        if (bold.IsLoaded()) return &bold;
+    }
+    if (face == BitmapFont::Face::MediumPlain) {
+        const GdrFont& plain = DeviceSlot(BitmapFont::Face::SmallPlain);
+        if (plain.IsLoaded()) return &plain;
+    }
+    return nullptr;
+}
+
+// A glyph for `c`, or the store's own '?' when this face has nothing for
+// it -- so an unexpected character still takes up a cell.
+const GdrGlyph* DeviceGlyph(const GdrFont& font, char c) {
+    const GdrGlyph* glyph = font.GetGlyph(static_cast<unsigned char>(c));
+    return glyph ? glyph : font.GetGlyph('?');
+}
+
+void GdiDrawString(Backbuffer& bb, int x, int y, const std::string& text, uint16_t rgb565);
+
 }  // namespace
 
-int BitmapFont::StringWidth(const std::string& text) {
+bool BitmapFont::LoadDeviceFonts(const std::string& ceuropePath) {
+    if (ceuropePath.empty()) return false;
+    bool latin = true;
+    latin &= DeviceSlot(Face::SmallBold).Load(ceuropePath, "LatinBold12");
+    latin &= DeviceSlot(Face::MediumBold).Load(ceuropePath, "LatinBold13");
+    latin &= DeviceSlot(Face::SmallPlain).Load(ceuropePath, "LatinPlain12");
+    latin &= DeviceSlot(Face::LargeBold).Load(ceuropePath, "LatinBold17");
+
+    // Browsereur.gdr beside Ceurope.gdr -- matched case-insensitively,
+    // since device dumps and SDKs disagree on the capitalisation.
+    namespace fs = std::filesystem;
+    std::error_code error;
+    const fs::path directory = fs::path(ceuropePath).parent_path();
+    for (const fs::directory_entry& entry : fs::directory_iterator(directory, error)) {
+        std::string name = entry.path().filename().string();
+        for (char& ch : name) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (name == "browsereur.gdr") {
+            DeviceSlot(Face::LargeItalic).Load(entry.path().string(), "alpi17");
+            DeviceSlot(Face::MediumPlain).Load(entry.path().string(), "Alp13");
+            break;
+        }
+    }
+
+    std::printf("BitmapFont: device fonts from %s: %s, italic %s\n", ceuropePath.c_str(),
+                latin ? "loaded" : "NOT loaded", DeviceSlot(Face::LargeItalic).IsLoaded() ? "loaded" : "missing");
+    return latin;
+}
+
+bool BitmapFont::IsDeviceFace(Face face) { return DeviceSlot(face).IsLoaded(); }
+
+int BitmapFont::LineHeight(Face face) {
+    const GdrFont* font = DeviceFont(face);
+    return font ? font->CellHeight() : kGlyphHeight;
+}
+
+int BitmapFont::StringWidth(const std::string& text, Face face) {
+    if (const GdrFont* font = DeviceFont(face)) {
+        int width = 0;
+        for (char c : text) {
+            if (const GdrGlyph* glyph = DeviceGlyph(*font, c)) width += glyph->advance;
+        }
+        return width;
+    }
     return static_cast<int>(GdiFontContext::Instance().Measure(text).cx);
 }
 
-void BitmapFont::DrawString(Backbuffer& bb, int x, int y, const std::string& text, uint16_t rgb565) {
+void BitmapFont::DrawString(Backbuffer& bb, int x, int y, const std::string& text, uint16_t rgb565,
+                            Face face) {
+    const GdrFont* font = DeviceFont(face);
+    if (!font) {
+        GdiDrawString(bb, x, y, text, rgb565);
+        return;
+    }
+    // 1-bit, like the device: CFbsBitGc writes ink pixels in the pen
+    // colour and leaves every other pixel alone.
+    const int baseline = y + font->Ascent();
+    int penX = x;
+    for (char c : text) {
+        const GdrGlyph* glyph = DeviceGlyph(*font, c);
+        if (!glyph) continue;
+        const int left = penX + glyph->leftBearing;
+        const int top = baseline - glyph->ascent;
+        for (int row = 0; row < glyph->height; row++) {
+            const int dy = top + row;
+            if (dy < 0 || dy >= Backbuffer::kHeight) continue;
+            for (int col = 0; col < glyph->width; col++) {
+                const int dx = left + col;
+                if (dx < 0 || dx >= Backbuffer::kWidth) continue;
+                if (glyph->bits[static_cast<size_t>(row) * glyph->width + col]) bb.SetPixel(dx, dy, rgb565);
+            }
+        }
+        penX += glyph->advance;
+    }
+}
+
+namespace {
+
+void GdiDrawString(Backbuffer& bb, int x, int y, const std::string& text, uint16_t rgb565) {
     if (text.empty()) return;
 
     GdiFontContext& ctx = GdiFontContext::Instance();
@@ -170,5 +287,7 @@ void BitmapFont::DrawString(Backbuffer& bb, int x, int y, const std::string& tex
         }
     }
 }
+
+}  // namespace
 
 }  // namespace stormhold

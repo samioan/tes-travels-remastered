@@ -28,8 +28,13 @@ constexpr uint16_t kInputFg = PackRGB565(255, 255, 255);
 constexpr uint16_t kErrorFg = PackRGB565(255, 96, 96);
 
 constexpr int kLineHeight = BitmapFont::kGlyphHeight + 2;
-constexpr int kContentTop = 16;
-constexpr int kBarTop = Backbuffer::kHeight - 14;
+// UIScreen.java's own geometry: a 14px title bar (paintTitleBar), content
+// from textY=20, and the command bar from y=190 (paintCommandBar, labels at
+// (10,192) left and right-aligned to width-10). The original draws the
+// right label at y=195, 3px below the left one; both sit at 192 here so
+// the two labels line up.
+constexpr int kContentTop = 20;
+constexpr int kBarTop = 190;
 constexpr int kMargin = 8;
 
 // UIScreen.java's own creditsLines, joined with real line breaks --
@@ -69,25 +74,24 @@ int ListItemCount(MenuScreen s, const CharacterData& charData) {
     }
 }
 
-void DrawCentered(Backbuffer& bb, int y, const std::string& text, uint16_t color) {
-    int w = BitmapFont::StringWidth(text);
-    BitmapFont::DrawString(bb, (Backbuffer::kWidth - w) / 2, y, text, color);
+void DrawCentered(Backbuffer& bb, int y, const std::string& text, uint16_t color,
+                  BitmapFont::Face face = BitmapFont::Face::SmallBold) {
+    int w = BitmapFont::StringWidth(text, face);
+    BitmapFont::DrawString(bb, (Backbuffer::kWidth - w) / 2, y, text, color, face);
 }
 
+// paintTitleBar(): titleFont (LatinBold13) at y=0, HCENTER|TOP.
 void PaintTitleBar(Backbuffer& bb, const std::string& title) {
-    bb.FillRect(0, 0, Backbuffer::kWidth, 12, kTitleBg);
-    // M74: y nudged from 3 to 1 -- see graphics/bitmap_font.cpp's own
-    // kFontHeightPx comment for why the new GDI font needs the extra
-    // headroom to stay inside this 12px bar.
-    DrawCentered(bb, 1, title, kTitleFg);
+    bb.FillRect(0, 0, Backbuffer::kWidth, 14, kTitleBg);
+    DrawCentered(bb, 0, title, kTitleFg, BitmapFont::Face::MediumBold);
 }
 
 void PaintBottomBar(Backbuffer& bb, const std::string& leftLabel, const std::string& rightLabel) {
     bb.FillRect(0, kBarTop, Backbuffer::kWidth, Backbuffer::kHeight - kBarTop, kBarBg);
-    if (!leftLabel.empty()) BitmapFont::DrawString(bb, 4, kBarTop + 4, leftLabel, kBarFg);
+    if (!leftLabel.empty()) BitmapFont::DrawString(bb, 10, 192, leftLabel, kBarFg);
     if (!rightLabel.empty()) {
         int w = BitmapFont::StringWidth(rightLabel);
-        BitmapFont::DrawString(bb, Backbuffer::kWidth - 4 - w, kBarTop + 4, rightLabel, kBarFg);
+        BitmapFont::DrawString(bb, Backbuffer::kWidth - 10 - w, 192, rightLabel, kBarFg);
     }
 }
 
@@ -132,7 +136,7 @@ std::vector<std::string> WordWrap(const std::string& text, int maxWidthPx) {
 }
 
 void PaintPanel(Backbuffer& bb, const std::string& title) {
-    bb.FillRect(0, 12, Backbuffer::kWidth, kBarTop - 12, kBodyBg);
+    bb.FillRect(0, 14, Backbuffer::kWidth, kBarTop - 14, kBodyBg);
     PaintTitleBar(bb, title);
 }
 

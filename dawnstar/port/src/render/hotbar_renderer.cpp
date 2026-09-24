@@ -41,8 +41,9 @@ void DrawHotbarDigit(Backbuffer& bb, char c, int x, int y) {
     constexpr uint16_t kBlack = PackRGB565(0, 0, 0);
     constexpr uint16_t kWhite = PackRGB565(255, 255, 255);
     std::string s(1, c);
-    BitmapFont::DrawString(bb, x + 1, y + 1, s, kBlack);
-    BitmapFont::DrawString(bb, x, y, s, kWhite);
+    // paintHotbar(): SMALL_FONT (LatinPlain12).
+    BitmapFont::DrawString(bb, x + 1, y + 1, s, kBlack, BitmapFont::Face::SmallPlain);
+    BitmapFont::DrawString(bb, x, y, s, kWhite, BitmapFont::Face::SmallPlain);
 }
 
 }  // namespace

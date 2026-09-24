@@ -48,8 +48,8 @@ void NameEntry::Render(Backbuffer& bb) const {
     bb.FillRect(0, 0, Backbuffer::kWidth, Backbuffer::kHeight, kBackgroundColor);
 
     bb.FillRect(0, 0, Backbuffer::kWidth, 14, kTitleBarColor);
-    int titleX = Backbuffer::kWidth / 2 - BitmapFont::StringWidth("Enter name") / 2;
-    BitmapFont::DrawString(bb, titleX, 0, "Enter name", kTitleTextColor);
+    int titleX = Backbuffer::kWidth / 2 - BitmapFont::StringWidth("Enter name", BitmapFont::Face::MediumBold) / 2;
+    BitmapFont::DrawString(bb, titleX, 0, "Enter name", kTitleTextColor, BitmapFont::Face::MediumBold);
 
     int cursorY = 20;
     for (const std::string& line :

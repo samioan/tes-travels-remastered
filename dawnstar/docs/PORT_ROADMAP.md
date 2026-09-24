@@ -3714,6 +3714,58 @@ milestone rather than just read-through.
       the new key reaches `PlayerMovement::Move` for real. Full rebuild
       zero new warnings; all 52 smoke tests pass.
 
+- [x] **M63 -- the phone's real fonts, replacing M58's GDI look-alike.**
+      User-reported: M58's font "closely resembles the original but isn't
+      the same". Root cause: M58 matched a KEmulator screenshot, and
+      KEmulator draws MIDP text with PC fonts, not the phone's.
+
+      What the original really drew in, established (shared with
+      Stormhold's M78 -- same engine, same target phone): the jar's
+      `icon3650.png`/MIDP-1.0/Nokia-UI-API/176x208 profile is the Nokia
+      3650 (Series 60 1st Edition). Its Java runtime, `kmidrun.dll` in
+      Nokia's Series 60 MIDP SDK 1.2.1 emulator (archive.org
+      `nokia_sdks_n_dev_tools/nS60_jme_sdk_v1_2_1.zip`), was
+      disassembled: `CMIDFont.cpp`'s font factory IGNORES
+      `Font.getFont`'s face argument (so `64` -- which this project had
+      been reading as "monospace"; it's actually FACE_PROPORTIONAL --
+      changes nothing) and maps size x style through a fixed 12-entry
+      table of ROM font UIDs (VA 0x100db56c) onto the phone's bitmap
+      typefaces -- see `graphics/bitmap_font.h`'s Face comment for the
+      table. Those typefaces live in the ROM's `Ceurope.gdr` (Latin*) and
+      `Browsereur.gdr` (Al*): Symbian bitmap font stores, read by the new
+      `assets/gdr_font.h` -- a clean implementation from Nokia's
+      EPL-licensed Symbian sources (fontstore FNTBODY.CPP/FNTSTORE.CPP,
+      bitgdi TEXT.CPP), deliberately NOT shadowkey-decomp's parser, which
+      is derived from EKA2L1's GPLv3 one.
+
+      Faces used, per the original's own `Font.getFont` calls:
+      SmallBold/LatinBold12 (Screen text, soft keys -- the default),
+      MediumBold/LatinBold13 (titles, loading screen), MediumPlain/Alp13
+      (MIDP's default font -- the splash credits, whose fixed, never-
+      wrapped lines only fit the 176px screen in it: 137px widest, 197px
+      in LatinBold13), SmallPlain/LatinPlain12 (hotbar, message popup,
+      zoomed-in compass), LargeBold/LatinBold17 (zoomed-out compass),
+      LargeItalic/alpi17 ("You're Dead!"/"CAMPING"). 1-bit, like the
+      device -- no anti-aliasing. M58's GDI renderer stays as the
+      fallback whenever the fonts aren't provided.
+
+      Nokia firmware, so -- same deal as shadowkey-decomp's Ceurope.gdr --
+      never committed or shipped: the launcher gained shadowkey-decomp's
+      optional font row (picks Ceurope.gdr, takes Browsereur.gdr from
+      beside it, copies both to `<install>/fonts/`, auto-detects an
+      EKA2L1 ROM or the SDK on first run) and passes it as argv[2]; a dev
+      build reads `port/assets/fonts/` (gitignored). Two accuracy fixes
+      that the real metrics made possible: the dead/camping text now
+      sits on the original's anchor 33 (bottom on the midline, not
+      vertically centred), and `MessagePopup::WrapToTwoLines` uses the
+      original's own 69px `wordWrap` width when LatinPlain12 is loaded
+      (80 was only ever a GDI-width compensation). The launcher window
+      is also centred in the work area now -- its taller panel ran under
+      the taskbar at the default cascade position.
+
+      New `device_font_smoke` (skips without the fonts) plus launcher
+      font checks; all 53 smoke tests pass.
+
 ## Milestones next
 
 Nothing queued. A second fresh full sweep of `../src/` against `port/src/`

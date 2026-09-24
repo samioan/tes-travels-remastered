@@ -6,10 +6,9 @@
 // a round trip, and game-data discovery/install accepts the shapes people
 // really point a file dialog at while rejecting things that merely look
 // plausible. Ported from dawnstar's own src/tests/m_launcher_smoke.cpp
-// (itself from shadowkey-decomp's m113_launcher_smoke.cpp), dropping every
-// font-related check (Stormhold has no font concept -- see
-// launcher/install.h) and replacing the folder-discovery checks with
-// jar-unpacking ones, same as dawnstar's own version already does.
+// (itself from shadowkey-decomp's m113_launcher_smoke.cpp), replacing the
+// folder-discovery checks with jar-unpacking ones, same as dawnstar's own
+// version already does. M78 added the device-font checks back (part 10).
 //
 // Headless and window-free, so it needs no game data and no network -- the
 // two things that make it safe to run in CI.
@@ -257,12 +256,14 @@ int main(int, char**) {
         const std::string path = (scratch / "launcher.cfg").string();
         LauncherConfig written;
         written.gameData = "data";
+        written.font = "fonts/Ceurope.gdr";
         written.scale = 4;
         Check(SaveLauncherConfig(path, written), "SaveLauncherConfig writes the file");
 
         LauncherConfig read;
         Check(LoadLauncherConfig(path, read), "LoadLauncherConfig reads it back");
         Check(read.gameData == written.gameData, "gameData survives the round trip");
+        Check(read.font == written.font, "font survives the round trip (M78)");
         Check(read.scale == written.scale, "scale survives the round trip");
 
         LauncherConfig missing;
@@ -510,6 +511,38 @@ int main(int, char**) {
         Check(!UpdatesEnabledForThisBuild("0.1.0-dev"), "a -dev build does not self-update");
         Check(!UpdatesEnabledForThisBuild(""), "an empty version does not self-update");
         Check(UpdatesEnabledForThisBuild("0.1.0"), "a release build does");
+    }
+
+    // -- 10. the device font (M78) --
+    //
+    // The rejections always run. The accept/copy half needs a real Nokia
+    // Ceurope.gdr, which is firmware and never committed -- it runs only
+    // when a developer has put their own in port/assets/fonts/.
+    std::printf("\n-- 10. the device font --\n");
+    {
+        Check(!IsUsableFont(""), "an empty path is not a font");
+        Check(!IsUsableFont((scratch / "nope.gdr").string()), "a missing file is not a font");
+        std::ofstream(scratch / "fake.gdr", std::ios::binary) << "definitely not a font store";
+        Check(!IsUsableFont((scratch / "fake.gdr").string()), "a file that merely ends in .gdr is not a font");
+        bool italic = true;
+        std::string error;
+        Check(!InstallFonts((scratch / "fake.gdr").string(), (scratch / "fonts").string(), italic, error) &&
+                  !error.empty(),
+              "installing a non-font is refused with a reason");
+
+        const std::string real = FindAsset("../assets/fonts/Ceurope.gdr", "stormhold/port/assets/fonts/Ceurope.gdr");
+        if (fs::is_regular_file(real)) {
+            Check(IsUsableFont(real), "the real Ceurope.gdr is accepted");
+            const fs::path dest = scratch / "install" / "fonts";
+            const bool installed = InstallFonts(real, dest.string(), italic, error);
+            Check(installed, "InstallFonts copies it" + (error.empty() ? std::string() : ": " + error));
+            Check(IsUsableFont((dest / "Ceurope.gdr").string()), "...and the copy is usable");
+            Check(italic == fs::is_regular_file(fs::path(real).parent_path() / "Browsereur.gdr") &&
+                      italic == fs::is_regular_file(dest / "Browsereur.gdr"),
+                  "Browsereur.gdr comes along exactly when it sat beside the source");
+        } else {
+            std::printf("  (skipped the accept/copy half: no dev copy of Ceurope.gdr)\n");
+        }
     }
 
     std::error_code cleanup;

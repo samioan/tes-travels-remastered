@@ -55,6 +55,7 @@ add_library(dawnstar_assets STATIC
   src/assets/dat_archive.cpp
   src/assets/decoded_image.cpp
   src/assets/dungeon_geometry.cpp
+  src/assets/gdr_font.cpp
   src/assets/help_text.cpp
   src/assets/img_archive.cpp
   src/assets/item_database.cpp
@@ -133,7 +134,7 @@ target_include_directories(dawnstar_render PUBLIC src)
 # that links dawnstar_render -- transitively including every smoke test
 # below, not just dawnstar_port itself -- automatically link it too,
 # without each one needing its own explicit gdi32 entry.
-target_link_libraries(dawnstar_render PUBLIC dawnstar_world dawnstar_player dawnstar_dungeon dawnstar_npc gdi32)
+target_link_libraries(dawnstar_render PUBLIC dawnstar_assets dawnstar_world dawnstar_player dawnstar_dungeon dawnstar_npc gdi32)
 
 # M11/M12/M13/M14/M16/M17/M23/M25/M28: player character creation + full
 # save format + movement (now also touching the live world registry for
@@ -290,6 +291,7 @@ target_link_libraries(dawnstar_save PUBLIC dawnstar_player)
 # machine in the same priority chain (see main.cpp's own doc comment).
 add_executable(dawnstar_port WIN32
   src/main.cpp
+  src/platform/win32/exe_dir.cpp
   src/platform/win32/window.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
@@ -336,6 +338,7 @@ add_executable(dawnstar_launcher WIN32
   src/launcher/updater.cpp
   src/launcher/zip_reader.cpp
   src/launcher/launcher.rc
+  src/assets/gdr_font.cpp
   src/platform/win32/exe_dir.cpp
 )
 set_target_properties(dawnstar_launcher PROPERTIES OUTPUT_NAME "Dawnstar")
@@ -356,6 +359,7 @@ target_link_options(dawnstar_launcher PRIVATE /MANIFEST:NO)
 # dawnstar_launcher itself.
 add_executable(launcher_smoke
   src/tests/m_launcher_smoke.cpp
+  src/assets/gdr_font.cpp
   src/launcher/banner.cpp
   src/launcher/install.cpp
   src/launcher/launcher_config.cpp
@@ -368,6 +372,11 @@ target_link_libraries(launcher_smoke PRIVATE stb_image puff ole32 winhttp)
 target_compile_definitions(launcher_smoke PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 
 if(NOT DAWNSTAR_DIST)
+
+# M63 smoke test -- see src/tests/m63_device_font_smoke.cpp. Skips when the
+# (never-committed) Nokia fonts aren't in port/assets/fonts/.
+add_executable(device_font_smoke src/tests/m63_device_font_smoke.cpp)
+target_link_libraries(device_font_smoke PRIVATE dawnstar_render)
 
 # M2 milestone smoke test -- see src/tests/m2_asset_smoke.cpp. Separate
 # console executable so it doesn't disturb the M0/M1 windowed app.

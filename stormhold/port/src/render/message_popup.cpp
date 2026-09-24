@@ -38,8 +38,9 @@ void MessagePopup::Paint(Backbuffer& bb, const MessagePopupState& state) {
     if (!state.visible) return;
 
     bb.FillRoundRect(96, 118, 75, 35, 5, 5, kPopupBg);
-    BitmapFont::DrawString(bb, 100, 122, state.lines[0], kTextColor);
-    BitmapFont::DrawString(bb, 100, 134, state.lines[1], kTextColor);
+    // paintMessagePopup(): smallFont (LatinPlain12).
+    BitmapFont::DrawString(bb, 100, 122, state.lines[0], kTextColor, BitmapFont::Face::SmallPlain);
+    BitmapFont::DrawString(bb, 100, 134, state.lines[1], kTextColor, BitmapFont::Face::SmallPlain);
 }
 
 }  // namespace stormhold

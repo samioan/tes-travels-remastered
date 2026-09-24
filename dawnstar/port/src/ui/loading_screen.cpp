@@ -58,8 +58,11 @@ void LoadingScreen::Render(Backbuffer& bb) const {
     // left edge -- the same convention ui/screen.cpp's own RenderTitleBar
     // already established for that anchor.
     const std::string title = TitleForMode(mode_);
-    BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(title) / 2, 30, title, kTextColor);
-    BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth("Please Wait") / 2, 45, "Please Wait", kTextColor);
+    // LoadingScreen.paint(): Screen.LARGE_TEXT_FONT (LatinBold13).
+    constexpr BitmapFont::Face kFace = BitmapFont::Face::MediumBold;
+    BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(title, kFace) / 2, 30, title, kTextColor, kFace);
+    BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth("Please Wait", kFace) / 2, 45, "Please Wait",
+                           kTextColor, kFace);
 
     bb.FillRect((Width() - kBarBoxWidth) / 2, kBarBoxY, kBarBoxWidth, kBarBoxHeight, kBarBoxColor);
     // percent * 88 / 100 with no clamp -- see SetPercent's own doc comment.

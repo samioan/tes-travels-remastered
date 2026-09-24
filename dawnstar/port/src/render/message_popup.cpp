@@ -9,6 +9,9 @@ namespace {
 // GameCanvas.paintMessagePopup()'s own g.setColor(13080935)/color 0.
 constexpr uint16_t kPopupBg = PackRGB565(0xC7, 0x99, 0x67);
 constexpr uint16_t kTextColor = PackRGB565(0, 0, 0);
+// paintMessagePopup(): SMALL_FONT (LatinPlain12) -- the wrap measurements
+// below must use the same face the text is drawn in.
+constexpr BitmapFont::Face kPopupFace = BitmapFont::Face::SmallPlain;
 constexpr int64_t kTimeoutMs = 3000;
 
 }  // namespace
@@ -51,7 +54,7 @@ std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int m
         text = text.substr(0, text.size() - 1);
     }
 
-    if (BitmapFont::StringWidth(text) < maxWidthPx) {
+    if (BitmapFont::StringWidth(text, kPopupFace) < maxWidthPx) {
         return {text};
     }
 
@@ -62,7 +65,7 @@ std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int m
 
     size_t spaceAt;
     while ((spaceAt = text.find(' ', static_cast<size_t>(lineStart) + 1)) != std::string::npos) {
-        if (BitmapFont::StringWidth(text.substr(0, spaceAt)) < maxWidthPx) {
+        if (BitmapFont::StringWidth(text.substr(0, spaceAt), kPopupFace) < maxWidthPx) {
             lineStart = static_cast<int>(spaceAt);
         } else {
             if (lineStart == 0) {
@@ -76,7 +79,7 @@ std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int m
                 // approximating this one spot with a flat advance when
                 // the real per-character width is available.
                 while (w < maxWidthPx && lineStart < static_cast<int>(text.size())) {
-                    w += BitmapFont::CharWidth(text[static_cast<size_t>(lineStart)]);
+                    w += BitmapFont::CharWidth(text[static_cast<size_t>(lineStart)], kPopupFace);
                     lineStart++;
                 }
                 lines.push_back(text.substr(0, static_cast<size_t>(lineStart)));
@@ -111,7 +114,13 @@ std::array<std::string, 2> MessagePopup::WrapToTwoLines(const std::string& text)
     // BitmapFont -- verified against the two longest real strings this
     // path ever wraps (Shop.NAMES' "Heavy Armor Peddler"/"Weapon
     // Peddler") in message_popup_smoke.cpp.
-    std::vector<std::string> wrapped = WordWrap(text, 80);
+    //
+    // M78: the threshold IS recoverable once the real font is: the original
+    // calls `wordWrap(text, 69, SMALL_FONT)`, and SMALL_FONT is the
+    // device's LatinPlain12 (graphics/bitmap_font.h). So 69 whenever that
+    // face is really loaded; 80 stays only for the wider GDI stand-in.
+    const int wrapWidth = BitmapFont::IsDeviceFace(kPopupFace) ? 69 : 80;
+    std::vector<std::string> wrapped = WordWrap(text, wrapWidth);
     std::array<std::string, 2> result{"", ""};
     if (!wrapped.empty()) result[0] = wrapped[0];
     if (wrapped.size() >= 2) result[1] = wrapped[1];
@@ -122,8 +131,8 @@ void MessagePopup::Paint(Backbuffer& bb, const MessagePopupState& state) {
     if (!state.visible) return;
 
     bb.FillRoundRect(96, 118, 75, 35, 5, 5, kPopupBg);
-    BitmapFont::DrawString(bb, 100, 122, state.lines[0], kTextColor);
-    BitmapFont::DrawString(bb, 100, 134, state.lines[1], kTextColor);
+    BitmapFont::DrawString(bb, 100, 122, state.lines[0], kTextColor, kPopupFace);
+    BitmapFont::DrawString(bb, 100, 134, state.lines[1], kTextColor, kPopupFace);
 }
 
 }  // namespace dawnstar

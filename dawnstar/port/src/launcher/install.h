@@ -11,10 +11,11 @@
 // picked `.jar` into the install's own `data/`, and check the result looks
 // like the game before trusting it.
 //
-// There is no font concept here at all -- Dawnstar's renderer
-// (port/src/graphics/bitmap_font.h/.cpp) draws its own embedded bitmap
-// font and reads no external file, unlike Shadowkey's Nokia ROM font
-// requirement.
+// M78: and, separately, the Nokia 3650's own ROM fonts -- Ceurope.gdr (the
+// Latin faces) and, if present beside it, Browsereur.gdr (the italic one).
+// Nokia device firmware, so this project never ships them either; same
+// "optional, stand-in letters without it" deal as shadowkey-decomp's own
+// Ceurope.gdr step. See graphics/bitmap_font.h for which faces are used.
 
 #include <string>
 
@@ -32,6 +33,24 @@ bool IsGameDataRoot(const std::string& directory);
 // false and puts something a user can act on in `error` (not a real jar,
 // a permission problem, a full disk, a source that vanished mid-copy).
 bool InstallGameJar(const std::string& jarPath, const std::string& destDir, std::string& error);
+
+// A file is a usable font iff the port's own parser can load LatinBold12
+// out of it -- the same call the game makes, so "the launcher accepted it"
+// and "the game can use it" cannot disagree.
+bool IsUsableFont(const std::string& path);
+
+// Copies `ceuropePath` into `destDir` as Ceurope.gdr, and Browsereur.gdr
+// too when one sits beside it (matched case-insensitively -- dumps and
+// SDKs disagree on capitalisation). On failure returns false with a
+// user-facing `error`. `copiedItalic` says whether the second file came.
+bool InstallFonts(const std::string& ceuropePath, const std::string& destDir, bool& copiedItalic,
+                  std::string& error);
+
+// Best-effort guess at a Ceurope.gdr already on this machine: an EKA2L1
+// install's ROM drive, or Nokia's Series 60 MIDP SDK emulator at its
+// default install path. Empty when there is none -- a first-run
+// convenience, never a requirement.
+std::string FindExistingFont();
 
 }  // namespace launcher
 }  // namespace dawnstar

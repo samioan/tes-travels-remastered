@@ -18,8 +18,13 @@ constexpr uint16_t kBarBg = PackRGB565(255, 255, 255);
 constexpr uint16_t kBarFg = PackRGB565(0, 0, 0);
 
 constexpr int kLineHeight = BitmapFont::kGlyphHeight + 2;
-constexpr int kContentTop = 16;
-constexpr int kBarTop = Backbuffer::kHeight - 14;
+// UIScreen.java's own geometry: a 14px title bar (paintTitleBar), content
+// from textY=20, and the command bar from y=190 (paintCommandBar, labels at
+// (10,192) left and right-aligned to width-10). The original draws the
+// right label at y=195, 3px below the left one; both sit at 192 here so
+// the two labels line up.
+constexpr int kContentTop = 20;
+constexpr int kBarTop = 190;
 constexpr int kMargin = 8;
 
 // newLevelUpUI(step)'s own prompts, verbatim (its "\n" split into lines).
@@ -68,10 +73,11 @@ bool LevelUpMenu::Confirm(LevelUpMenuState& state, PlayerState& p, const Charact
 }
 
 void LevelUpMenu::Render(Backbuffer& bb, const LevelUpMenuState& state) {
-    bb.FillRect(0, 12, Backbuffer::kWidth, kBarTop - 12, kBodyBg);
-    bb.FillRect(0, 0, Backbuffer::kWidth, 12, kTitleBg);
+    bb.FillRect(0, 14, Backbuffer::kWidth, kBarTop - 14, kBodyBg);
+    bb.FillRect(0, 0, Backbuffer::kWidth, 14, kTitleBg);
     const std::string title = "Level Up";
-    BitmapFont::DrawString(bb, (Backbuffer::kWidth - BitmapFont::StringWidth(title)) / 2, 1, title, kTitleFg);
+    BitmapFont::DrawString(bb, (Backbuffer::kWidth - BitmapFont::StringWidth(title, BitmapFont::Face::MediumBold)) / 2, 0,
+                           title, kTitleFg, BitmapFont::Face::MediumBold);
 
     int y = kContentTop;
     for (const char* line : kPrompts[static_cast<size_t>(state.step)]) {
@@ -90,7 +96,7 @@ void LevelUpMenu::Render(Backbuffer& bb, const LevelUpMenuState& state) {
     }
 
     bb.FillRect(0, kBarTop, Backbuffer::kWidth, Backbuffer::kHeight - kBarTop, kBarBg);
-    BitmapFont::DrawString(bb, 4, kBarTop + 4, "Enter: Ok", kBarFg);
+    BitmapFont::DrawString(bb, 10, 192, "Enter: Ok", kBarFg);
 }
 
 }  // namespace stormhold

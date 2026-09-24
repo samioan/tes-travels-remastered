@@ -82,19 +82,24 @@ void GameRenderer::RenderHud(Backbuffer& bb, const HotbarAssets& assets, int ico
     for (int slot = 0; slot < 4; slot++) {
         int idx = row.iconIdx[slot];
         bb.Blit(kHotbarX[slot], 174, assets.icons[idx]);
+        // paintHud(): smallFont (LatinPlain12).
         BitmapFont::DrawString(bb, kHotbarGlyphX[slot], 180, std::string(1, kHotbarKeyGlyphs[idx]),
-                                PackRGB565(0, 0, 0));
+                                PackRGB565(0, 0, 0), BitmapFont::Face::SmallPlain);
     }
 }
 
 void GameRenderer::RenderMinimapZoomedOut(Backbuffer& bb, const SquareViewGrid& grid, int facing) {
-    BitmapFont::DrawString(bb, 16, 10, std::string(1, kCompassGlyphs[facing]), PackRGB565(255, 255, 255));
+    // paintMinimapZoomedOut(): smallFont (LatinPlain12).
+    BitmapFont::DrawString(bb, 16, 10, std::string(1, kCompassGlyphs[facing]), PackRGB565(255, 255, 255),
+                           BitmapFont::Face::SmallPlain);
     bb.FillRect(10, 20, 23, 23, PackRGB565(0, 0, 0));
     DrawMinimapGrid(bb, 10, 20, 7, 3, 1, grid);
 }
 
 void GameRenderer::RenderMinimapNormal(Backbuffer& bb, const SquareViewGrid& grid, int facing) {
-    BitmapFont::DrawString(bb, 58, 10, std::string(1, kCompassGlyphs[facing]), PackRGB565(255, 255, 255));
+    // paintMinimapNormal(): minimapFont (LatinBold17).
+    BitmapFont::DrawString(bb, 58, 10, std::string(1, kCompassGlyphs[facing]), PackRGB565(255, 255, 255),
+                           BitmapFont::Face::LargeBold);
     bb.FillRect(15, 25, 89, 89, PackRGB565(0, 0, 0));
     DrawMinimapGrid(bb, 15, 25, 17, 5, 2, grid);
 }

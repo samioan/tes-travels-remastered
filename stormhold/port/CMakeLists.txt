@@ -55,6 +55,7 @@ add_library(stormhold_assets STATIC
   src/assets/decoded_image.cpp
   src/assets/dungeon_geometry.cpp
   src/assets/dungeon_names.cpp
+  src/assets/gdr_font.cpp
   src/assets/item_database.cpp
   src/assets/monster_database.cpp
   src/assets/monster_image_set.cpp
@@ -195,6 +196,7 @@ target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets
 # dawnstar ports' platform layer.
 add_executable(stormhold_port WIN32
   src/main.cpp
+  src/platform/win32/exe_dir.cpp
   src/platform/win32/window.cpp
 )
 target_include_directories(stormhold_port PRIVATE src)
@@ -245,6 +247,7 @@ add_executable(stormhold_launcher WIN32
   src/launcher/updater.cpp
   src/launcher/zip_reader.cpp
   src/launcher/launcher.rc
+  src/assets/gdr_font.cpp
   src/platform/win32/exe_dir.cpp
 )
 set_target_properties(stormhold_launcher PROPERTIES OUTPUT_NAME "Stormhold")
@@ -265,6 +268,7 @@ target_link_options(stormhold_launcher PRIVATE /MANIFEST:NO)
 # stormhold_launcher itself.
 add_executable(launcher_smoke
   src/tests/m_launcher_smoke.cpp
+  src/assets/gdr_font.cpp
   src/launcher/banner.cpp
   src/launcher/install.cpp
   src/launcher/launcher_config.cpp
@@ -509,6 +513,11 @@ target_link_libraries(beneca_choices_menu_smoke PRIVATE stormhold_render stormho
 # M66 milestone smoke test -- see src/tests/m66_helga_choices_menu_smoke.cpp.
 add_executable(helga_choices_menu_smoke src/tests/m66_helga_choices_menu_smoke.cpp)
 target_link_libraries(helga_choices_menu_smoke PRIVATE stormhold_render stormhold_player)
+
+# M78 smoke test -- see src/tests/m78_device_font_smoke.cpp. Skips when the
+# (never-committed) Nokia fonts aren't in port/assets/fonts/.
+add_executable(device_font_smoke src/tests/m78_device_font_smoke.cpp)
+target_link_libraries(device_font_smoke PRIVATE stormhold_render)
 
 # M77 smoke test -- see src/tests/m77_level_up_menu_smoke.cpp.
 add_executable(level_up_menu_smoke src/tests/m77_level_up_menu_smoke.cpp)

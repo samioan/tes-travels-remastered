@@ -5260,6 +5260,72 @@ status/per-second timers keep running while a menu is open (the original
 pauses its whole tick loop); camp/attack/interact aren't gated on the
 HUD icon set the way the original's hotkeys are.
 
+## M78: the phone's real fonts
+
+User-reported: M74's GDI "Arial Black" (Dawnstar M58's choice) "closely
+resembles the original but isn't the same". It was matched to a KEmulator
+screenshot, and KEmulator draws MIDP text with PC fonts.
+
+**Target device.** `icon3650.png`, MIDP-1.0, the Nokia UI API and a
+176x208 canvas: the Nokia 3650, Series 60 1st Edition.
+
+**The mapping, read out of the phone's runtime.** Nokia's Series 60 MIDP
+SDK 1.2.1 (archive.org `nokia_sdks_n_dev_tools/nS60_jme_sdk_v1_2_1.zip`)
+ships the phone's emulator, including `kmidrun.dll` (the KVM + native
+LCDUI) and the ROM font stores. Disassembling `CMIDFont.cpp`'s font
+factory: it ignores `Font.getFont`'s face argument -- so the `64` both
+games pass, which this project's comments had called "monospace" but is
+FACE_PROPORTIONAL, makes no difference -- and indexes a 3x4 size x style
+table of ROM font UIDs (VA 0x100db56c). See `graphics/bitmap_font.h`
+for the table. (A second function builds a font by name, LatinBold13 --
+first taken for the Graphics default font, which put the splash credits in
+it and ran them past both screen edges. It must be the font for the
+phone's own built-in UI screens; the MIDlet's default font is MIDP's
+getFont(SYSTEM, PLAIN, MEDIUM) = Alp13, the only reading under which the
+original's fixed, never-wrapped credit lines fit the 176px screen:
+widest line 137px in Alp13, 197px in LatinBold13.)
+
+**What each call site uses**, from the original's own `Font.getFont`
+calls: LatinBold12 (UIScreen itemFont/commandFont -- lists, body text,
+command bar), LatinBold13 (titleFont), Alp13 (the default font the
+splash credits use), LatinPlain12 (GameCanvas smallFont -- HUD, message popup,
+zoomed-out compass), LatinBold17 (minimapFont), alpi17 (dead/camp
+screens). All 1-bit; bold and italic are separate hand-drawn faces.
+
+**The format.** `Ceurope.gdr` (Latin*) and `Browsereur.gdr` (Al*) are
+Symbian bitmap font stores (fnttran version 39, "KFnttran7650Version").
+`assets/gdr_font.h` reads them -- written from Nokia's EPL-licensed
+Symbian sources (textandloc fontstore FNTBODY.CPP/FNTSTORE.CPP, graphics
+bitgdi TEXT.CPP's `DoDrawCharacter` for glyph decoding), deliberately
+not shadowkey-decomp's parser, which derives from EKA2L1's GPLv3 code.
+
+**Provisioning.** Nokia firmware, so never committed or shipped -- the
+same deal as shadowkey-decomp's Ceurope.gdr: the launcher's optional font
+row picks Ceurope.gdr, takes Browsereur.gdr from beside it, copies both
+to `<install>/fonts/` and passes the path as argv[2]; first run
+auto-detects an EKA2L1 ROM or the SDK at its default path. A dev build
+reads `port/assets/fonts/` (gitignored). Without them, M74's GDI font is
+the fallback; without only Browsereur.gdr, its two faces fall back to the
+nearest Ceurope.gdr one (alpi17 -> LatinBold17, Alp13 -> LatinPlain12).
+
+The command bar's right label is drawn at y=192 like the left one, not the
+original's y=195 -- on the device those labels sat in the phone's own
+soft-key area, and the 3px step read as a misalignment here.
+
+**Geometry the real metrics exposed.** UIScreen's own title bar is 14px
+with the title at y=0 (the port had 12px/y=1, a GDI-era nudge), content
+starts at textY=20 (was 16), and the command bar starts at y=190 with
+labels at (10,192) and right-aligned to width-10 at y=195 (the port had
+194/+4 -- a 12px font would have run off the screen). All six UI screens
+now use the original's numbers. List text still starts at x=8 where the
+original's `textX` is 15 -- left alone, layout not font.
+
+The launcher window is also centred in the work area now: the taller
+three-row panel ran under the taskbar at CW_USEDEFAULT's position.
+
+New `device_font_smoke` (skips when the fonts aren't present) plus
+launcher font checks; all 60 smoke tests pass.
+
 ## What's next
 
 Every NPC interaction (all 7 shops), the full M41 dispatch web, the

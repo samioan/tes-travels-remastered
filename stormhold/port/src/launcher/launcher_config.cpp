@@ -47,6 +47,8 @@ bool LoadLauncherConfig(const std::string& path, LauncherConfig& out) {
 
         if (key == "gameData") {
             out.gameData = value;
+        } else if (key == "font") {
+            out.font = value;
         } else if (key == "scale") {
             // A garbage or out-of-range scale keeps the default rather than
             // opening a 1-pixel or 20000-pixel window.
@@ -70,6 +72,7 @@ bool SaveLauncherConfig(const std::string& path, const LauncherConfig& config) {
     file << "# Stormhold Remastered launcher settings.\n"
          << "# Rewritten by the launcher; hand-edits to known keys are kept.\n"
          << "gameData=" << ToForwardSlashes(config.gameData) << "\n"
+         << "font=" << ToForwardSlashes(config.font) << "\n"
          << "scale=" << config.scale << "\n";
     return static_cast<bool>(file);
 }

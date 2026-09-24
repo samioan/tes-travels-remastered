@@ -47,14 +47,15 @@ foreach ($required in @($launcher, $game, (Join-Path $DistDir 'README.txt'),
 }
 
 # --- nothing copyrighted came along -----------------------------------
-# The game's own jar/extracted assets are the user's to supply. `data/`
+# The game's own jar/extracted assets and the Nokia fonts (Ceurope.gdr,
+# Browsereur.gdr -- M78) are the user's to supply. `data/`, `fonts/`
 # and `user/` are created at runtime and must not be in the package.
-foreach ($forbidden in @('data', 'user', 'launcher.cfg')) {
+foreach ($forbidden in @('data', 'user', 'fonts', 'launcher.cfg')) {
     $path = Join-Path $DistDir $forbidden
     if (Test-Path $path) { Fail "must not be shipped: $path" }
 }
 $strays = Get-ChildItem -Recurse -File $DistDir |
-          Where-Object { $_.Extension -in @('.jar', '.lmp', '.dat', '.cus', '.sav') }
+          Where-Object { $_.Extension -in @('.jar', '.lmp', '.dat', '.cus', '.sav', '.gdr') }
 foreach ($stray in $strays) { Fail "game data in the package: $($stray.FullName)" }
 
 # --- no Visual C++ runtime dependency ---------------------------------

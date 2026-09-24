@@ -163,9 +163,9 @@ void MinimapRenderer::Composite(Backbuffer& bb, const MinimapSurface& surface, c
     if (facing >= 1 && facing <= 4) {
         std::string glyph(1, kCompassGlyphs[facing]);
         if (!p.minimapZoomedOut) {
-            BitmapFont::DrawString(bb, 16, 10, glyph, kWhite);
+            BitmapFont::DrawString(bb, 16, 10, glyph, kWhite, BitmapFont::Face::SmallPlain);
         } else {
-            BitmapFont::DrawString(bb, 58, 10, glyph, kWhite);
+            BitmapFont::DrawString(bb, 58, 10, glyph, kWhite, BitmapFont::Face::LargeBold);
         }
     }
 

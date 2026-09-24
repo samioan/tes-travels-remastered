@@ -9,6 +9,7 @@ namespace stormhold {
 namespace {
 
 constexpr uint16_t kBlack = PackRGB565(0, 0, 0);
+constexpr BitmapFont::Face kCreditsFace = BitmapFont::Face::MediumPlain;
 constexpr uint16_t kWhite = PackRGB565(255, 255, 255);
 // UIScreen.paintSplash()'s own literal, 10485760 = 0xA00000 = RGB(160,0,0)
 // -- the SAME literal dawnstar's own identical splash bar uses (both games
@@ -62,11 +63,17 @@ void BootSplash::Render(Backbuffer& bb, int64_t elapsedMs) const {
         int y = 10 + headerLogo_.height + 3;
         for (const char* line : kCreditLines) {
             const std::string s = line;
-            BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(s) / 2, y, s, kBlack);
+            // paintSplash() sets no font: the Graphics default, MIDP's
+            // getFont(SYSTEM, PLAIN, MEDIUM) -- Alp13 on the device (see
+            // bitmap_font.h). The lines are fixed strings the original never
+            // wraps; Alp13's widest is 137px, well inside 176.
+            BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(s, kCreditsFace) / 2, y, s, kBlack,
+                                   kCreditsFace);
             y += 14;
         }
         const std::string distributed = "Distributed by:";
-        BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(distributed) / 2, 143, distributed, kBlack);
+        BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(distributed, kCreditsFace) / 2, 143, distributed,
+                               kBlack, kCreditsFace);
         DrawCentered(bb, distributedLogo_, 158);
         return;
     }

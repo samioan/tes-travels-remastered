@@ -222,6 +222,7 @@
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
 #include "graphics/bitmap_font.h"
+#include "platform/win32/exe_dir.h"
 #include "monster/monster_runtime.h"
 #include "platform/win32/window.h"
 #include "player/camp_state.h"
@@ -274,6 +275,22 @@ std::string ResolveAssetRoot() {
         return narrow;
     }
     return "../../extracted";
+}
+
+// M78: argv[2], if given, is the device font store Ceurope.gdr (the
+// launcher passes its own copy -- see launcher/install.h); otherwise a plain
+// dev build looks in port/assets/fonts/ (gitignored: Nokia firmware, never
+// committed), next to the build/ directory the exe runs from. Either way a
+// missing file is fine -- graphics/bitmap_font.h falls back to its stand-in.
+std::string ResolveFontPath() {
+    if (__argc > 2 && __wargv && __wargv[2] && __wargv[2][0] != L'\0') {
+        int size = WideCharToMultiByte(CP_UTF8, 0, __wargv[2], -1, nullptr, 0, nullptr, nullptr);
+        std::string narrow(static_cast<size_t>(size - 1), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, __wargv[2], -1, narrow.data(), size, nullptr, nullptr);
+        return narrow;
+    }
+    return (std::filesystem::path(stormhold::ExecutableDirectory()) / ".." / "assets" / "fonts" / "Ceurope.gdr")
+        .string();
 }
 
 // STORMHOLD_USER_DIR (set by the launcher to <install>/user, mirroring
@@ -375,15 +392,14 @@ void ClearTransientTileFlags(stormhold::GeneratedLevel& level) {
 // GameCanvas.paintDeadScreen()/paintCampScreen() -- both identical apart
 // from their text: black fill, then one white string drawn with anchor 33
 // (HCENTER|BOTTOM) at (width/2, height/2). deadScreenFont/campScreenFont
-// (`Font.getFont(64, 2, 16)`, a large MIDP system font) have no
-// recoverable glyphs, so this reuses graphics/bitmap_font.h's GDI font --
-// same stand-in dawnstar's own identical "You're Dead!"/"CAMPING" screens
-// use.
+// are `Font.getFont(64, ITALIC, LARGE)` -- the device's alpi17 (see
+// graphics/bitmap_font.h), so the text's cell bottom sits at height/2.
 void PaintFullScreenMessage(stormhold::Backbuffer& bb, const std::string& text) {
+    constexpr auto kFace = stormhold::BitmapFont::Face::LargeItalic;
     bb.Fill(stormhold::PackRGB565(0, 0, 0));
-    int x = (stormhold::Backbuffer::kWidth - stormhold::BitmapFont::StringWidth(text)) / 2;
-    int y = stormhold::Backbuffer::kHeight / 2 - stormhold::BitmapFont::kGlyphHeight;
-    stormhold::BitmapFont::DrawString(bb, x, y, text, stormhold::PackRGB565(255, 255, 255));
+    int x = (stormhold::Backbuffer::kWidth - stormhold::BitmapFont::StringWidth(text, kFace)) / 2;
+    int y = stormhold::Backbuffer::kHeight / 2 - stormhold::BitmapFont::LineHeight(kFace);
+    stormhold::BitmapFont::DrawString(bb, x, y, text, stormhold::PackRGB565(255, 255, 255), kFace);
 }
 
 // GameCanvas.itemFoundMessageLines() (was decompiled/e.java's `k()`, M41)
@@ -428,6 +444,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         userDir.empty() ? std::string() : (std::filesystem::path(userDir) / "savegame.dat").string();
 
     const std::string assetRootPath = ResolveAssetRoot();
+    stormhold::BitmapFont::LoadDeviceFonts(ResolveFontPath());
     stormhold::AssetRoot assetRoot(assetRootPath);
 
     stormhold::ItemDatabase items = stormhold::ItemDatabase::Load(assetRoot);

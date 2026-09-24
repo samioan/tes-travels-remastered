@@ -180,8 +180,9 @@ void Screen::RenderTitleBar(Backbuffer& bb) const {
     bb.FillRect(0, 0, width(), 14, kTitleBarColor);
     // Anchor 17 (TOP|HCENTER) in the original: `x` names the text's
     // horizontal CENTER, not its left edge.
-    int x = width() / 2 - BitmapFont::StringWidth(title_) / 2;
-    BitmapFont::DrawString(bb, x, 0, title_, kTitleTextColor);
+    // TITLE_FONT (LatinBold13).
+    int x = width() / 2 - BitmapFont::StringWidth(title_, BitmapFont::Face::MediumBold) / 2;
+    BitmapFont::DrawString(bb, x, 0, title_, kTitleTextColor, BitmapFont::Face::MediumBold);
 }
 
 int Screen::RenderItemRows(Backbuffer& bb, int cursorY, int lineHeight) const {

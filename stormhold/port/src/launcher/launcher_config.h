@@ -2,10 +2,11 @@
 
 // `launcher.cfg` -- where the launcher remembers what the user plugged in.
 // Ported from dawnstar's own port/src/launcher/launcher_config.h/.cpp
-// (itself from shadowkey-decomp); same plain `key=value` file, `font`
-// dropped (Stormhold needs none -- see install.h).
+// (itself from shadowkey-decomp); same plain `key=value` file. M78 brought
+// shadowkey-decomp's own `font` key back (see install.h).
 //
 //     gameData=data
+//     font=fonts/Ceurope.gdr
 //     scale=2
 //
 // Paths are stored relative to the install root when they live inside it
@@ -25,6 +26,10 @@ struct LauncherConfig {
     // itemsin.dat, npcstrings.dat, ...) -- passed to stormhold_port.exe as
     // argv[1]. Empty until the user has picked a .jar.
     std::string gameData;
+    // M78: the installed copy of the phone's Ceurope.gdr (Browsereur.gdr
+    // sits beside it when the player had one) -- passed to stormhold_port.exe
+    // as argv[2]. Empty means stand-in letters.
+    std::string font;
     // Integer window scale over the native 176x208. main.cpp hardcoded 2
     // before this milestone, which stays the default.
     int scale = 2;

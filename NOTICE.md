@@ -18,6 +18,15 @@ original `TEST-Dawnstar.jar`/`TEST-Stormhold.jar` is committed here, and
 none is distributed with any release. Each launcher asks for your own
 copy and will not run without it. See `.gitignore`.
 
+**The phone's fonts.** `Ceurope.gdr` and `Browsereur.gdr` are the Nokia
+Series 60 phones' own ROM fonts, which both games' text was drawn in.
+They are Nokia device firmware: never committed and never shipped. Each
+launcher asks for them separately, and the games run (with stand-in
+letters) without them. The code that reads them
+(`*/port/src/assets/gdr_font.cpp`) is this project's own, written from
+Nokia's EPL-licensed Symbian sources rather than taken from any other
+font reader.
+
 ## Artwork
 
 Each launcher's background is this project's own key art:

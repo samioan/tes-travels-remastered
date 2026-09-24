@@ -4,12 +4,12 @@
 // same architecture throughout (owner-drawn buttons, an Impl-in-
 // GWLP_USERDATA idiom, an artwork-sized window, a detached worker thread
 // posting WM_APP_* messages back for the update check/install, IFileOpenDialog
-// pickers, hidden-while-playing + MsgWaitForMultipleObjects). Two real
-// differences from the source this was ported from: there is no font row
-// (Dawnstar's renderer draws its own embedded bitmap font -- see
-// graphics/bitmap_font.h/.cpp -- and reads no external file, unlike
-// Shadowkey's Nokia ROM font requirement), and "Choose file..." asks for
-// a single .jar rather than a folder to search (see launcher/install.h).
+// pickers, hidden-while-playing + MsgWaitForMultipleObjects). "Choose
+// file..." asks for a single .jar rather than a folder to search (see
+// launcher/install.h). M78 restored shadowkey-decomp's optional font row:
+// the Nokia 3650's own ROM fonts (Ceurope.gdr, plus Browsereur.gdr from
+// beside it), which the game draws its text in when present -- see
+// graphics/bitmap_font.h.
 //
 // It draws its own text and its own buttons rather than using a dialog
 // template: the artwork is a dark, mostly-black wordmark, and the default
@@ -68,7 +68,7 @@ constexpr COLORREF kBad = RGB(224, 120, 120);
 // re-lays the window instead of slicing the wordmark off.
 constexpr int kClientWidth = 760;
 constexpr int kMinClientWidth = 520;
-constexpr int kPanelHeight = 250;
+constexpr int kPanelHeight = 296;
 constexpr int kFallbackHeaderHeight = 200;  // only if the artwork fails to decode
 constexpr int kBannerVisiblePermille = 1000;  // this banner has no lower "cropped" region to trim
 
@@ -82,20 +82,26 @@ constexpr int kButtonRight = kMargin + kButtonWidth;  // from the window's right
 constexpr int kRow1Caption = 20;
 constexpr int kRow1Value = 40;
 constexpr int kRow1Button = 32;
-constexpr int kRow2Caption = 82;
-constexpr int kScaleY = 102;
+// M78: shadowkey-decomp's own three-row layout (game files, font, window
+// size), now that the font row is back.
+constexpr int kRow2Caption = 76;
+constexpr int kRow2Value = 96;
+constexpr int kRow2Button = 88;
+constexpr int kRow3Caption = 142;
+constexpr int kScaleY = 162;
 constexpr int kScaleWidth = 44;
 constexpr int kScaleHeight = 28;
-constexpr int kPlayY = 96;
+constexpr int kPlayY = 140;
 constexpr int kPlayHeight = 44;
-constexpr int kStatusY = 152;
-constexpr int kVersionY = 196;
-constexpr int kUpdateY = 218;
+constexpr int kStatusY = 196;
+constexpr int kVersionY = 234;
+constexpr int kUpdateY = 256;
 
 enum ControlId : int {
     IDC_CHOOSE_DATA = 1001,
     IDC_PLAY = 1002,
     IDC_UPDATE = 1003,
+    IDC_CHOOSE_FONT = 1004,
     IDC_SCALE_FIRST = 1010,  // +0 => 2x, +1 => 3x, +2 => 4x
 };
 
@@ -223,12 +229,16 @@ struct Impl {
     // launch instead of failing at Play.
     std::string dataPath;
     bool dataOk = false;
+    // M78: same, for the optional device font (see Refresh()).
+    std::string fontPath;
+    bool fontOk = false;
 
     std::wstring status;
     COLORREF statusColor = kMuted;
     bool busy = false;
 
     Button chooseData;
+    Button chooseFont;
     Button play;
     Button update;
     Button scale[3];
@@ -345,10 +355,14 @@ void SetStatus(Impl& impl, const std::wstring& text, COLORREF color) {
 void Refresh(Impl& impl) {
     impl.dataPath = dawnstar::launcher::ResolveAgainst(impl.installRoot, impl.config.gameData);
     impl.dataOk = dawnstar::launcher::IsGameDataRoot(impl.dataPath);
+    impl.fontPath = dawnstar::launcher::ResolveAgainst(impl.installRoot, impl.config.font);
+    impl.fontOk = dawnstar::launcher::IsUsableFont(impl.fontPath);
 
     const bool busy = impl.busy || impl.installing;
+    // The font is optional -- Play needs only the game.
     EnableWindow(impl.play.hwnd, impl.dataOk && !busy);
     EnableWindow(impl.chooseData.hwnd, !busy);
+    EnableWindow(impl.chooseFont.hwnd, !busy);
     for (int i = 0; i < 3; ++i) {
         impl.scale[i].style.selected = kScaleChoices[i] == impl.config.scale;
         EnableWindow(impl.scale[i].hwnd, !busy);
@@ -495,6 +509,36 @@ void ChooseGameData(Impl& impl) {
     SetStatus(impl, L"Game files installed. Ready to play.", kGold);
 }
 
+// Copies the picked Ceurope.gdr (and Browsereur.gdr from beside it) into
+// <install>/fonts, so the install keeps working after the source is moved.
+// Shared by the picker and the first-run auto-detect.
+bool InstallFontFrom(Impl& impl, const std::string& source) {
+    const std::string destination = (fs::path(impl.installRoot) / "fonts").string();
+    bool copiedItalic = false;
+    std::string error;
+    if (!dawnstar::launcher::InstallFonts(source, destination, copiedItalic, error)) {
+        SetStatus(impl, Widen(error), kBad);
+        return false;
+    }
+    impl.config.font =
+        dawnstar::launcher::RelativeToIfInside(impl.installRoot, (fs::path(destination) / "Ceurope.gdr").string());
+    Save(impl);
+    Refresh(impl);
+    SetStatus(impl,
+              copiedItalic ? L"Nokia fonts installed."
+                           : L"Nokia font installed. There was no Browsereur.gdr beside it, so "
+                             L"the italic \"You're Dead!\"/\"CAMPING\" text uses bold instead.",
+              kGold);
+    return true;
+}
+
+void ChooseFont(Impl& impl) {
+    const std::wstring picked = PickPath(impl.hwnd, false, L"Select Ceurope.gdr",
+                                         L"Nokia font store (*.gdr)", L"*.gdr");
+    if (picked.empty()) return;
+    InstallFontFrom(impl, Narrow(picked));
+}
+
 // ---------------------------------------------------------------------
 // Play
 // ---------------------------------------------------------------------
@@ -536,6 +580,8 @@ void Play(Impl& impl) {
     // argv[1] is the asset root -- quoted because it routinely contains
     // spaces.
     std::wstring command = L"\"" + Widen(exe) + L"\" \"" + Widen(impl.dataPath) + L"\"";
+    // M78: argv[2], the optional device font.
+    if (impl.fontOk) command += L" \"" + Widen(impl.fontPath) + L"\"";
 
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
@@ -719,8 +765,19 @@ void PaintWindow(Impl& impl, HDC target) {
                      L"Not set — choose your Dawnstar .jar to begin.");
     }
 
-    // Row 2 -- the window size.
+    // Row 2 -- the device font (M78).
     DrawTextLine(dc, impl.captionFont, kCaption, margin, impl.P(kRow2Caption), impl.S(400),
+                 impl.S(18), L"NOKIA FONT   ·   OPTIONAL");
+    if (impl.fontOk) {
+        DrawTextLine(dc, impl.valueFont, kText, margin, impl.P(kRow2Value), valueWidth,
+                     impl.S(22), ElidePath(Widen(impl.fontPath), valueChars));
+    } else {
+        DrawTextLine(dc, impl.valueFont, kMuted, margin, impl.P(kRow2Value), valueWidth,
+                     impl.S(22), L"Not set — the game will run with stand-in letters.");
+    }
+
+    // Row 3 -- the window size.
+    DrawTextLine(dc, impl.captionFont, kCaption, margin, impl.P(kRow3Caption), impl.S(400),
                  impl.S(18), L"WINDOW SIZE");
 
     // The status line, and the version in the corner.
@@ -796,8 +853,17 @@ void SizeToArtwork(Impl& impl, DWORD style) {
 
     RECT desired{0, 0, width, header + panelHeight};
     AdjustWindowRect(&desired, style, FALSE);
-    SetWindowPos(impl.hwnd, nullptr, 0, 0, desired.right - desired.left,
-                 desired.bottom - desired.top, SWP_NOMOVE | SWP_NOZORDER);
+    // Centred in the work area rather than left at CW_USEDEFAULT's cascade
+    // position: M78's taller three-row panel otherwise ran its bottom rows
+    // (version, update) under the taskbar on a 1080p screen, even though the
+    // height itself fits.
+    const int windowWidth = desired.right - desired.left;
+    const int windowHeight = desired.bottom - desired.top;
+    const int workWidth = static_cast<int>(work.right - work.left);
+    const int workHeight = static_cast<int>(work.bottom - work.top);
+    const int x = static_cast<int>(work.left) + (std::max)(0, (workWidth - windowWidth) / 2);
+    const int y = static_cast<int>(work.top) + (std::max)(0, (workHeight - windowHeight) / 2);
+    SetWindowPos(impl.hwnd, nullptr, x, y, windowWidth, windowHeight, SWP_NOZORDER);
 }
 
 // `x` and `y` are device pixels (y already panel-relative via Impl::P);
@@ -819,6 +885,8 @@ void CreateControls(Impl& impl) {
     const int buttonX = impl.ButtonX();
     MakeButton(impl, impl.chooseData, L"Choose file…", IDC_CHOOSE_DATA, buttonX,
                impl.P(kRow1Button), kButtonWidth, kButtonHeight, ButtonStyle{});
+    MakeButton(impl, impl.chooseFont, L"Choose file…", IDC_CHOOSE_FONT, buttonX,
+               impl.P(kRow2Button), kButtonWidth, kButtonHeight, ButtonStyle{});
     MakeButton(impl, impl.play, L"Play", IDC_PLAY, buttonX, impl.P(kPlayY), kButtonWidth,
                kPlayHeight, ButtonStyle{true, false});
     MakeButton(impl, impl.update, L"Update", IDC_UPDATE, buttonX, impl.P(kUpdateY),
@@ -856,6 +924,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             const Button* button = nullptr;
             switch (static_cast<int>(wParam)) {
                 case IDC_CHOOSE_DATA: button = &impl->chooseData; break;
+                case IDC_CHOOSE_FONT: button = &impl->chooseFont; break;
                 case IDC_PLAY: button = &impl->play; break;
                 case IDC_UPDATE: button = &impl->update; break;
                 default:
@@ -874,6 +943,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (HIWORD(wParam) != BN_CLICKED) break;
             if (impl->installing) return 0;  // nothing is safe to start mid-swap
             if (id == IDC_CHOOSE_DATA) ChooseGameData(*impl);
+            else if (id == IDC_CHOOSE_FONT) ChooseFont(*impl);
             else if (id == IDC_PLAY) Play(*impl);
             else if (id == IDC_UPDATE) {
                 impl->installing = true;
@@ -1030,6 +1100,16 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand) {
     CreateControls(impl);
     Refresh(impl);
 
+    // M78: first run with no font configured -- install whatever Nokia font
+    // is already on this machine (an EKA2L1 ROM, Nokia's S60 MIDP SDK), so
+    // the common case needs no font pick at all. Same convenience as
+    // shadowkey-decomp's launcher.
+    bool autoInstalledFont = false;
+    if (impl.config.font.empty()) {
+        const std::string found = dawnstar::launcher::FindExistingFont();
+        if (!found.empty()) autoInstalledFont = InstallFontFrom(impl, found);
+    }
+
     // Clears out whatever the last update left behind, then asks GitHub
     // whether there is a newer Dawnstar build -- on a worker thread,
     // because a slow or unreachable network must never delay the window
@@ -1042,7 +1122,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand) {
         impl.updateState = UpdateState::Disabled;
     }
 
-    if (impl.dataOk) {
+    if (autoInstalledFont) {
+        // InstallFontFrom's own status line says what it found -- keep it.
+    } else if (impl.dataOk) {
         SetStatus(impl, L"Ready to play.", kMuted);
     } else {
         SetStatus(impl,

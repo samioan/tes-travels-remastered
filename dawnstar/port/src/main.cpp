@@ -68,6 +68,7 @@ extern wchar_t** __wargv;
 #include "interact/interact_tick.h"
 #include "npc/shop_interaction.h"
 #include "passive/passive_tick.h"
+#include "platform/win32/exe_dir.h"
 #include "platform/win32/window.h"
 #include "player/player_combat_stats.h"
 #include "player/player_creation.h"
@@ -145,6 +146,19 @@ std::string ResolveAssetRoot() {
         return NarrowArg(__wargv[1]);
     }
     return "../../extracted";
+}
+
+// M78: argv[2], if given, is the device font store Ceurope.gdr (the
+// launcher passes its own copy -- see launcher/install.h); otherwise a plain
+// dev build looks in port/assets/fonts/ (gitignored: Nokia firmware, never
+// committed), next to the build/ directory the exe runs from. Either way a
+// missing file is fine -- graphics/bitmap_font.h falls back to its stand-in.
+std::string ResolveFontPath() {
+    if (__argc > 2 && __wargv && __wargv[2] && __wargv[2][0] != L'\0') {
+        return NarrowArg(__wargv[2]);
+    }
+    return (std::filesystem::path(dawnstar::ExecutableDirectory()) / ".." / "assets" / "fonts" / "Ceurope.gdr")
+        .string();
 }
 
 // DAWNSTAR_USER_DIR (set by the launcher to <install>/user, mirroring
@@ -430,6 +444,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // uses (see e.g. tests/m10_frame_render_smoke.cpp) -- this exe also
     // lands in build/, two levels above dawnstar/extracted/.
     const std::string root = ResolveAssetRoot();
+    dawnstar::BitmapFont::LoadDeviceFonts(ResolveFontPath());
 
     try {
         dawnstar::DatArchive archive(root + "/datfiles.lmp");
@@ -1565,16 +1580,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // GameCanvas.paint()'s own top-level branch: `deathState == 3`
             // (paintDeathScreen) outranks the campState check below it,
             // exactly like the original's own else-if chain -- M50. A
-            // black screen plus "You're Dead!" centered in BIG_MESSAGE_FONT,
-            // same invented-font reasoning as paintCampingScreen's own
-            // "CAMPING" just below (see that block's doc comment).
+            // black screen plus "You're Dead!" in BIG_MESSAGE_FONT (the
+            // device's alpi17, M78), anchor 33 (HCENTER|BOTTOM) at the
+            // screen centre.
             if (player.deathState == 3) {
                 backbuffer.Fill(dawnstar::PackRGB565(0, 0, 0));
                 const std::string deathText = "You're Dead!";
-                int textX = (dawnstar::Backbuffer::kWidth - dawnstar::BitmapFont::StringWidth(deathText)) / 2;
-                int textY = (dawnstar::Backbuffer::kHeight - dawnstar::BitmapFont::kGlyphHeight) / 2;
+                constexpr auto kFace = dawnstar::BitmapFont::Face::LargeItalic;
+                int textX = (dawnstar::Backbuffer::kWidth - dawnstar::BitmapFont::StringWidth(deathText, kFace)) / 2;
+                int textY = dawnstar::Backbuffer::kHeight / 2 - dawnstar::BitmapFont::LineHeight(kFace);
                 dawnstar::BitmapFont::DrawString(backbuffer, textX, textY, deathText,
-                                                  dawnstar::PackRGB565(255, 255, 255));
+                                                  dawnstar::PackRGB565(255, 255, 255), kFace);
                 window.Present(backbuffer);
                 return;
             }
@@ -1583,20 +1599,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // entirely REPLACES paintGameView() while camping (not layered
             // on top of it) -- no corridor/HUD/hotbar/minimap at all.
             if (player.campState != 0) {
-                // paintCampingScreen(): a black screen plus "CAMPING"
-                // centered in BIG_MESSAGE_FONT -- another MIDP built-in
-                // system font (like SMALL_FONT, see graphics/
-                // bitmap_font.h's own doc comment) with no recoverable
-                // real glyph shapes/metrics, so this reuses the same
-                // invented BitmapFont rather than hand-authoring a
-                // second, bigger invented font purely for this one
-                // screen.
+                // paintCampingScreen(): a black screen plus "CAMPING" in
+                // BIG_MESSAGE_FONT, same face and anchor as the death
+                // screen above.
                 backbuffer.Fill(dawnstar::PackRGB565(0, 0, 0));
                 const std::string campingText = "CAMPING";
-                int textX = (dawnstar::Backbuffer::kWidth - dawnstar::BitmapFont::StringWidth(campingText)) / 2;
-                int textY = (dawnstar::Backbuffer::kHeight - dawnstar::BitmapFont::kGlyphHeight) / 2;
+                constexpr auto kFace = dawnstar::BitmapFont::Face::LargeItalic;
+                int textX = (dawnstar::Backbuffer::kWidth - dawnstar::BitmapFont::StringWidth(campingText, kFace)) / 2;
+                int textY = dawnstar::Backbuffer::kHeight / 2 - dawnstar::BitmapFont::LineHeight(kFace);
                 dawnstar::BitmapFont::DrawString(backbuffer, textX, textY, campingText,
-                                                  dawnstar::PackRGB565(255, 255, 255));
+                                                  dawnstar::PackRGB565(255, 255, 255), kFace);
                 window.Present(backbuffer);
                 return;
             }

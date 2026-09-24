@@ -65,11 +65,17 @@ void BootSplash::Render(Backbuffer& bb, int64_t elapsedMs) const {
         int y = 10 + vir2lLogo_.height + 3;
         for (const char* line : kCopyStringParts) {
             const std::string s = line;
-            BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(s) / 2, y, s, kBlack);
+            // paintSplash() sets no font: the Graphics default, MIDP's
+            // getFont(SYSTEM, PLAIN, MEDIUM) -- Alp13 on the device (see
+            // bitmap_font.h). The lines are fixed strings the original never
+            // wraps; Alp13's widest is 137px, well inside 176.
+            BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(s, BitmapFont::Face::MediumPlain) / 2, y, s,
+                                   kBlack, BitmapFont::Face::MediumPlain);
             y += 14;
         }
         const std::string distributed = "Distributed by:";
-        BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(distributed) / 2, 143, distributed, kBlack);
+        BitmapFont::DrawString(bb, cx - BitmapFont::StringWidth(distributed, BitmapFont::Face::MediumPlain) / 2, 143,
+                               distributed, kBlack, BitmapFont::Face::MediumPlain);
         DrawCentered(bb, carrierLogo_, 158);
         return;
     }

@@ -6,6 +6,15 @@
 /oblivion/extracted/
 /stormhold/extracted/
 
+# --- Copyrighted device firmware ---
+# Ceurope.gdr/Browsereur.gdr are the Nokia 3650's own ROM fonts (see each
+# port's src/graphics/bitmap_font.h) -- Nokia's, not this project's. Never
+# commit them; each dev copies their own into port/assets/fonts/ (from a
+# device dump, EKA2L1, or Nokia's Series 60 MIDP SDK emulator's
+# epoc32/release/wins/udeb/z/system/fonts/).
+/dawnstar/port/assets/fonts/
+/stormhold/port/assets/fonts/
+
 # --- Third-party tooling ---
 # Not project source; fetched locally, not tracked in git.
 /tools/vineflower.jar
