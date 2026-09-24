@@ -173,6 +173,7 @@ add_library(stormhold_render STATIC
   src/render/message_popup.cpp
   src/render/status_bar_plan.cpp
   src/render/visible_object_renderer.cpp
+  src/ui/boot_splash.cpp
   src/ui/inventory_ui.cpp
   src/ui/menu_flow.cpp
   src/ui/npc_choices_menu.cpp
@@ -505,5 +506,9 @@ target_link_libraries(helga_choices_menu_smoke PRIVATE stormhold_render stormhol
 # M67 milestone smoke test -- see src/tests/m67_paint_unknown_b_smoke.cpp.
 add_executable(paint_unknown_b_smoke src/tests/m67_paint_unknown_b_smoke.cpp)
 target_link_libraries(paint_unknown_b_smoke PRIVATE stormhold_render)
+
+# M73 milestone smoke test -- see src/tests/m73_boot_splash_smoke.cpp.
+add_executable(boot_splash_smoke src/tests/m73_boot_splash_smoke.cpp)
+target_link_libraries(boot_splash_smoke PRIVATE stormhold_render)
 
 endif()  # NOT STORMHOLD_DIST

@@ -201,6 +201,7 @@
 // already wires through DungeonRuntime.
 #include <windows.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -242,6 +243,7 @@
 #include "render/visible_object_assets.h"
 #include "render/visible_object_renderer.h"
 #include "ui/inventory_ui.h"
+#include "ui/boot_splash.h"
 #include "ui/menu_flow.h"
 #include "ui/npc_choices_menu.h"
 #include "ui/npc_dialogue.h"
@@ -448,6 +450,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     stormhold::FlashOverlayAssets flashOverlayAssets = stormhold::FlashOverlayAssets::Load(assetRoot);
     stormhold::FlashOverlayState flashOverlay;
 
+    // M73: UIScreen mode 2 -- the startup splash (splashtop/splashbot +
+    // progress bar, then the Vir2L/ZeniMax copyright card, then splashtop/
+    // splashbot again) -- see ui/boot_splash.h's own class comment for the
+    // full timeline and the two confirmed-different-from-dawnstar details.
+    stormhold::BootSplash bootSplash = stormhold::BootSplash::Load(assetRoot);
+    bool inSplash = true;
+    int64_t splashStartMs = -1;
+
     stormhold::Window window(stormhold::Backbuffer::kWidth * scale, stormhold::Backbuffer::kHeight * scale,
                               L"Stormhold Port");
     stormhold::GameClock clock;
@@ -557,6 +567,34 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // paper over, so the crash itself is correct behavior; only the
         // silence around it wasn't.
         try {
+        if (inSplash) {
+            int64_t now = static_cast<int64_t>(GetTickCount64());
+            if (splashStartMs < 0) splashStartMs = now;
+            int64_t elapsed = now - splashStartMs;
+            // No real `cmdSkip`/equivalent exists in the original (its own
+            // splash thread runs to completion unconditionally) -- this is
+            // a deliberate, port-only convenience, same class of addition
+            // as the 'P' pause-menu hotkey (ui/pause_menu.h's own class
+            // comment): Enter/Escape/Space fast-forward to the main menu,
+            // since this port has no way to run genuinely in the
+            // background while the player waits out a fixed real-time
+            // sequence that carries no real loading work here (see
+            // ui/boot_splash.h's own class comment on why the bar is
+            // animated rather than real).
+            bool skip = KeyEdge(VK_RETURN) || KeyEdge(VK_ESCAPE) || KeyEdge(VK_SPACE);
+            if (skip || stormhold::BootSplash::IsDone(elapsed)) {
+                inSplash = false;
+            } else {
+                int percent = static_cast<int>(std::min<int64_t>(
+                    100, elapsed * 100 / stormhold::BootSplash::kCopyrightStartMs));
+                bootSplash.SetPercent(percent);
+                backbuffer.Fill(stormhold::PackRGB565(0, 0, 0));
+                bootSplash.Render(backbuffer, elapsed);
+                window.Present(backbuffer);
+                return;
+            }
+        }
+
         if (menuState.screen != stormhold::MenuScreen::Finished) {
             if (KeyEdge(VK_UP)) stormhold::MenuFlow::MoveSelection(menuState, -1, charData);
             if (KeyEdge(VK_DOWN)) stormhold::MenuFlow::MoveSelection(menuState, 1, charData);

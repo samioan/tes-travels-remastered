@@ -19,6 +19,7 @@
 
 #include "assets/asset_root.h"
 #include "assets/character_data.h"
+#include "assets/help_topics.h"
 #include "assets/item_database.h"
 #include "assets/shop_dialogue.h"
 #include "graphics/backbuffer.h"
@@ -59,9 +60,12 @@ int main(int argc, char** argv) {
         MenuFlow::MoveSelection(state, 1, charData);
         MenuFlow::MoveSelection(state, 1, charData);
         MenuFlow::MoveSelection(state, 1, charData);
-        Expect(state.selectedIndex == 3, "Main Menu has 4 items (New/Continue/Credits/Exit), index should reach 3");
         MenuFlow::MoveSelection(state, 1, charData);
-        Expect(state.selectedIndex == 3, "MoveSelection should clamp at the last item");
+        Expect(state.selectedIndex == 4,
+               "Main Menu has 5 real items (New/Continue/Help/Credits/Exit -- M72, previously silently missing "
+               "Help), index should reach 4");
+        MenuFlow::MoveSelection(state, 1, charData);
+        Expect(state.selectedIndex == 4, "MoveSelection should clamp at the last item");
         MenuFlow::Render(bb, state, charData, dialogue);
 
         std::printf("-- Continue Game always takes the no-saved-game branch --\n");
@@ -73,10 +77,34 @@ int main(int argc, char** argv) {
         Expect(state.screen == MenuScreen::MainMenu, "NoSavedGame's Ok should return to the Main Menu");
         Expect(state.selectedIndex == 0, "returning to the Main Menu should reset selectedIndex");
 
-        std::printf("-- Credits round-trips back to the Main Menu via Cancel --\n");
+        std::printf("-- Help: 12-topic list -> a topic's body -> Main Menu (M72) --\n");
         state.selectedIndex = 2;
         MenuFlow::Confirm(state, charData, items);
-        Expect(state.screen == MenuScreen::Credits, "index 2 should be Credits");
+        Expect(state.screen == MenuScreen::Help, "index 2 should be Help");
+        MenuFlow::MoveSelection(state, 100, charData);
+        Expect(state.selectedIndex == HelpTopics::kCount - 1, "Help should clamp at the 12th topic like any list");
+        state.selectedIndex = 5;
+        MenuFlow::Render(bb, state, charData, dialogue);
+        MenuFlow::Confirm(state, charData, items);
+        Expect(state.screen == MenuScreen::HelpTopic, "picking a topic should open its body");
+        Expect(state.helpTopicIndex == 5, "helpTopicIndex should be the row that was picked");
+        MenuFlow::Render(bb, state, charData, dialogue);
+        // Real target is `nextScreen = this.statsUI`, confirmed null this
+        // early (no game has started yet) -- see ui/pause_menu.h's own
+        // class comment for the full finding. This port's own choice is
+        // MainMenu, not a literal reproduction of that null-target
+        // softlock -- see ui/menu_flow.h's own class comment.
+        MenuFlow::Confirm(state, charData, items);
+        Expect(state.screen == MenuScreen::MainMenu, "leaving a help topic (Ok) should land on the Main Menu");
+        state.selectedIndex = 2;
+        MenuFlow::Confirm(state, charData, items);
+        MenuFlow::Cancel(state);
+        Expect(state.screen == MenuScreen::MainMenu, "Cancel from the Help topic list itself should also return to the Main Menu");
+
+        std::printf("-- Credits round-trips back to the Main Menu via Cancel --\n");
+        state.selectedIndex = 3;
+        MenuFlow::Confirm(state, charData, items);
+        Expect(state.screen == MenuScreen::Credits, "index 3 should be Credits");
         MenuFlow::Render(bb, state, charData, dialogue);
         MenuFlow::Cancel(state);
         Expect(state.screen == MenuScreen::MainMenu, "Credits' Cancel should also return to the Main Menu");
@@ -156,9 +184,9 @@ int main(int argc, char** argv) {
 
         std::printf("-- Exit sets exitRequested without changing the screen --\n");
         MenuFlowState exitState;
-        exitState.selectedIndex = 3;
+        exitState.selectedIndex = 4;
         MenuFlow::Confirm(exitState, charData, items);
-        Expect(exitState.exitRequested, "Main Menu item 3 (Exit) should set exitRequested");
+        Expect(exitState.exitRequested, "Main Menu item 4 (Exit) should set exitRequested");
 
         if (!g_ok) {
             std::fprintf(stderr, "m40_menu_flow_smoke: FAILED\n");

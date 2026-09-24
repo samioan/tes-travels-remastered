@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "assets/help_topics.h"
 #include "graphics/bitmap_font.h"
 #include "player/player_creation.h"
 
@@ -49,17 +50,20 @@ const std::string kCreditsText =
     "All rights reserved.";
 
 bool IsListScreen(MenuScreen s) {
-    return s == MenuScreen::MainMenu || s == MenuScreen::ClassSelect || s == MenuScreen::ClassConfirm;
+    return s == MenuScreen::MainMenu || s == MenuScreen::ClassSelect || s == MenuScreen::ClassConfirm ||
+           s == MenuScreen::Help;
 }
 
 int ListItemCount(MenuScreen s, const CharacterData& charData) {
     switch (s) {
         case MenuScreen::MainMenu:
-            return 4;
+            return 5;
         case MenuScreen::ClassSelect:
             return charData.ClassCount();
         case MenuScreen::ClassConfirm:
             return 2;
+        case MenuScreen::Help:
+            return HelpTopics::kCount;
         default:
             return 0;
     }
@@ -198,11 +202,16 @@ void MenuFlow::Confirm(MenuFlowState& state, const CharacterData& charData, cons
                         state.selectedIndex = 0;
                     }
                     break;
-                case 2:  // Credits
+                case 2:  // Help -- M72, was silently missing (mainMenuItems'
+                         // real 5th item, see this file's own class comment).
+                    state.screen = MenuScreen::Help;
+                    state.selectedIndex = 0;
+                    break;
+                case 3:  // Credits
                     state.screen = MenuScreen::Credits;
                     state.selectedIndex = 0;
                     break;
-                case 3:  // Exit
+                case 4:  // Exit
                     state.exitRequested = true;
                     break;
                 default:
@@ -262,6 +271,23 @@ void MenuFlow::Confirm(MenuFlowState& state, const CharacterData& charData, cons
             state.selectedIndex = 0;
             break;
 
+        case MenuScreen::Help:
+            state.helpTopicIndex = state.selectedIndex;
+            state.screen = MenuScreen::HelpTopic;
+            state.selectedIndex = 0;
+            break;
+
+        case MenuScreen::HelpTopic:
+            // Real target is `newHelpTopicUI(topicIndex).nextScreen = this.
+            // statsUI` -- confirmed null this early (no game has started,
+            // `statsUI` is only ever built from the IN-GAME pause menu's
+            // own "Stats" item) -- see ui/pause_menu.h's own class comment
+            // for the full finding. MainMenu is this screen's own closest
+            // equivalent to "session home," not a literal reproduction.
+            state.screen = MenuScreen::MainMenu;
+            state.selectedIndex = 0;
+            break;
+
         case MenuScreen::Welcome:
             state.screen = MenuScreen::Intro;
             state.selectedIndex = 0;
@@ -302,6 +328,8 @@ void MenuFlow::Cancel(MenuFlowState& state) {
 
         case MenuScreen::NoSavedGame:
         case MenuScreen::Credits:
+        case MenuScreen::Help:
+        case MenuScreen::HelpTopic:
             state.screen = MenuScreen::MainMenu;
             state.selectedIndex = 0;
             break;
@@ -331,7 +359,7 @@ void MenuFlow::Render(Backbuffer& bb, const MenuFlowState& state, const Characte
                        const ShopDialogue& dialogue) {
     switch (state.screen) {
         case MenuScreen::MainMenu: {
-            std::vector<std::string> items = {"New Game", "Continue Game", "Credits", "Exit"};
+            std::vector<std::string> items = {"New Game", "Continue Game", "Help", "Credits", "Exit"};
             PaintList(bb, "Main Menu", {}, items, state.selectedIndex);
             PaintBottomBar(bb, "", "Select");
             break;
@@ -381,6 +409,16 @@ void MenuFlow::Render(Backbuffer& bb, const MenuFlowState& state, const Characte
             break;
         case MenuScreen::Credits:
             PaintMessage(bb, "Credits", kCreditsText, state.selectedIndex);
+            PaintBottomBar(bb, "", "Ok");
+            break;
+        case MenuScreen::Help:
+            PaintList(bb, "Help", {}, HelpTopics::Titles(dialogue), state.selectedIndex);
+            PaintBottomBar(bb, "Cancel", "Select");
+            break;
+        case MenuScreen::HelpTopic:
+            PaintMessage(bb, state.helpTopicIndex >= 0 ? HelpTopics::Title(dialogue, state.helpTopicIndex) : "Help",
+                         state.helpTopicIndex >= 0 ? HelpTopics::Body(dialogue, state.helpTopicIndex) : "",
+                         state.selectedIndex);
             PaintBottomBar(bb, "", "Ok");
             break;
         case MenuScreen::Welcome:

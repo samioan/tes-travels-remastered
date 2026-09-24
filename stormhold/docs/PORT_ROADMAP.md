@@ -4849,6 +4849,129 @@ starts and stays up.
       sampled, including several not touched by M67-M70's own fixes,
       came back a faithful, correct match.
 
+- [x] **M72 -- continued the audit into `Dungeon.java` (found the same "the
+      port is more careful than it needs to be" pattern M71 already
+      established, nothing new to fix there) and found one real, concrete
+      missing feature: the main menu is silently missing its own "Help"
+      item.** `Dungeon.java`'s generation constants (`MONSTER_TYPE_BY_TIER`
+      -- all 37 rows, `DIFFICULTY_TIER_LOOKUP`, `CHEST_GIFT_SUBTYPE_BY_TIER`)
+      and its `rollRoomRect()`/`tryPlaceRoom()`/`placeChests()` RNG formulas
+      (including the confirmed `AbsThenMod` vs `RandomInt0Based` distinction
+      the port's own comment already flagged) all match
+      `world/dungeon_generator.cpp` exactly, transcribed digit-for-digit.
+      `placeChests()` turned up one more instance of the SAME class of
+      finding M71 closed out: the original's own `record[2] = first ? 1 :
+      0` byte is provably always 0 (`first` is flipped to `false` earlier
+      in the same iteration) -- already found, reasoned through, and
+      correctly left un-reproduced (nothing reads it either side) by an
+      EARLIER session, confirmed independently here rather than newly
+      discovered.
+
+      The real finding: `src/ESGame.java`'s own `mainMenuItems` is `{"New
+      Game", "Continue Game", "Help", "Credits", "Exit"}` -- 5 real items
+      -- but `ui/menu_flow.h`'s own `MenuScreen::MainMenu` only ever
+      modeled 4 (`ListItemCount` returned 4, `Confirm`'s switch only had
+      cases 0-3), silently dropping "Help" entirely. Traced why: M63's own
+      class comment said Help was "deliberately NOT modeled" because the
+      transcription gap M69 later closed still looked open at the time --
+      once that gap closed, nobody came back to check whether the MAIN
+      MENU (not just the pause menu M69 actually wired) also had a Help
+      entry waiting on it. Fixed: `MenuScreen::Help`/`HelpTopic` now mirror
+      `PauseScreen::Help`/`HelpTopic`'s own list-then-body shape, sharing
+      the actual topic lookup via a new `assets/help_topics.h` (`HelpTopics`
+      class) instead of each keeping its own copy -- `ui/pause_menu.cpp`'s
+      own earlier local copy was folded into this shared file, not
+      duplicated.
+
+      **A second real finding, surfaced while tracing WHERE a help topic
+      should lead once left:** the real target, `newHelpTopicUI
+      (topicIndex).nextScreen = this.statsUI`, is only a working screen if
+      `statsUI` has already been built -- its ONLY assignment site is the
+      pause menu's own "Stats" item (screenGroup 31 case 0). Before that
+      (which includes EVERY visit to Help from the main menu, since no
+      player/game exists yet at that point), `statsUI` is `null`, and
+      `ESGame.showScreen(null)` (neither `instanceof` check matches)
+      leaves `activeScreen` pointing at the just-exited help-topic screen
+      with no new Displayable ever set -- a confirmed real softlock, on
+      literally the first thing a curious new player might try before
+      ever starting a game. Neither this port's main-menu Help (leaves to
+      `MenuScreen::MainMenu`) nor M69's own earlier pause-menu Help
+      (leaves to `PauseScreen::Stats`, built fresh, never actually null
+      here) reproduces it -- the same "faithful reproduction needs
+      machinery this port doesn't model and would actively harm the port"
+      call `ui/inventory_ui.h`'s own `openInventory` exception already
+      made, now also retroactively documented on M69's own pause-menu
+      entry (`ui/pause_menu.h`'s class comment) rather than left as an
+      overclaimed "faithfully preserved quirk."
+
+      Verified: rewrote/extended `m40_menu_flow_smoke.cpp` (5-item Main
+      Menu, the Help list -> topic -> Main Menu round trip, both Cancel
+      paths, and the shifted Credits/Exit indices). All 58 smoke tests
+      pass, zero new `/W4` warnings. **Live-verified:** scripted-`SendKeys`
+      run confirmed navigating Main Menu -> Help -> a topic -> Ok lands
+      back on the Main Menu (not stuck), and that the SAME New-Game flow
+      used by every earlier milestone's own live check still reaches the
+      live game afterward -- proving the fix doesn't leave the state
+      machine in a bad place for what comes after it.
+
+- [x] **M73 -- built the 3 screens that were simply never ported at all:
+      the startup loading screen, the Vir2L/ZeniMax copyright card, and the
+      image-logo screen, following the sibling dawnstar project's own
+      identical M48 `BootSplash` as a structural template (same underlying
+      Vir2L toolkit -- several literal pixel/color constants are
+      byte-for-byte identical between the two games' splash screens).**
+      Not a gap this project's own docs had flagged anywhere -- these 3
+      screens (`UIScreen.java`'s mode 2, `paintSplash()`/`runSplash()`/
+      `holdRepainting()`) simply had no port-side counterpart at all until
+      now, confirmed by grepping the whole `port/src/` tree for
+      `splashtop`/`vir2lLogo`/etc. before starting and finding nothing.
+
+      Read `runSplash()`/`holdRepainting()` directly rather than assuming
+      dawnstar's own timeline carried over, and found it matches almost
+      exactly, TOTAL duration included (8000ms), but not identically:
+      Stormhold's own `paintSplash()` has no gate hiding the progress bar
+      for an initial no-bar sub-phase the way dawnstar's does (dawnstar's
+      own `runAppload()` has a real `sleep(1000)` before repainting even
+      starts; Stormhold's has no equivalent -- the bar's white container is
+      drawn unconditionally throughout the whole first phase), so this
+      port's own `Phase::Splash` covers the bar from t=0 rather than
+      splitting into a separate pre-bar phase. **A second, more
+      consequential real difference, confirmed by reading `paintSplash()`
+      directly rather than assumed:** the copyright card's own logo roles
+      are SWAPPED relative to dawnstar -- Stormhold draws `mformaLogo.png`
+      at the header position and `vir2lLogo.png` under "Distributed by:",
+      the OPPOSITE assignment dawnstar's own splash uses. Got this right by
+      reading the source, not by copying dawnstar's own mapping, and
+      confirmed live (see below).
+
+      New `ui/boot_splash.h`/`.cpp` (`BootSplash`, mirroring dawnstar's own
+      class shape: `PhaseAt`/`IsDone`/`Render`, driven by a plain elapsed-
+      ms timestamp, no real background thread) wired into `main.cpp`'s own
+      message loop as a new `inSplash` gate ahead of the existing
+      `MenuFlow` dispatch, with a port-only (no original equivalent, same
+      class of addition as the 'P' pause-menu hotkey) Enter/Escape/Space
+      skip. Real loading already happens synchronously before the window
+      even opens (same as every earlier milestone's own asset-loading
+      block), so the progress bar has no real progress left to report by
+      the time it's shown -- animated linearly across the bar's own visible
+      window instead, the same precedent dawnstar's own main.cpp already
+      established for the identical situation.
+
+      Verified: new `m73_boot_splash_smoke.cpp` (a literal transcription of
+      `runSplash()`/`holdRepainting()`'s own two loops as a timeline
+      simulator, checked against `PhaseAt` at every phase boundary, plus
+      independently-computed expected pixels for all 3 visible phases
+      against the real splash assets). All 58 smoke tests pass, zero new
+      `/W4` warnings. **Live-verified with real screenshots this session**
+      (the user confirmed window focus wouldn't be an issue this time,
+      unlike M69's own mishap): captured the loading-screen phase (logos +
+      animated red/white progress bar), the copyright card (mForma header,
+      six-line legal text, "Distributed by" + Vir2L Studios logo at the
+      bottom -- confirming the swapped logo mapping renders correctly, not
+      just passes the smoke test), and confirmed the Main Menu (now
+      showing "Help" as of M72) renders correctly once the splash hands
+      off.
+
 ## What's next
 
 With M66, every one of the 7 real NPCs' own `npcChoicesUI` interactive

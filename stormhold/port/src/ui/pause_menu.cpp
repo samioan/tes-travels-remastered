@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "assets/help_topics.h"
 #include "combat/spell_casting.h"
 #include "graphics/bitmap_font.h"
 #include "player/game_save.h"
@@ -31,38 +32,6 @@ constexpr int kMargin = 8;
 
 const std::vector<std::string> kOptionsItems = {"Stats",     "Inventory", "Skills", "Spells",
                                                  "Save Game", "Load Game", "Help",   "Quit Game"};
-
-// ESGame.loadHelpTopicTitles()/loadHelpTopicBodies(): 12 help topics, each
-// a single title row plus a 1-5-row body span, all into `ShopDialogue`
-// group 7 (the 41-entry generic/rumor pool -- see assets/shop_dialogue.h's
-// own class comment). Transcribed verbatim from `decompiled/ESGame.java`'s
-// `private void a()` (M69) -- `src/ESGame.java`'s own copy of the same
-// method previously stopped partway through topic 5, flagged as a
-// transcription gap; the decompiled bytecode itself was never actually
-// incomplete, just not fully hand-copied yet.
-constexpr int kHelpTitleRow[12] = {6, 8, 11, 13, 19, 21, 24, 29, 31, 34, 37, 39};
-const std::vector<std::vector<int>> kHelpBodyRows = {
-    {7}, {9, 10}, {12}, {14, 15, 16, 17, 18}, {20}, {22, 23}, {25, 26, 27, 28}, {30}, {32, 33}, {35, 36}, {38}, {40},
-};
-
-std::string HelpTopicTitle(const ShopDialogue& dialogue, int topicIndex) {
-    return dialogue.groups[7][static_cast<size_t>(kHelpTitleRow[topicIndex])];
-}
-
-std::string HelpTopicBody(const ShopDialogue& dialogue, int topicIndex) {
-    std::string body;
-    for (int row : kHelpBodyRows[static_cast<size_t>(topicIndex)]) {
-        body += dialogue.groups[7][static_cast<size_t>(row)];
-    }
-    return body;
-}
-
-std::vector<std::string> HelpTopicTitles(const ShopDialogue& dialogue) {
-    std::vector<std::string> titles;
-    titles.reserve(12);
-    for (int i = 0; i < 12; i++) titles.push_back(HelpTopicTitle(dialogue, i));
-    return titles;
-}
 
 // ESGame.creditsText() verbatim, including its own real "Studos" typo --
 // preserved exactly, not "corrected" (see this file's own header comment
@@ -390,7 +359,7 @@ void PauseMenu::Render(Backbuffer& bb, const PauseMenuState& state, const Player
             PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
             return;
         case PauseScreen::Help:
-            PaintList(bb, "Help", {}, HelpTopicTitles(dialogue), state.selectedIndex);
+            PaintList(bb, "Help", {}, HelpTopics::Titles(dialogue), state.selectedIndex);
             PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
             return;
         case PauseScreen::HelpTopic:
@@ -398,8 +367,8 @@ void PauseMenu::Render(Backbuffer& bb, const PauseMenuState& state, const Player
             // (not just Ok) leaves to Stats (GoBack's own HelpTopic case),
             // so the bottom bar only ever advertises one action, same as
             // Stats/SkillInfo/SaveError above.
-            PaintMessage(bb, state.helpTopicIndex >= 0 ? HelpTopicTitle(dialogue, state.helpTopicIndex) : "Help",
-                         state.helpTopicIndex >= 0 ? HelpTopicBody(dialogue, state.helpTopicIndex) : "");
+            PaintMessage(bb, state.helpTopicIndex >= 0 ? HelpTopics::Title(dialogue, state.helpTopicIndex) : "Help",
+                         state.helpTopicIndex >= 0 ? HelpTopics::Body(dialogue, state.helpTopicIndex) : "");
             PaintBottomBar(bb, "Enter: Ok", "");
             return;
     }

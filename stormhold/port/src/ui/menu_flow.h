@@ -21,9 +21,24 @@ namespace stormhold {
 // screen itself, GameCanvas/screenGroup 101's own commandAction target)
 // is main.cpp's own already-wired tick loop, not this file's concern.
 //
-// Deliberately NOT modeled: Help (loadHelpTopicBodies()'s own Java
-// transcription is itself incomplete past topic index 4 -- a real,
-// pre-existing gap, not one this milestone introduces).
+// M72: Help (`mainMenuItems[2]`, screenGroups 203/206) is now modeled too
+// -- the transcription gap that used to block it (loadHelpTopicBodies()
+// stopping short past topic index 4) was closed in `src/ESGame.java`
+// directly (M69's own finding: a stalled hand-copy, not a real decompiler
+// gap), and this state machine was simply missing the main menu's 5th
+// real item (`mainMenuItems = {"New Game", "Continue Game", "Help",
+// "Credits", "Exit"}` -- this file previously only modeled 4, silently
+// dropping Help). `MenuScreen::Help`/`HelpTopic` and the topic-lookup
+// itself are shared with `ui/pause_menu.h`'s own identical Help feature
+// via `assets/help_topics.h`'s `HelpTopics` (both are real call sites of
+// the SAME `newHelpMenuUI`/`newHelpTopicUI` pair in the original, just
+// with different `backTarget`/`nextScreen` values -- see this file's own
+// .cpp for the one place that differs: leaving a topic here goes to
+// MainMenu, not Stats, since no player/character exists yet at this point
+// in the flow, and the real `nextScreen = this.statsUI` target is
+// confirmed null pre-game anyway -- `ui/pause_menu.h`'s own class comment
+// has the full finding on why neither call site reproduces that as a
+// literal softlock).
 //
 // M50: Continue Game's real load path -- Confirm()'s own MainMenu case 1
 // now calls `GameSave::Exists(savePath)` (player/game_save.h) and only
@@ -48,6 +63,10 @@ enum class MenuScreen {
     EnterName,
     NoSavedGame,
     Credits,
+    // M72: the 12-topic list (screenGroup 203) and one topic's body
+    // (screenGroup 206) -- see this file's own class comment.
+    Help,
+    HelpTopic,
     Welcome,
     Intro,
     // Hand-off point: main.cpp's own live tick/render loop takes over
@@ -83,6 +102,10 @@ struct MenuFlowState {
     // checks this the same way it checks `draft.has_value()`, and does
     // the real `GameSave::Load` call once `screen` reaches `Finished`.
     bool loadRequested = false;
+    // M72: set by Confirm() when entering HelpTopic from Help -- a row
+    // index into `HelpTopics` (assets/help_topics.h), not a `ShopDialogue`
+    // row. Mirrors `PauseMenuState::helpTopicIndex`.
+    int helpTopicIndex = -1;
 };
 
 class MenuFlow {

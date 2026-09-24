@@ -101,17 +101,34 @@ namespace stormhold {
 // copy (`helpTopicBodies[5..11]`, `Shop.dialogue[7][22..40]`) was the
 // whole gap. `PauseScreen::Help` (the 12-topic list, screenGroup 203) and
 // `PauseScreen::HelpTopic` (one topic's body, screenGroup 206) mirror
-// Skills/SkillInfo's own list-then-detail shape, with one real, faithfully
-// preserved quirk: `newHelpTopicUI(topicIndex).nextScreen = this.statsUI`
-// -- leaving a help topic body (Ok OR Cancel, screenGroup 206's dispatch
-// doesn't distinguish) goes to the STATS screen, not back to the topic
-// list and not to Options either, the same "confirmed real bug, keep it"
-// treatment "Quit Game" showing Credits instead of quitting already got
-// above. Topic titles/bodies are real `ShopDialogue` (npcstrings.dat)
-// text, group 7's own 41-entry pool, not literals -- `Render` now takes a
-// `const ShopDialogue&` for them, the one public signature change this
-// milestone makes.
+// Skills/SkillInfo's own list-then-detail shape, with one real quirk:
+// `newHelpTopicUI(topicIndex).nextScreen = this.statsUI` -- leaving a help
+// topic body (Ok OR Cancel, screenGroup 206's dispatch doesn't distinguish)
+// goes to the STATS screen, not back to the topic list and not to Options
+// either. Topic titles/bodies are real `ShopDialogue` (npcstrings.dat)
+// text, group 7's own 41-entry pool, shared with `ui/menu_flow.h`'s own
+// main-menu Help (M72, `ESGame.java`'s OTHER real `newHelpMenuUI`/
+// `newHelpTopicUI` call site) via `assets/help_topics.h`'s `HelpTopics`,
+// not literals -- `Render` takes a `const ShopDialogue&` for them, the one
+// public signature change M69 made.
 //
+// **Refined, M72:** `nextScreen = this.statsUI` is NOT always a working
+// target -- `statsUI` (an `ESGame` instance field) is `null` until the
+// player has opened the pause-menu's own "Stats" item at least once THIS
+// session (its only assignment site, screenGroup 31 case 0). Before that,
+// `showScreen(null)` (`ESGame.showScreen`'s own body: `null` fails both
+// `instanceof` checks, so NEITHER branch runs) leaves `activeScreen`
+// pointing at the just-exited help-topic screen with no new Displayable
+// ever set -- a confirmed real softlock reachable the first time ANY
+// player visits Help before Stats, in-game (pause menu) or not (main
+// menu, see menu_flow.h). Deliberately NOT reproduced here, the same
+// "faithful reproduction needs machinery this port doesn't model (a
+// null/not-yet-built screen as a real, distinct state) and would actively
+// harm the port" call `ui/inventory_ui.h`'s own `openInventory` exception
+// already made -- `PauseScreen::Stats` is unconditionally built fresh
+// instead (harmless: `PlayerCombatStats::CharacterSheetText` needs only
+// `p`/`charData`, both already in hand), so this port's version simply
+// never has an uninitialized target to softlock on.
 // **Also NOT modeled, another same-category machinery gap:** the real
 // `noSavedGameUI` (Load Game with no save file) and `saveErrorUI` (a
 // save I/O failure) both have a `nextScreen` this port cannot reach from
