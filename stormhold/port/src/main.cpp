@@ -718,7 +718,28 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             }
 
             gameTimeMs += stormhold::GameClock::kTickInterval.count();
-            stormhold::GeneratedLevel& currentLevelMutable = levelLookup(player.currentLevel);
+            // M70: no longer a single `currentLevelMutable` bound once here
+            // and reused for the rest of the tick -- every real use site
+            // below now calls `levelLookup(player.currentLevel)` fresh
+            // instead. A single up-front binding went stale the instant
+            // ANYTHING later in the SAME tick changed `player.currentLevel`
+            // -- not just the rare camp-mark-tile auto-warp (M68's own
+            // fix), but every ordinary level-to-level STEP too (`up`/
+            // `down`/`left`/`right` below, the single most common action in
+            // the game), since movement runs BEFORE most of this tick's own
+            // later level-keyed work (chest collection, monster death/AI
+            // tick, minimap sampling). Confirmed real, if short-lived
+            // (self-heals the following tick, since a fresh binding was
+            // always made at the TOP of the next tick regardless): crossing
+            // from the 19x19 hub into any 35x35 dungeon left that same
+            // tick's minimap sample reading the player's NEW, larger-range
+            // coordinates against the OLD, smaller hub level object --
+            // `DungeonRuntime::TileAt`'s own neighbor-stepping bounds check
+            // (dungeon/dungeon_runtime.cpp) means this was never a raw
+            // out-of-bounds/UB read, just a wrong-level minimap/monster-AI-
+            // tick/chest-registry-mutation for that one tick, but still a
+            // real correctness bug on one of the most common actions in the
+            // game, not a hypothetical edge case.
 
             // M62: while the inventory screen is open, Up/Down move the
             // cursor, Enter is the single "Ok" action (screenGroup 33/34's
@@ -735,7 +756,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 if (KeyEdge(VK_DOWN)) stormhold::InventoryUi::MoveSelection(inventoryUi, 1, player);
                 if (KeyEdge(VK_RETURN)) {
                     stormhold::InventoryUi::Confirm(inventoryUi, player, items, spells, monsters,
-                                                     currentLevelMutable, world, combatRng);
+                                                     levelLookup(player.currentLevel), world, combatRng);
                 }
                 if (KeyEdge(VK_ESCAPE)) stormhold::InventoryUi::Cancel(inventoryUi);
             }
@@ -795,8 +816,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // VisibleObjects::Refresh/rendering all run unconditionally
             // every tick in the original, same as here).
             stormhold::CampTickResult campResult =
-                stormhold::Camping::Tick(camp, player, currentLevelMutable, world, items, monsters, combatRng,
-                                          nextSpawnIdCounter, gameTimeMs);
+                stormhold::Camping::Tick(camp, player, levelLookup(player.currentLevel), world, items, monsters,
+                                          combatRng, nextSpawnIdCounter, gameTimeMs);
             if (campResult == stormhold::CampTickResult::Disturbed) {
                 stormhold::MessagePopup::Show(messagePopup, {"Rest", "disturbed!"}, 1, gameTimeMs);
             } else if (campResult == stormhold::CampTickResult::Complete) {
@@ -940,8 +961,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     }
                 } else if (interactKeyEdge && chestAhead.has_value()) {
                     int result = stormhold::PlayerInventory::CollectChestItem(player, *chestAhead, items,
-                                                                                currentLevelMutable, world,
-                                                                                levelLookup);
+                                                                                levelLookup(player.currentLevel),
+                                                                                world, levelLookup);
                     if (result == 0) {
                         stormhold::MessagePopup::Show(messagePopup, {"Inventory", "full!"}, -1, gameTimeMs);
                     } else {
@@ -1039,16 +1060,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // M38: GameCanvas.resolveTargetMonsterDeath() (was e.java's
                 // m()).
                 if (targetMonster.has_value() && targetMonster->currentHp <= 0) {
+                    stormhold::GeneratedLevel& deathLevel = levelLookup(player.currentLevel);
                     bool guaranteedDrop = (targetMonster->typeIndex == 41);
                     stormhold::MonsterRuntime::DeathDrop drop = stormhold::MonsterRuntime::OnDeath(
-                        *targetMonster, monsters, items, currentLevelMutable.tier, guaranteedDrop, nextSpawnIdCounter,
+                        *targetMonster, monsters, items, deathLevel.tier, guaranteedDrop, nextSpawnIdCounter,
                         combatRng);
                     if (drop.dropped) {
                         std::array<int8_t, 7> record;
                         for (size_t i = 0; i < record.size(); i++) record[i] = static_cast<int8_t>(drop.record[i]);
-                        stormhold::DungeonRuntime::AddDroppedItem(currentLevelMutable, world, record);
+                        stormhold::DungeonRuntime::AddDroppedItem(deathLevel, world, record);
                     }
-                    stormhold::DungeonRuntime::RemoveMonster(currentLevelMutable, world, targetMonster->spawnId);
+                    stormhold::DungeonRuntime::RemoveMonster(deathLevel, world, targetMonster->spawnId);
                     if (stormhold::PlayerCombatStats::HasAilment(player, 4)) {
                         int heal = 3 * player.coreStats[3] / 10;
                         player.coreStats[2] = static_cast<int16_t>(
@@ -1127,8 +1149,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // ever ticks -- matching the real ESGame.G[]-indexed read
                 // exactly, not an invented simplification.
                 bool showAttackMessage = stormhold::CombatResolution::TickMonstersOnLevel(
-                    world, currentLevelMutable, player, charData, items, monsters, levels, gameTimeMs, combatRng,
-                    ambushRng, nextSpawnIdCounter);
+                    world, levelLookup(player.currentLevel), player, charData, items, monsters, levels, gameTimeMs,
+                    combatRng, ambushRng, nextSpawnIdCounter);
                 if (showAttackMessage) {
                     stormhold::MessagePopup::Show(messagePopup, {"Creature", "attacks!"}, 2, gameTimeMs);
                 }
@@ -1259,11 +1281,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
                 if (minimapZoomedOut) {
                     stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
-                        currentLevelMutable, world, player.tileX, player.tileY, player.facing, 7, levelLookup);
+                        levelLookup(player.currentLevel), world, player.tileX, player.tileY, player.facing, 7,
+                        levelLookup);
                     stormhold::GameRenderer::RenderMinimapZoomedOut(backbuffer, grid, player.facing);
                 } else {
                     stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
-                        currentLevelMutable, world, player.tileX, player.tileY, player.facing, 17, levelLookup);
+                        levelLookup(player.currentLevel), world, player.tileX, player.tileY, player.facing, 17,
+                        levelLookup);
                     stormhold::GameRenderer::RenderMinimapNormal(backbuffer, grid, player.facing);
                 }
                 stormhold::MessagePopup::Paint(backbuffer, messagePopup);

@@ -4734,6 +4734,54 @@ starts and stays up.
       exercised directly by the two tests above, just not the live
       keyboard-input/window-focus path end to end.
 
+- [x] **M70 -- fixed a real correctness bug reachable on every ordinary level
+      transition, not just the rare camp-mark-tile edge case: `main.cpp`'s
+      own `currentLevelMutable` went stale mid-tick.** Found while
+      investigating M68's own reported symptoms further -- `currentLevelMutable`
+      (`levelLookup(player.currentLevel)`, bound ONCE near the top of each
+      tick) was passed to every later-in-the-tick level-keyed call
+      (`Camping::Tick`, `InventoryUi::Confirm`, `CollectChestItem`,
+      monster-death drop/removal, `CombatResolution::TickMonstersOnLevel`,
+      both `SampleSquareView` minimap calls) -- but movement (`up`/`down`/
+      `left`/`right`, the single most common player action) runs BEFORE
+      most of those, and `PlayerMovement::Move`/`CommitMove` updates
+      `player.currentLevel` in place on any ordinary level-to-level step,
+      not just the M68-fixed camp-mark-tile auto-warp. So EVERY step that
+      crosses a level boundary left the rest of that tick's chest
+      collection, monster AI tick, monster death drop, and minimap
+      rendering reading/writing the OLD level object the player just LEFT,
+      not the one they're now on -- confirmed real, not just theoretical:
+      crossing from the 19x19 hub into any 35x35 dungeon left that tick's
+      minimap sample combining the player's NEW, larger-range coordinates
+      with the OLD, smaller hub level's own tile grid and neighbor
+      pointers. Not memory-unsafe (`DungeonRuntime::TileAt`'s own
+      neighbor-stepping bounds check means an out-of-range coordinate walks
+      to a neighbor level via a valid index, never a raw out-of-bounds
+      array read), and self-heals the very next tick (a fresh binding was
+      always recomputed at the top of every tick regardless) -- but a real,
+      constantly-reachable, wrong-level bug for that one tick on what is
+      almost certainly the single most common action in the entire game.
+
+      Fixed by removing the single cached binding entirely: every one of
+      the 8 real use sites now calls `levelLookup(player.currentLevel)`
+      fresh at its own point of use (a local `deathLevel` binding kept
+      only for the 3-line monster-death-drop block, which doesn't cross a
+      level change partway through itself). `levelLookup` is a plain O(1)
+      array index, so this costs nothing measurable.
+
+      Verified: all 57 smoke tests pass (no test exercised this specific
+      mid-tick-staleness path directly -- it's a `main.cpp`-only wiring
+      bug, not a unit a smoke test targets, so this relies on the existing
+      suite's regression coverage of each individual call plus a live
+      check). Full clean rebuild, zero `/W4` warnings. **Live-verified
+      this time:** launched the real windowed exe (no desktop screenshots
+      this session, after M69's own focus-targeting mishap -- verified via
+      process-alive polling and the log file only), completed character
+      creation, then walked left/down repeatedly (crossing at least one
+      level boundary out of the hub) for several seconds; the process
+      stayed up throughout and the log file showed no `FATAL` line from
+      the M68 exception logger.
+
 ## What's next
 
 With M66, every one of the 7 real NPCs' own `npcChoicesUI` interactive
