@@ -76,7 +76,10 @@ void DrawCentered(Backbuffer& bb, int y, const std::string& text, uint16_t color
 
 void PaintTitleBar(Backbuffer& bb, const std::string& title) {
     bb.FillRect(0, 0, Backbuffer::kWidth, 12, kTitleBg);
-    DrawCentered(bb, 3, title, kTitleFg);
+    // M74: y nudged from 3 to 1 -- see graphics/bitmap_font.cpp's own
+    // kFontHeightPx comment for why the new GDI font needs the extra
+    // headroom to stay inside this 12px bar.
+    DrawCentered(bb, 1, title, kTitleFg);
 }
 
 void PaintBottomBar(Backbuffer& bb, const std::string& leftLabel, const std::string& rightLabel) {

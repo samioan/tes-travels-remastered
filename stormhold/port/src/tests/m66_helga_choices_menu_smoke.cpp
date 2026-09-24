@@ -71,17 +71,18 @@ void TestKillResultClosesTheWholeMenu(const CharacterData& charData, const ItemD
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
     ShopState shop;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 0);
     state.selectedIndex = 4;  // Kill
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "Kill should move to the Result screen");
     Expect(state.resultCloses, "Kill's own Result should be flagged resultCloses (screenGroup 26 really works)");
 
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(!state.active, "confirming Kill's Result should close the whole menu, matching screenGroup 26 exactly");
 }
 
@@ -93,15 +94,16 @@ void TestBefriendStillReturnsToChoices(const CharacterData& charData, const Item
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
     ShopState shop;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 0);
     state.selectedIndex = 2;  // Befriend
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(!state.resultCloses, "Befriend's own Result should NOT be flagged resultCloses (screenGroup 24 is dead)");
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.active && state.screen == NpcChoicesScreen::Choices,
            "confirming Befriend's Result should still return to Choices, not close the menu");
 }
@@ -111,13 +113,14 @@ void TestRumors(const CharacterData& charData, const ItemDatabase& items, const 
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
     ShopState shop;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 5);
     state.selectedIndex = 0;  // Rumors
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "Rumors should go straight to a Result screen");
     Expect(state.resultTitle == "Rumors",
            "Rumors' own title should be rumorsUI's own leftover placeholder \"Rumors\", not \"NPC name here\"");
@@ -126,7 +129,7 @@ void TestRumors(const CharacterData& charData, const ItemDatabase& items, const 
            "Rumors' own Result should NOT close the menu -- rumorsUI has the identical confirmed softlock npcHelloUI "
            "does (see class comment), not reproduced, so this is the same port-only 'return to Choices' mapping");
 
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.active && state.screen == NpcChoicesScreen::Choices, "confirming Rumors should return to Choices");
 }
 
@@ -155,17 +158,18 @@ void TestGiveCrystalUsesHelgaDialogue(const CharacterData& charData, const ItemD
     ShopState shop;
     int16_t beforePoints = shop.helgaPoints;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 5);
     state.selectedIndex = 1;  // "Give Crystal"
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::GiveWhat, "selecting Give Crystal should move to the GiveWhat screen");
 
     state.selectedIndex = slot;
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "confirming an item should move to the Result screen");
     Expect(shop.helgaPoints > beforePoints,
            "giving an acceptable item to Helga should increment helgaPoints (HelgaDialogue's own action 4)");
@@ -198,20 +202,21 @@ void TestEnchant(const CharacterData& charData, const ItemDatabase& items, const
     ShopState shop;
     shop.helgaPoints = 10;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 5);
     state.selectedIndex = 2;  // "Enchant"
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::EnchantWhat, "selecting Enchant should move to the EnchantWhat screen");
 
     NpcChoicesMenu::MoveSelection(state, 1000, p);
     Expect(state.selectedIndex == p.inventoryCount - 1, "EnchantWhat's own list should be exactly inventoryCount long");
 
     state.selectedIndex = slot;
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "confirming an item should move to the Result screen");
     Expect(shop.helgaPoints == 3, "a successful Enchant should spend exactly 7 helgaPoints");
     Expect(PlayerInventory::IsItemCharged(p, slot), "a successful Enchant should actually charge the item");
@@ -223,7 +228,7 @@ void TestEnchant(const CharacterData& charData, const ItemDatabase& items, const
     NpcChoicesMenuState state2;
     NpcChoicesMenu::Open(state2, 5);
     state2.selectedIndex = 2;
-    NpcChoicesMenu::Confirm(state2, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state2, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state2.screen == NpcChoicesScreen::EnchantWhat, "should be on EnchantWhat");
     NpcChoicesMenu::Cancel(state2);
     Expect(!state2.active, "Cancel from EnchantWhat should close the whole menu, matching nextScreen=gameCanvas");
@@ -236,13 +241,14 @@ void TestBlessCureRecovery(const CharacterData& charData, const ItemDatabase& it
         ShopState shop;
         shop.helgaPoints = 10;
         GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
         JavaRandom rng(1);
         int16_t spawnIdCounter = 10000;
 
         NpcChoicesMenuState state;
         NpcChoicesMenu::Open(state, 5);
         state.selectedIndex = choice;
-        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+        NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
         Expect(state.screen == NpcChoicesScreen::Result, "Bless/Cure should go straight to Result");
         Expect(!state.resultBody.empty(), "Bless/Cure should each produce a real, non-empty line");
         Expect(!state.resultCloses, "Bless/Cure's own Results should NOT close the menu (352/353 are dead ends)");
@@ -260,13 +266,14 @@ void TestBlessCureRecovery(const CharacterData& charData, const ItemDatabase& it
     ShopState shop;
     shop.helgaPoints = 0;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 5);
     state.selectedIndex = 6;  // Recovery
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "Recovery should go straight to Result");
     Expect(p.coreStats[2] == p.coreStats[3], "Recovery should fully heal HP even at 0 helgaPoints (no gate)");
     Expect(p.coreStats[4] == p.coreStats[5], "Recovery should fully restore Magicka even at 0 helgaPoints (no gate)");
@@ -277,27 +284,33 @@ void TestWarpClosesTheWholeMenuAndClearsCampMark(const CharacterData& charData, 
                                                  const ShopDialogue& text) {
     std::printf("-- NpcChoicesMenu::Confirm: Warp closes the whole menu, and clears justMarkedCamp --\n");
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
-    PlayerInventory::MarkCampAndReturnToTown(p);
+    GeneratedLevel hub = MakeSyntheticHub();
+    // M74: MarkCampAndReturnToTown/WarpToCampMark now call
+    // RefreshCorridorView internally (see player_inventory.h's own doc
+    // comment), so both need a real LevelLookup -- campLevel here is 1
+    // (the hub, CreateCharacter's own starting level), so `hub` alone
+    // covers every level number this test ever actually looks up.
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
+    PlayerInventory::MarkCampAndReturnToTown(p, levels);
     Expect(PlayerInventory::HasCampMark(p), "the player should have a real camp mark to warp to");
     p.justMarkedCamp = true;  // MarkCampAndReturnToTown's own real side effect.
 
     ShopState shop;
     shop.helgaPoints = 5;
-    GeneratedLevel hub = MakeSyntheticHub();
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 5);
     state.selectedIndex = 5;  // Warp
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "Warp should move to the Result screen");
     Expect(!p.justMarkedCamp,
            "Warp's own dispatch should clear justMarkedCamp, matching screenGroup 41's real handler exactly");
     Expect(shop.helgaPoints == 4, "a successful Warp should spend exactly 1 helgaPoint");
     Expect(state.resultCloses, "Warp's own Result should be flagged resultCloses (screenGroup 41 really works)");
 
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(!state.active, "confirming Warp's Result should close the whole menu, matching screenGroup 41 exactly");
 }
 

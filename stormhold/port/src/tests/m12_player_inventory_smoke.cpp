@@ -2,6 +2,7 @@
 // methods against real CharacterData/ItemDatabase.
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
 
 #include "assets/asset_root.h"
@@ -160,6 +161,13 @@ void TestSpawnIdSignExtensionQuirk(const stormhold::ItemDatabase& items) {
 
 void TestCampBookmark() {
     std::printf("-- camp bookmark --\n");
+    std::map<int, stormhold::GeneratedLevel> cache;
+    stormhold::GameAdvancement::LevelLookup levels = [&](int n) -> stormhold::GeneratedLevel& {
+        auto it = cache.find(n);
+        if (it != cache.end()) return it->second;
+        return cache.emplace(n, MakeLevel(n)).first->second;
+    };
+
     stormhold::PlayerState p;
     p.currentLevel = 5;
     p.tileX = 10;
@@ -168,7 +176,7 @@ void TestCampBookmark() {
 
     Expect(!stormhold::PlayerInventory::HasCampMark(p), "a fresh character should have no camp mark");
 
-    stormhold::PlayerInventory::MarkCampAndReturnToTown(p);
+    stormhold::PlayerInventory::MarkCampAndReturnToTown(p, levels);
     Expect(stormhold::PlayerInventory::HasCampMark(p), "should have a camp mark after MarkCampAndReturnToTown");
     Expect(p.campLevel == 5 && p.campX == 10 && p.campY == 20 && p.campFacing == 3,
            "the camp bookmark should capture the pre-call position");
@@ -181,7 +189,7 @@ void TestCampBookmark() {
     p.tileY = 1;
     p.facing = 4;
     p.justMarkedCamp = false;
-    stormhold::PlayerInventory::WarpToCampMark(p);
+    stormhold::PlayerInventory::WarpToCampMark(p, levels);
     Expect(p.currentLevel == 5 && p.tileX == 10 && p.tileY == 20, "warping back should restore the camp position");
     Expect(p.facing == 4, "WarpToCampMark should NOT touch facing at all (confirmed by reading the whole method)");
     Expect(p.justMarkedCamp, "justMarkedCamp should be true again after warping");

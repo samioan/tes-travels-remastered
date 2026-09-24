@@ -70,7 +70,10 @@ void PaintPanel(Backbuffer& bb, const std::string& title) {
     bb.FillRect(0, 12, Backbuffer::kWidth, kBarTop - 12, kBodyBg);
     bb.FillRect(0, 0, Backbuffer::kWidth, 12, kTitleBg);
     int titleWidth = BitmapFont::StringWidth(title);
-    BitmapFont::DrawString(bb, (Backbuffer::kWidth - titleWidth) / 2, 3, title, kTitleFg);
+    // M74: y nudged from 3 to 1 -- see graphics/bitmap_font.cpp's own
+    // kFontHeightPx comment for why the new GDI font needs the extra
+    // headroom to stay inside this 12px bar.
+    BitmapFont::DrawString(bb, (Backbuffer::kWidth - titleWidth) / 2, 1, title, kTitleFg);
 }
 
 void PaintBottomBar(Backbuffer& bb, const std::string& leftLabel, const std::string& rightLabel) {
@@ -228,21 +231,21 @@ namespace {
 std::optional<std::string> DialogueFor(int shopId, int action, int extra, PlayerState& p, ShopState& shop,
                                         const ShopDialogue& text, const CharacterData& charData,
                                         const ItemDatabase& items, GeneratedLevel& hub, JavaRandom& rng,
-                                        int16_t& spawnIdCounter) {
+                                        int16_t& spawnIdCounter, const GameAdvancement::LevelLookup& levels) {
     if (shopId <= 3) {
         return ShopInteraction::QuestShopDialogue(p, shop, text, charData, items, hub, rng, shopId, action, extra);
     }
     if (shopId == 4) {
         return ShopInteraction::BenecaDialogue(p, shop, text, items, spawnIdCounter, action, extra);
     }
-    return ShopInteraction::HelgaDialogue(p, shop, text, items, action, extra);
+    return ShopInteraction::HelgaDialogue(p, shop, text, items, action, extra, levels);
 }
 
 }  // namespace
 
 void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopState& shop, const ShopDialogue& text,
                               const CharacterData& charData, const ItemDatabase& items, GeneratedLevel& hub,
-                              JavaRandom& rng, int16_t& spawnIdCounter) {
+                              JavaRandom& rng, int16_t& spawnIdCounter, const GameAdvancement::LevelLookup& levels) {
     if (!state.active) return;
 
     // Result's own single "Ok" -- closes the whole menu for the 2
@@ -277,7 +280,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
         int slot = state.selectedIndex;
         if (slot < 0 || slot >= p.inventoryCount) return;
         std::optional<std::string> result =
-            DialogueFor(state.shopId, 4, slot, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+            DialogueFor(state.shopId, 4, slot, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
         state.resultTitle = "NPC name here";
         state.resultBody = result.value_or("");
         state.resultCloses = false;  // screenGroup 23, a confirmed dead end for every shop group.
@@ -308,7 +311,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
         // trap this time).
         int slot = state.selectedIndex;
         if (slot < 0 || slot >= p.inventoryCount) return;
-        std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, slot);
+        std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, slot, levels);
         state.resultTitle = "NPC name here";
         state.resultBody = result.value_or("");
         state.resultCloses = false;  // screenGroup 351, a confirmed dead end.
@@ -402,7 +405,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
     // Bless (3) / Cure (4) / Warp (5) / Recovery (6).
     switch (state.selectedIndex) {
         case 0: {  // Rumors -- showRumors()'s own dialogue(5, 13, 0) call.
-            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 13, 0);
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 13, 0, levels);
             state.resultTitle = "Rumors";  // rumorsUI's own dead-write placeholder, see class comment.
             state.resultBody = result.value_or("No rumors!");  // showRumors()'s own real fallback text.
             state.resultCloses = false;  // rumorsUI's own confirmed softlock, not reproduced -- see class comment.
@@ -426,7 +429,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
             state.selectedIndex = 0;
             return;
         case 3: {  // Bless
-            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0);
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0, levels);
             state.resultTitle = "NPC name here";
             state.resultBody = result.value_or("");
             state.resultCloses = false;  // screenGroup 352, a confirmed dead end.
@@ -435,7 +438,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
             return;
         }
         case 4: {  // Cure
-            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 10, 0);
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 10, 0, levels);
             state.resultTitle = "NPC name here";
             state.resultBody = result.value_or("");
             state.resultCloses = false;  // screenGroup 353, a confirmed dead end.
@@ -444,7 +447,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
             return;
         }
         case 5: {  // Warp
-            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 11, 0);
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 11, 0, levels);
             // screenGroup 41's own real handler clears this on dismissal;
             // applied here at result-creation time instead -- observably
             // identical, since nothing else reads this flag in between
@@ -461,7 +464,7 @@ void NpcChoicesMenu::Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopSta
             return;
         }
         case 6: {  // Recovery
-            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 12, 0);
+            std::optional<std::string> result = ShopInteraction::HelgaDialogue(p, shop, text, items, 12, 0, levels);
             state.resultTitle = "NPC name here";
             state.resultBody = result.value_or("");
             state.resultCloses = false;  // screenGroup 355, a confirmed dead end.

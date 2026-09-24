@@ -232,7 +232,8 @@ std::optional<std::string> ShopInteraction::BenecaDialogue(PlayerState& player, 
 
 std::optional<std::string> ShopInteraction::HelgaDialogue(PlayerState& player, ShopState& shop,
                                                             const ShopDialogue& text, const ItemDatabase& items,
-                                                            int action, int extra) {
+                                                            int action, int extra,
+                                                            const GameAdvancement::LevelLookup& levels) {
     const std::vector<std::string>& lines = text.groups[5];
 
     if (action == 1) {
@@ -319,7 +320,7 @@ std::optional<std::string> ShopInteraction::HelgaDialogue(PlayerState& player, S
         if (shop.helgaPoints < 1) return lines[1];
         if (!PlayerInventory::HasCampMark(player)) return lines[18];
         shop.helgaPoints--;
-        PlayerInventory::WarpToCampMark(player);
+        PlayerInventory::WarpToCampMark(player, levels);
         return lines[19];
     }
 

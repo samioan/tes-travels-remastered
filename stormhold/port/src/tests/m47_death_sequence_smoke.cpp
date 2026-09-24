@@ -1,5 +1,6 @@
 // M47 smoke test: DeathSequence/DeathState (GameCanvas.tickDeathAndRegen()
-// plus run()'s own already-Java-transcribed `facing != 1` death/respawn
+// plus run()'s own already-Java-transcribed `facing != 1` (GameCanvas.facing,
+// this port's DeathState::phase -- NOT Player.facing) death/respawn
 // state machine, finally wired to a real driver) plus the small pieces it
 // leans on that had no port-side counterpart before this milestone:
 // PlayerCombatStats::TickFatigueRegen, PlayerCreation::NormalizeToMaxStats/
@@ -56,9 +57,8 @@ void TestTickDeathAndRegen(const CharacterData& charData) {
     std::printf("-- DeathSequence::TickDeathAndRegen --\n");
 
     {
-        // Alive: regen ticks, facing/death state untouched.
+        // Alive: regen ticks, death state untouched.
         PlayerState p;
-        p.facing = 1;
         p.coreStats[2] = 50;
         p.coreStats[3] = 100;  // HP 50/100, alive
         p.attributes[10] = 40;
@@ -68,7 +68,7 @@ void TestTickDeathAndRegen(const CharacterData& charData) {
         DeathState death;
         bool justDied = DeathSequence::TickDeathAndRegen(p, death, charData, /*now=*/5000, /*deltaMs=*/250);
         Expect(!justDied, "alive (HP>0) -> TickDeathAndRegen returns false");
-        Expect(p.facing == 1, "facing untouched while alive");
+        Expect(death.phase == 1, "phase untouched while alive");
         Expect(death.deathAtMs == 0, "deathAtMs untouched while alive");
         Expect(p.coreStats[6] > 0, "Fatigue regen still ticks while alive");
     }
@@ -76,13 +76,14 @@ void TestTickDeathAndRegen(const CharacterData& charData) {
     {
         // HP already at 0: dies this call.
         PlayerState p;
-        p.facing = 1;
+        p.facing = 4;  // compass facing -- must NOT be touched by death
         p.coreStats[2] = 0;
         p.coreStats[3] = 100;
         DeathState death;
         bool justDied = DeathSequence::TickDeathAndRegen(p, death, charData, /*now=*/9000, /*deltaMs=*/250);
         Expect(justDied, "HP<=0 -> TickDeathAndRegen returns true (just died)");
-        Expect(p.facing == 2, "HP<=0 sets facing=2");
+        Expect(death.phase == 2, "HP<=0 sets phase=2");
+        Expect(p.facing == 4, "HP<=0 leaves the PLAYER's compass facing alone (GameCanvas.facing != Player.facing)");
         Expect(death.deathAtMs == 9000, "HP<=0 stamps deathAtMs to 'now'");
     }
 
@@ -91,7 +92,6 @@ void TestTickDeathAndRegen(const CharacterData& charData) {
         // past 0) still counts as dead, matching the original's own
         // `hp <= 0` check exactly, not `== 0`.
         PlayerState p;
-        p.facing = 1;
         p.coreStats[2] = -37;
         p.coreStats[3] = 100;
         DeathState death;
@@ -105,35 +105,49 @@ void TestTickAliveAndWaiting(const ItemDatabase& items) {
 
     {
         PlayerState p;
-        p.facing = 1;
         DeathState death;
         DeathTickResult result = DeathSequence::Tick(p, death, items, /*now=*/12345);
-        Expect(result == DeathTickResult::Alive, "facing==1 -> Alive, an ordinary tick");
-        Expect(p.facing == 1, "Alive leaves facing untouched");
+        Expect(result == DeathTickResult::Alive, "phase==1 -> Alive, an ordinary tick");
+        Expect(death.phase == 1, "Alive leaves phase untouched");
     }
 
     {
-        // facing==2 (just died, per TickDeathAndRegen above): the very
+        // Regression: turning (compass facing 2/3/4) while alive must NOT
+        // read as dead. The port once stored the death phase on
+        // PlayerState::facing, so any Q/E turn respawned the player in
+        // front of Helga 5s later.
+        for (int8_t compass = 1; compass <= 4; compass++) {
+            PlayerState p;
+            p.facing = compass;
+            DeathState death;
+            DeathTickResult result = DeathSequence::Tick(p, death, items, /*now=*/999999);
+            Expect(result == DeathTickResult::Alive, "any compass facing while alive -> Alive");
+            Expect(p.facing == compass, "Tick never touches the compass facing while alive");
+        }
+    }
+
+    {
+        // phase==2 (just died, per TickDeathAndRegen above): the very
         // next Tick() call transitions to 3, and the timeout hasn't
         // elapsed (0ms since death.deathAtMs==now).
         PlayerState p;
-        p.facing = 2;
         DeathState death;
+        death.phase = 2;
         death.deathAtMs = 10000;
         DeathTickResult result = DeathSequence::Tick(p, death, items, /*now=*/10000);
-        Expect(result == DeathTickResult::Waiting, "facing==2, 0ms elapsed -> Waiting (transitions to 3 internally)");
-        Expect(p.facing == 3, "facing==2 -> Tick() advances it to 3 on this same call");
+        Expect(result == DeathTickResult::Waiting, "phase==2, 0ms elapsed -> Waiting (transitions to 3 internally)");
+        Expect(death.phase == 3, "phase==2 -> Tick() advances it to 3 on this same call");
     }
 
     {
-        // facing==3, well within the 5s window.
+        // phase==3, well within the 5s window.
         PlayerState p;
-        p.facing = 3;
         DeathState death;
+        death.phase = 3;
         death.deathAtMs = 10000;
         DeathTickResult result = DeathSequence::Tick(p, death, items, /*now=*/14000);  // 4000ms elapsed
-        Expect(result == DeathTickResult::Waiting, "facing==3, 4000ms elapsed (<=5000) -> Waiting");
-        Expect(p.facing == 3, "facing untouched while still waiting");
+        Expect(result == DeathTickResult::Waiting, "phase==3, 4000ms elapsed (<=5000) -> Waiting");
+        Expect(death.phase == 3, "phase untouched while still waiting");
         Expect(death.deathAtMs == 10000, "deathAtMs untouched while still waiting");
     }
 
@@ -142,8 +156,8 @@ void TestTickAliveAndWaiting(const ItemDatabase& items) {
         // `now - deathAtMs <= 5000L` in the port, mirroring the
         // original's own `> 5000L` respawn-trigger condition exactly).
         PlayerState p;
-        p.facing = 3;
         DeathState death;
+        death.phase = 3;
         death.deathAtMs = 0;
         DeathTickResult result = DeathSequence::Tick(p, death, items, /*now=*/5000);
         Expect(result == DeathTickResult::Waiting, "exactly 5000ms elapsed -> still Waiting (needs to EXCEED 5000)");
@@ -193,9 +207,9 @@ void TestRespawn(const CharacterData& charData, const ItemDatabase& items) {
 
     DeathState death;
     death.deathAtMs = 0;
-    p.facing = 2;
+    death.phase = 2;
 
-    // facing==2 -> 3 (Waiting), matching the original's own transition
+    // phase==2 -> 3 (Waiting), matching the original's own transition
     // tick never respawning in the same call the timer was just stamped.
     DeathTickResult step1 = DeathSequence::Tick(p, death, items, /*now=*/0);
     Expect(step1 == DeathTickResult::Waiting, "the 2->3 transition tick is still Waiting, not an immediate respawn");
@@ -214,6 +228,7 @@ void TestRespawn(const CharacterData& charData, const ItemDatabase& items) {
     Expect(p.currentLevel == 1 && p.tileX == 12 && p.tileY == 14 && p.facing == 1,
            "respawn lands at the DEATH/respawn hub point (12, 14), distinct from character creation's (9, 10)");
     Expect(death.deathAtMs == 0, "deathAtMs resets to 0 on respawn");
+    Expect(death.phase == 1, "phase resets to 1 (alive) on respawn");
 
     Expect(p.giftPointsFound == 42 && p.rumorRevealStep == 3 && p.wardenLoreStep == 2,
            "full=true respawn PRESERVES gift/rumor/warden-lore progress, unlike fresh character creation");

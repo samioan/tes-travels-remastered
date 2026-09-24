@@ -86,17 +86,18 @@ void TestGiveItemUsesBenecaDialogue(const CharacterData& charData, const ItemDat
     ShopState shop;
     int16_t beforePoints = shop.benecaPoints;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 4);
     state.selectedIndex = 0;  // "Give Item"
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::GiveWhat, "selecting Give Item should move to the GiveWhat screen");
 
     state.selectedIndex = slot;
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "confirming an item should move to the Result screen");
     Expect(shop.benecaPoints == beforePoints + 1,
            "giving an acceptable item to Beneca should increment benecaPoints (BenecaDialogue's own action 4)");
@@ -109,13 +110,14 @@ void TestGiveItemEmptyInventory(const CharacterData& charData, const ItemDatabas
     p.inventoryCount = 0;
     ShopState shop;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 4);
     state.selectedIndex = 0;  // "Give Item"
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "Give Item with an empty inventory should go straight to Result");
     Expect(state.resultBody == "You have nothing to give me!",
            "the empty-inventory message should match the real literal string exactly, same as shops 0-3");
@@ -129,20 +131,21 @@ void TestTakeCrystalFlow(const CharacterData& charData, const ItemDatabase& item
     ShopState shop;
     shop.benecaPoints = 5;  // >= 3, so BenecaDialogue's action 7 succeeds.
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 4);
     state.selectedIndex = 1;  // "Take Crystal"
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::TakeWhat, "selecting Take Crystal should move to the TakeWhat screen");
 
     NpcChoicesMenu::MoveSelection(state, 1000, p);
     Expect(state.selectedIndex == 12, "TakeWhat's own list should be exactly the 13 real gift items (ids 87-99)");
 
     state.selectedIndex = 0;  // Item id 87.
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::Result, "confirming a crystal choice should move to the Result screen");
     Expect(shop.benecaPoints == 2, "a successful Take Crystal should spend exactly 3 benecaPoints");
     Expect(p.inventoryCount == 1, "a successful Take Crystal should actually grant the item");
@@ -158,15 +161,16 @@ void TestTakeCrystalNotEnoughPoints(const CharacterData& charData, const ItemDat
     ShopState shop;
     shop.benecaPoints = 2;  // < 3.
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 4);
     state.selectedIndex = 1;
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     state.selectedIndex = 0;
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(!state.resultBody.empty(), "an insufficient-points result should still be a real, non-empty line");
     Expect(shop.benecaPoints == 2, "insufficient points should leave benecaPoints unchanged");
 }
@@ -176,6 +180,7 @@ void TestCancelAsymmetry(const CharacterData& charData, const ItemDatabase& item
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
     ShopState shop;
     GeneratedLevel hub = MakeSyntheticHub();
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return hub; };
     JavaRandom rng(1);
     int16_t spawnIdCounter = 10000;
 
@@ -186,7 +191,7 @@ void TestCancelAsymmetry(const CharacterData& charData, const ItemDatabase& item
     NpcChoicesMenuState state;
     NpcChoicesMenu::Open(state, 4);
     state.selectedIndex = 1;  // "Take Crystal"
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::TakeWhat, "should be on TakeWhat");
     NpcChoicesMenu::Cancel(state);
     Expect(state.active && state.screen == NpcChoicesScreen::Choices,
@@ -197,7 +202,7 @@ void TestCancelAsymmetry(const CharacterData& charData, const ItemDatabase& item
     NpcChoicesMenu::Open(state, 4);
     state.selectedIndex = 0;  // "Give Item"
     p.inventoryCount = 1;  // Force the GiveWhat branch, not the empty-inventory Result.
-    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter);
+    NpcChoicesMenu::Confirm(state, p, shop, text, charData, items, hub, rng, spawnIdCounter, levels);
     Expect(state.screen == NpcChoicesScreen::GiveWhat, "should be on GiveWhat");
     NpcChoicesMenu::Cancel(state);
     Expect(!state.active, "Cancel from GiveWhat should close the whole menu, matching nextScreen=gameCanvas");

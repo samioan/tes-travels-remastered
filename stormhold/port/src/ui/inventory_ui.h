@@ -94,9 +94,14 @@ public:
     // "close the whole screen back to gameplay" branch that field would
     // gate is unreachable dead code. This always takes the other (live,
     // reachable) branch: rebuild the list and stay on it.
+    // `levels` is `PlayerInventory::UseItem`'s own parameter, needed only
+    // by the camp-marker item (id 87) to close the `MarkCampAndReturnToTown`/
+    // `WarpToCampMark` stale-corridor-view gap -- see that method's own
+    // header comment. `level` (the player's CURRENT level, used by
+    // Drop/DropInventoryItem) is unrelated and kept as its own parameter.
     static void Confirm(InventoryUiState& state, PlayerState& p, const ItemDatabase& items,
                          const SpellDatabase& spells, const MonsterDatabase& monsters, GeneratedLevel& level,
-                         WorldRegistry& world, JavaRandom& rng);
+                         WorldRegistry& world, JavaRandom& rng, const GameAdvancement::LevelLookup& levels);
 
     // The single "Cancel"/"Back" action. From the ItemAction screen, goes
     // back to the List screen (`nextScreen = this.inventoryUI`, real

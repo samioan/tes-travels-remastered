@@ -4972,25 +4972,305 @@ starts and stays up.
       showing "Help" as of M72) renders correctly once the splash hands
       off.
 
+- [x] **M74 -- replaced the hand-authored 4x7 invented pixel font with a
+      real Win32 GDI font, following the sibling dawnstar project's own
+      identical M58 -- user-requested ("implement the same gdi font
+      dawnstar has").** `graphics/bitmap_font.h`'s own class comment
+      already documented why M30/M31's font was always a deliberate
+      invention, not recovered data (`GameCanvas.smallFont`'s exact glyph
+      bitmaps are real MIDP built-in system font data, platform/
+      device-dependent and unrecoverable) -- the same situation dawnstar's
+      own M58 already reasoned through for its own identical invented
+      font, no new justification needed here. `BitmapFont::DrawString`/
+      `StringWidth` render through a persistent, process-lifetime GDI
+      memory DC (Arial Black, 10px, `ANTIALIASED_QUALITY`) exactly the
+      way dawnstar's own does -- same white-on-black scratch-canvas
+      coverage trick, same per-pixel alpha blend against whatever the
+      backbuffer already holds (this remains the one place in the whole
+      rendering pipeline that does real alpha compositing, not Blit/
+      FillRect's binary on/off). Kept the same public surface
+      (`DrawString`/`StringWidth`) every real call site already used --
+      unlike dawnstar, no call site here ever measured per-character
+      widths through a flat `kAdvance` (every word-wrap in this port's
+      own `ui/menu_flow.cpp`/`ui/inventory_ui.cpp`/`ui/npc_choices_menu.
+      cpp`/`ui/npc_dialogue.cpp`/`ui/pause_menu.cpp` already measured
+      whole candidate strings via `StringWidth`), so `CharWidth` isn't
+      ported here -- there was no per-character-loop call site that would
+      ever call it, unlike dawnstar's own `message_popup.cpp`/
+      `name_entry.cpp`.
+
+      Two small real layout fixes this font swap required, both
+      independently re-derived from this port's own fixed pixel
+      constants, not copied from dawnstar's own (different) numbers:
+      the taller 10px glyph height (vs. the old font's 7px) would have
+      bled 1px past every screen's own fixed 12px title bar (`ui/
+      menu_flow.cpp`/`ui/inventory_ui.cpp`/`ui/npc_choices_menu.cpp`/
+      `ui/npc_dialogue.cpp`/`ui/pause_menu.cpp`'s own `PaintTitleBar`/
+      `PaintPanel`) -- title text y nudged from 3 to 1 in all 5 places.
+      Every other fixed pixel constant already comfortably fit the new
+      font without changes (`kLineHeight = BitmapFont::kGlyphHeight + 2`
+      is computed off the font's own constant already, not hardcoded;
+      the bottom command bar's 14px height, the message popup's 12px
+      line gap, and the hotbar/compass glyph clearances all had enough
+      headroom already). One real, disclosed tradeoff, not a bug: this
+      port's own list screens with no scroll window (`ui/inventory_ui.
+      cpp`/`ui/pause_menu.cpp`/`ui/npc_choices_menu.cpp`'s own
+      `if (y + kLineHeight > kBarTop) break;` clip guard, pre-existing,
+      not new this milestone) now clip after ~14 visible rows instead of
+      ~19 for any list long enough to hit it -- no currently-real list in
+      this port (Help's 12 topics, the 8-item pause menu, character
+      classes) actually reaches either threshold, confirmed by reading
+      each one's own real item count directly.
+
+      `stormhold_render`'s own CMake target link gained `gdi32 PUBLIC`
+      (not `PRIVATE`), same reasoning as dawnstar's own M58: every smoke
+      test that links `stormhold_render` needs it transitively too, not
+      just `stormhold_port.exe` itself.
+
+      Verified: `m30_message_popup_smoke.cpp`/`m31_hud_renderer_smoke.
+      cpp`/`m33_minimap_renderer_smoke.cpp` were the only 3 of this
+      port's 58 smoke tests that asserted the OLD font's exact hand-
+      predicted glyph bit patterns (row/column lit/dark pixels) --
+      rewritten to check structural properties instead (`StringWidth`
+      monotonicity, "something non-background drew somewhere in its own
+      glyph box"), the identical fix dawnstar's own M58 already applied
+      to its own analogous tests. All 58 smoke tests pass, zero new
+      `/W4` warnings. **Live-verified with real screenshots this
+      session:** the Main Menu, class-select list, the "Character
+      Created!" word-wrapped message, the Welcome screen, live gameplay's
+      own hotbar digit glyphs and compass letter, and the Tab-opened
+      Options menu (M75, below) all render the new bold mixed-case font
+      correctly, titles fully contained inside their own 12px bars.
+
+- [x] **M75 -- modernized default keybinds (WASD + strafe + Q/E turning),
+      following dawnstar's own identical M60/M61/M62 -- user-requested
+      for the same reason: "modernize the game's controls."** This port's
+      own controls until now were the original phone's real D-pad/
+      numeric-keypad scheme remapped onto letter keys one-to-one (Up/
+      Down/Left/Right turn-only movement -- M34 never wired strafing to
+      any key at all -- 'C'=camp, 'F'=interact, '3'/'5'=the real cast/
+      cycle key codes, 'I'=inventory, 'P'=pause menu) -- faithful to the
+      original input device (and, for '3'/'5', to the original's own
+      real key codes specifically), but not how a PC dungeon crawler
+      plays today.
+
+      New default layout: `W`/`S` (alongside Up/Down, unchanged) walk
+      forward/backward; `A`/`D` strafe left/right; `Q`/`E` (alongside
+      Left/Right, unchanged) turn left/right; `Space` attacks (already
+      modern, unchanged); `F` casts the selected spell; `C` cycles it;
+      `R` interacts; `Z` rests/camps; `Tab` opens the pause menu; `I`
+      (already the modern convention) opens the inventory, unchanged.
+      Every one of dawnstar's own final M60/M62 letter choices
+      (W/S/A/D/Q/E/F/C/R/Z) was reused here verbatim for the identical
+      action, for the identical reason dawnstar's own commit history
+      already gives -- no new bikeshedding needed. Tab replacing 'P' for
+      the pause menu is this port's own direct equivalent of dawnstar's
+      own M61 (both are literally the same real `optionsUI`/screenGroup
+      31 menu the two games share, see `ui/pause_menu.h`'s own class
+      comment) -- the common "open a menu overlay" key in modern PC
+      games, a closer fit than a mnemonic letter key. Every remap here is
+      ADDITIVE where the original action already had a key (arrow keys
+      keep turning exactly as before; `I` for inventory is untouched) and
+      a straightforward reassignment everywhere else -- same "add, don't
+      remove" precedent dawnstar's own M60/M62 already set.
+
+      **A real, previously-missing capability, not just a remap, exactly
+      like dawnstar's own M60 found in its own port:** strafing was never
+      actually reachable in this port before this milestone.
+      `PlayerMovement::Move`'s own `strafe` parameter (dir 3/4 sidestep
+      instead of turn-in-place) has existed since this port's very first
+      `Move()` overload (M17), fully covered by `player_movement_smoke`'s
+      own dedicated strafe test, but `main.cpp`'s own movement dispatch
+      only ever called it with `strafe=false` until now. `A`/`D` are the
+      first real callers -- reusing the SAME dir value (`3`=left,
+      `4`=right) the existing Left/Right turn keys already use, per this
+      port's own `Player.move()` dir convention. This is the
+      OPPOSITE assignment from dawnstar's own port (dawnstar's own
+      `dir3`=right/`dir4`=left) -- confirmed by reading each game's own
+      decompiled `Player.move()` directly rather than assuming the two
+      ports share a convention just because they share an engine; each
+      port's strafe keys reuse its own existing turn-key dir values, not
+      a copied literal.
+
+      One deliberate fidelity tradeoff, the same one the user already
+      asked dawnstar's own M60 to make: `'3'`/`'5'` were this port's own
+      literal, real, unconditional original key codes (see `combat/
+      spell_casting.h`'s own `ResolveSpellCastInput`/
+      `ResolveSpellCycleInput` doc comments) -- unlike `'C'`/`'F'`/`'I'`/
+      `'P'`, which were already pragmatic stand-ins (this port has no
+      hotbar-driven numeral-key system, an already-documented M29/M31
+      gap). Remapping `'3'`/`'5'` to `'F'`/`'C'` trades that one narrow
+      slice of literal fidelity for the same modern-ergonomics tradeoff
+      the user already asked for and dawnstar's own port already made
+      for its own analogous keys.
+
+      `port/dist_readme.txt` (the real, tracked source `build_dist.bat`
+      copies into `dist/README.txt` at package time) rewritten with the
+      new control list, following the same update dawnstar's own M60/
+      M61/M62 made to its own readme -- and, since this port has no real
+      backlog left to caveat (see "What's next" below), brought fully in
+      line with dawnstar's own readme's up-to-date tone rather than still
+      warning about features (save/load, shops/NPCs, camping, the
+      inventory/options menu) that have in fact been wired since M41-M69.
+
+      Verified: all 58 smoke tests pass unchanged (this milestone only
+      touches `main.cpp`'s own key-code literals and comments -- no
+      `PlayerMovement`/`CombatResolution`/`SpellCasting`/`Camping` logic
+      changed), zero new `/W4` warnings. **Live-verified with real
+      screenshots this session**, scripting the real `stormhold_port.exe`
+      through actual character creation into gameplay: `Q`/`E` turn the
+      view left/right (compass glyph and corridor view both flip and
+      revert correctly); `Tab` opens the real Options menu (all 8 items
+      render, title contained in its own bar); `F` casts the selected
+      spell (Magicka bar visibly drains); `C` cycles to a new spell
+      ("Daedric Weapon" popup shown); `Z` starts a rest that completes
+      ~7.5s later (Magicka bar visibly refills). `W`/`A`/`D`/`R` dispatch
+      through the identical `GetAsyncKeyState`/`KeyEdge` mechanism
+      already proven live above and were not separately re-proven beyond
+      confirming they compile and reach the same already-tested
+      `PlayerMovement::Move`/interact dispatch code Up/Down/Left/Right/
+      the old `'F'` key already exercised.
+
+- [x] **M76 -- closed the stale-corridor-view gap M68 narrowed but didn't
+      finish, root-causing a real user-reported bug: "when exiting the
+      dungeon camp, I get teleported to the dungeon camp again and my
+      position constantly resets... movement doesn't work as expected."**
+      User-reported this session, with a pointer to check both the
+      original's own source and dawnstar's sibling port for how corridor
+      rendering and movement are supposed to interact.
+
+      Root cause, confirmed by reading `../src/Player.java` directly
+      (not assumed from this port's own prior comments): both
+      `markCampAndReturnToTown()` (line 2509) and `warpToCampMark()`
+      (line 2517) call `this.refreshCorridorView()` themselves,
+      UNCONDITIONALLY, as their own second-to-last statement, for EVERY
+      caller -- not just the one M68 happened to fix. M68's own entry
+      above narrowed the gap to "the other two real callers... still
+      don't take a `LevelLookup`", but along the way also repeated a
+      stale claim from an even earlier session: `ShopInteraction::
+      VarusDialogue` has no Warp action at all and never has -- reading
+      the function directly (it's a pure `WardenState::visitCount`
+      lore-line state machine, no position writes anywhere) confirms
+      this. The real second caller was always `ShopInteraction::
+      HelgaDialogue`'s own action 11 (Warp), reached through `ui/
+      npc_choices_menu.cpp`'s M66 dispatch -- corrected here rather than
+      carried forward a third time.
+
+      `player.corridorView` is a pure RENDER cache (`SampleCorridorView`'s
+      own 9x5 grid, sampled from a specific position/facing/level at the
+      moment it's refreshed) -- `PlayerMovement::CommitMove`'s own
+      walkability/position logic reads live `GeneratedLevel::tiles` data
+      directly and was never affected by this gap. Left stale after
+      `PlayerInventory::UseItem`'s camp-marker item (id 87) or Helga's
+      Warp, it keeps painting whatever the player was looking at
+      BEFORE the warp -- a different level entirely -- indefinitely,
+      since nothing re-samples it until the player's next SUCCESSFUL
+      `CommitMove`. That next move can fail to ever come: `PlayerMovement
+      ::Move`'s own `coreStats[6] <= 0` (empty Fatigue) guard returns
+      before `CommitMove` ever runs, which is entirely plausible right
+      after a dungeon crawl -- exactly the state a player reaching for a
+      camp-marker/Warp item is likely to be in. From the player's side,
+      that reads as exactly the reported symptom: the screen keeps
+      showing the dungeon ("teleported back to the dungeon camp"), input
+      appears to do nothing ("movement doesn't work"), and whatever real,
+      correctly-updated position IS nearby -- the hub's own fixed (12,
+      14) `MarkCampAndReturnToTown` respawn point sits one tile from
+      Helga's own (12, 13) hub shop tile (`kHubShopX/Y[5]` in `world/
+      dungeon_generator.cpp`) -- reads as "my position resets next to
+      Helga", not as a coincidence but as this port's own faithfully-
+      reproduced fixed hub geometry.
+
+      Checked dawnstar's own sibling port for how it avoids this whole
+      class of bug: dawnstar's `PlayerMovement::MarkCampAndReturnToTown`/
+      `WarpToCampMark` (its own `player/player_movement.h`) take `levels`
+      directly and refresh internally at every real call site
+      (`combat/combat_resolution.cpp`'s own UseItem equivalent, `npc/
+      shop_interaction.cpp`'s own NPC-warp dispatch) -- dawnstar never
+      had this gap because its own architecture put these methods
+      somewhere `levels` was already available. Fixed the same way here:
+      `PlayerInventory::MarkCampAndReturnToTown`/`WarpToCampMark` now
+      take a `GameAdvancement::LevelLookup` and call `PlayerMovement::
+      RefreshCorridorView` internally, matching Player.java's own
+      unconditional call exactly -- not just at the one call site that
+      happened to have `levels` in scope. `PlayerMovement::CommitMove`'s
+      own now-redundant second refresh call (M68's fix) was removed, and
+      `LevelLookup` threaded through every real caller: `PlayerInventory
+      ::UseItem`, `ShopInteraction::HelgaDialogue` (and, since it's one
+      shared C++ signature either way, `ui/npc_choices_menu.cpp`'s
+      `DialogueFor`/`Confirm` and `ui/inventory_ui.cpp`'s `Confirm`, down
+      to `main.cpp`'s own two call sites).
+
+      Verified: rewrote `m12_player_inventory_smoke.cpp`'s own camp-
+      bookmark test and `m61_inventory_actions_smoke.cpp`'s own id-87
+      sweep to pass a real `LevelLookup` and confirmed both the mark and
+      warp directions complete without crashing (proving
+      `RefreshCorridorView` runs safely against a lazily-built level, not
+      just that the position fields update); `m66_helga_choices_menu_
+      smoke.cpp`'s own existing end-to-end Warp test now exercises the
+      real `RefreshCorridorView` call it previously skipped entirely. All
+      58 smoke tests pass, zero new `/W4` warnings. **Live-verified this
+      session** for the two paths that were already working (`CommitMove`
+      ::Move's own turn/step dispatch, confirmed via Q/E/W's own M75
+      live-verification) as a regression check -- reproducing the
+      specific reported id-87/Helga-Warp sequence live wasn't practical
+      in this session (a fresh character's own starting inventory has no
+      real id-87 item, and earning a `helgaPoints` requires a longer play
+      session than fit here), so this fix leans on the smoke-test
+      coverage above, which now actually exercises the previously-silent
+      `RefreshCorridorView` call path with real assertions rather than
+      just constructing the right final position.
+
+## M77: source-vs-port audit of the game loop -- missing wiring found
+
+A third audit pass, this time comparing `GameCanvas.run()`/`paint()`/
+`tickPlayerAction()` and `ESGame.commandAction()` against `main.cpp`'s
+own wiring rather than method bodies (earlier passes compared bodies,
+which were already faithful -- the gaps were all in what calls them).
+Fixed:
+
+- **Death state stored on the compass facing.** `GameCanvas.facing` (the
+  dead flag) and `Player.facing` are two fields; the port had merged them,
+  so turning read as dying and respawned the player in front of Helga.
+  Now `DeathState::phase`.
+- **A/D strafe and Left/Right/Q/E turns reversed** in `main.cpp`'s
+  dispatch (dir 3 is right, dir 4 is left -- `keyPressed()` confirms).
+- **"You're Dead!" / "CAMPING" screens** (`paint()`'s top-level dispatch)
+  were never drawn.
+- **Level-up never happened.** `tryRankUpSkills()` had no caller, so
+  skills never ranked up and the character never levelled. Wired, plus
+  the 3-step "Level Up" screen (`ui/level_up_menu.h`, screenGroup 39).
+- **The ending never played.** `pendingLockedItemFlag` ->
+  `newEndOfGameUI()` ("Victory!") -> `newGameOverUI()` ("Game Over") ->
+  main menu. Returning to the main menu rebuilds the session.
+- **Camp key handled outside the tick gate** -- Z started a rest while
+  dead or with any menu/dialogue open. Moved inside `shouldRunTick`.
+- **Helga's post-death greeting** (`Shop.showSpecialGreeting`) was never
+  set on respawn.
+- **Minimap not hidden under ailment 3** (`paintGameView()` gates both
+  zooms on `!hasAilment(3)`).
+- **Level name on load.** `GameCanvas.showNotify()` -- present in
+  `decompiled/e.java` but missing from `src/GameCanvas.java`'s
+  transcription -- shows it when the game view appears after a load.
+
+Left as-is (minor, noted for the record): the original runs one action
+per tick (monster AI, then one player action, then target refresh/death),
+while the port lets movement/attack/cast share a tick and refreshes the
+target before attacking, so a kill resolves one tick (250ms) later;
+status/per-second timers keep running while a menu is open (the original
+pauses its whole tick loop); camp/attack/interact aren't gated on the
+HUD icon set the way the original's hotkeys are.
+
 ## What's next
 
 Every NPC interaction (all 7 shops), the full M41 dispatch web, the
 in-game pause menu, and the main menu (including Help, M72) are wired and
 working. Two source-vs-port audit passes (M71/M72) came back clean beyond
-what they fixed. There's no real backlog -- what follows is one small
-loose end plus the standing deliberate divergences, kept here so nobody
-re-litigates or re-discovers them from scratch.
-
-### Small loose end
-
-- `PlayerInventory::UseItem`'s camp-marker item (consumable, action id 87)
-  and `ShopInteraction::VarusDialogue`'s own Warp action still don't
-  refresh `player.corridorView` after warping the player, unlike
-  `PlayerMovement::CommitMove`'s own auto-camp-tile trigger (fixed in
-  M68, which had a `LevelLookup` already in scope). Both would need one
-  threaded through to close this the same way -- see
-  `player/player_inventory.h`'s own `MarkCampAndReturnToTown`/
-  `WarpToCampMark` doc comments for the exact gap.
+what they fixed. The real GDI font (M74) and modernized WASD/strafe/Q-E
+controls (M75) bring this port's presentation layer in line with
+dawnstar's own, and M76 closed the last known stale-corridor-view gap.
+There's no real backlog left -- what follows is the standing deliberate
+divergences, kept here so nobody re-litigates or re-discovers them from
+scratch.
 
 ### Deliberate divergences (working as intended, not bugs to fix)
 

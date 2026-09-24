@@ -10,7 +10,7 @@ bool DeathSequence::TickDeathAndRegen(PlayerState& p, DeathState& death, const C
                                        int64_t deltaMs) {
     int hp = PlayerCombatStats::EffectiveStat(p, charData, 2);
     if (hp <= 0) {
-        p.facing = 2;
+        death.phase = 2;
         death.deathAtMs = now;
         return true;
     }
@@ -20,12 +20,12 @@ bool DeathSequence::TickDeathAndRegen(PlayerState& p, DeathState& death, const C
 }
 
 DeathTickResult DeathSequence::Tick(PlayerState& p, DeathState& death, const ItemDatabase& items, int64_t now) {
-    if (p.facing == 1) {
+    if (death.phase == 1) {
         return DeathTickResult::Alive;
     }
 
-    if (p.facing == 2) {
-        p.facing = 3;
+    if (death.phase == 2) {
+        death.phase = 3;
         // unconfirmed_ad=false/messagePriority=0 message-clear NOT
         // modeled -- see this method's own header comment.
     }
@@ -45,7 +45,7 @@ DeathTickResult DeathSequence::Tick(PlayerState& p, DeathState& death, const Ite
     PlayerCreation::RespawnAfterDeath(p);
 
     death.deathAtMs = 0;
-    p.facing = 1;  // confirmed redundant -- see this method's own header comment.
+    death.phase = 1;
     return DeathTickResult::Respawned;
 }
 

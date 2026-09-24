@@ -2,8 +2,7 @@ Stormhold Remastered
 ====================
 
 A PC port of The Elder Scrolls Travels: Stormhold (J2ME, mobile Java),
-rebuilt from the original game's own decompiled code. Very much a work
-in progress -- see below.
+rebuilt from the original game's own decompiled code.
 
 
 WHAT YOU NEED
@@ -27,17 +26,35 @@ your original download afterwards and nothing breaks.
 
 From the Main Menu, choose New Game, pick a class, name your character,
 and read through (or skip past) the introduction to start playing.
+Continue Game resumes your last save.
 
 
 CONTROLS
 --------
 
-  Arrow keys            walk forward/backward, turn left/right
+  W / S / Up / Down     walk forward / backward
+  A / D                 strafe left / right
+  Q / E / Left / Right  turn left / right
   Space                  attack whatever monster you're facing
+  F                      cast selected spell
+  C                      cycle selected spell
+  R                      interact -- doors, people, chests, anything nearby
+  Z                      rest / camp
+  I                      inventory
+  Tab                    pause menu (stats, inventory, skills, spells,
+                          save/load, help)
   M                      toggle the zoomed-out minimap
-  Enter                  confirm / select (menus)
-  Escape                 back / cancel (menus)
+  Enter                  confirm / select
+  Escape                 back / cancel
   A-Z, 0-9, Backspace     type your character's name (menus)
+
+A WASD + strafe layout, the same shape most first-person dungeon crawlers
+use today (Legend of Grimrock and its own genre-mates), not the original
+phone's own D-pad-and-numeric-keypad scheme. Q/E sit right next to WASD
+so you can turn without moving your hand; the arrow keys still turn in
+place too, exactly like they always did. Strafing (A/D) is genuinely
+new -- the original had it too, it just never had a PC-keyboard binding
+here until now.
 
 The window size (2x, 3x or 4x) is set in the launcher, not in the game.
 
@@ -46,23 +63,14 @@ WHERE YOUR FILES GO
 --------------------
 
   data\    the game files you supplied (unpacked from your .jar)
-  user\    the log (no save/load yet -- see below)
+  user\    your saved games and the log
   bin\     the game engine itself
 
 To uninstall, delete this folder. Nothing is written anywhere else -- no
 registry keys, no AppData, no installer.
 
-To move it to another drive, move the whole folder.
-
-
-THIS IS A WORK IN PROGRESS
----------------------------
-
-Movement, combat, and starting a new character all work. Not yet ported:
-saving/loading a game, the inventory/skills/spells/options menu, shops
-and NPCs, and camping. Progress and a full write-up of what's been
-verified against the original game's own decompiled code live at
-stormhold/docs/PORT_ROADMAP.md in the project's repository.
+To move it to another drive, move the whole folder. To back up your saves,
+copy user\.
 
 
 IF SOMETHING GOES WRONG

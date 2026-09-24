@@ -221,10 +221,12 @@
 #include "dungeon/dungeon_runtime.h"
 #include "engine/game_clock.h"
 #include "graphics/backbuffer.h"
+#include "graphics/bitmap_font.h"
 #include "monster/monster_runtime.h"
 #include "platform/win32/window.h"
 #include "player/camp_state.h"
 #include "player/death_sequence.h"
+#include "player/player_leveling.h"
 #include "player/game_save.h"
 #include "player/movement_messages.h"
 #include "player/player_combat_stats.h"
@@ -244,6 +246,7 @@
 #include "render/visible_object_renderer.h"
 #include "ui/inventory_ui.h"
 #include "ui/boot_splash.h"
+#include "ui/level_up_menu.h"
 #include "ui/menu_flow.h"
 #include "ui/npc_choices_menu.h"
 #include "ui/npc_dialogue.h"
@@ -367,6 +370,20 @@ void ClearTransientTileFlags(stormhold::GeneratedLevel& level) {
             tile = static_cast<uint8_t>(tile & ~(2 | 4 | 16));
         }
     }
+}
+
+// GameCanvas.paintDeadScreen()/paintCampScreen() -- both identical apart
+// from their text: black fill, then one white string drawn with anchor 33
+// (HCENTER|BOTTOM) at (width/2, height/2). deadScreenFont/campScreenFont
+// (`Font.getFont(64, 2, 16)`, a large MIDP system font) have no
+// recoverable glyphs, so this reuses graphics/bitmap_font.h's GDI font --
+// same stand-in dawnstar's own identical "You're Dead!"/"CAMPING" screens
+// use.
+void PaintFullScreenMessage(stormhold::Backbuffer& bb, const std::string& text) {
+    bb.Fill(stormhold::PackRGB565(0, 0, 0));
+    int x = (stormhold::Backbuffer::kWidth - stormhold::BitmapFont::StringWidth(text)) / 2;
+    int y = stormhold::Backbuffer::kHeight / 2 - stormhold::BitmapFont::kGlyphHeight;
+    stormhold::BitmapFont::DrawString(bb, x, y, text, stormhold::PackRGB565(255, 255, 255));
 }
 
 // GameCanvas.itemFoundMessageLines() (was decompiled/e.java's `k()`, M41)
@@ -512,6 +529,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // original" finding this deliberately does NOT reproduce, and for the
     // separate confirmed "Quit Game" credits-screen bug this DOES.
     stormhold::PauseMenuState pauseMenu;
+    // ESGame.newLevelUpUI(step)/screenGroup 39 -- opened the tick
+    // PlayerLeveling::TryRankUpSkills returns true, see ui/level_up_menu.h.
+    stormhold::LevelUpMenuState levelUpMenu;
+    // ESGame.newEndOfGameUI() ("Victory!", screenGroup 200) -> its
+    // backTarget newGameOverUI() ("Game Over", 201) -> mainMenuUI. Both are
+    // plain title+message screens, so NpcDialogue's renderer is reused;
+    // `endOfGameIsVictory` says which of the two is showing.
+    stormhold::NpcDialogueState endOfGameScreen;
+    bool endOfGameIsVictory = false;
     // M38: GameCanvas.targetMonster -- refreshed every tick by
     // PlayerMovement::MonsterInFront below.
     std::optional<stormhold::MonsterState> targetMonster;
@@ -546,6 +572,40 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         bool edge = down && !keyDownLast[static_cast<size_t>(vk)];
         keyDownLast[static_cast<size_t>(vk)] = down;
         return edge;
+    };
+
+    // newGameOverUI()'s own backTarget: ESGame.mainMenuUI. The original
+    // simply shows the main menu again and lets New Game/Continue rebuild
+    // on top of the same statics; this port's session lives in the locals
+    // above instead, so they're rebuilt here exactly the way startup builds
+    // them. One deliberate difference: Player.pendingLockedItemFlag is a
+    // STATIC in the original and is never cleared, so a New Game started
+    // after a victory in the same app run would re-trigger "Victory!" on
+    // its very first step -- a fresh PlayerState here doesn't carry it.
+    auto ReturnToMainMenu = [&]() {
+        world = stormhold::WorldRegistry(37);
+        levels = BuildWorld(geometry, items, monsters, world);
+        warden = stormhold::WardenState{};
+        shop = stormhold::ShopState{};
+        player = stormhold::PlayerState{};
+        menuState = stormhold::MenuFlowState{};
+        gameStarted = false;
+        camp = stormhold::CampState{};
+        death = stormhold::DeathState{};
+        messagePopup = stormhold::MessagePopupState{};
+        npcDialogue = stormhold::NpcDialogueState{};
+        npcChoicesMenu = stormhold::NpcChoicesMenuState{};
+        inventoryUi = stormhold::InventoryUiState{};
+        pauseMenu = stormhold::PauseMenuState{};
+        levelUpMenu = stormhold::LevelUpMenuState{};
+        endOfGameScreen = stormhold::NpcDialogueState{};
+        targetMonster = std::nullopt;
+        hudState = stormhold::HudState{};
+        flashOverlay = stormhold::FlashOverlayState{};
+        monsterRenderedLastFrame = false;
+        attackRequested = spellCastRequested = spellCycleRequested = false;
+        lastAttackTimeMs = lastSpellCastTimeMs = 0;
+        secondAccumulatorMs = 0;
     };
 
     window.RunMessageLoop([&]() {
@@ -676,6 +736,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         ClearTransientTileFlags(level);
                         stormhold::DungeonRuntime::RefreshTileFlags(level, world);
                     }
+                    // startMonsterImageLoadForCurrentLevel() sets
+                    // GameCanvas.E, and GameCanvas.showNotify() (in
+                    // decompiled/e.java, missing from ../src/GameCanvas.java's
+                    // transcription) consumes it the moment the game view
+                    // appears: the same Warden's Camp / Outer Camp / level-
+                    // name choice the respawn message makes.
+                    stormhold::MessagePopup::Show(
+                        messagePopup, stormhold::DeathSequence::RespawnMessageLines(player, dungeonNames), 1,
+                        gameTimeMs);
                 }
             }
             stormhold::PlayerMovement::RefreshCorridorView(player, levelLookup(player.currentLevel), levelLookup);
@@ -683,35 +752,84 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         }
 
         if (clock.ConsumeTick()) {
-            bool up = (GetAsyncKeyState(VK_UP) & 0x8000) != 0;
-            bool down = (GetAsyncKeyState(VK_DOWN) & 0x8000) != 0;
-            bool left = (GetAsyncKeyState(VK_LEFT) & 0x8000) != 0;
-            bool right = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0;
+            // M75: modernized default keybinds (WASD + strafe + Q/E
+            // turning), following dawnstar's own identical M60/M61/M62 --
+            // user-requested for the same reason: "change the default
+            // controls so that they're matching a modern dungeon crawler
+            // you'd play today." Up/Down/Left/Right keep their own exact
+            // original behavior (step forward/backward, turn in place);
+            // W/S/Q/E are ADDED alongside them, not a replacement, same
+            // "add, don't remove" precedent dawnstar's own M60/M62 set.
+            bool up = (GetAsyncKeyState(VK_UP) & 0x8000) != 0 || (GetAsyncKeyState('W') & 0x8000) != 0;
+            bool down = (GetAsyncKeyState(VK_DOWN) & 0x8000) != 0 || (GetAsyncKeyState('S') & 0x8000) != 0;
+            bool left = (GetAsyncKeyState(VK_LEFT) & 0x8000) != 0 || (GetAsyncKeyState('Q') & 0x8000) != 0;
+            bool right = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0 || (GetAsyncKeyState('E') & 0x8000) != 0;
+            // A genuinely NEW capability, not just a remap: strafing was
+            // never actually reachable in this port before this milestone.
+            // PlayerMovement::Move's own `strafe` parameter (dir 3/4
+            // sidestep instead of turn-in-place -- the original's real
+            // numeric-keypad equivalent) has existed since this port's
+            // very first Move() overload, fully covered by player_
+            // movement_smoke's own strafe test, but main.cpp's own
+            // movement dispatch below only ever called it with
+            // `strafe=false` until now. 'A'/'D' reuse the SAME dir value
+            // 'left'/'right' above already turn with (see the dispatch
+            // below): dir3=RIGHT, dir4=LEFT, identical to dawnstar. Confirmed
+            // from ../src/GameCanvas.java's own keyPressed(): game action
+            // LEFT -> pendingMoveDir 4, RIGHT -> 3, numpad '4' -> strafe 4,
+            // numpad '6' -> strafe 3; and ComputeMoveTarget's dir 3 is
+            // `facing + 1` (N -> E, clockwise). An earlier version of this
+            // dispatch had both pairs swapped (A strafed right, Left/Q
+            // turned right).
+            bool strafeLeft = (GetAsyncKeyState('A') & 0x8000) != 0;
+            bool strafeRight = (GetAsyncKeyState('D') & 0x8000) != 0;
             bool mDown = (GetAsyncKeyState('M') & 0x8000) != 0;
-            bool campKeyEdge = KeyEdge('C');
-            bool interactKeyEdge = KeyEdge('F');
+            // M75: remapped from 'C' to 'Z' -- "Z to rest" is a common
+            // modern RPG convention, and frees 'C' for spell-cycle below
+            // (dawnstar's own M60/M62 arrived at the identical Z=camp/
+            // C=cycle split, for the identical reason).
+            bool campKeyEdge = KeyEdge('Z');
+            // M75: remapped from 'F' to 'R' -- the exact key dawnstar's own
+            // M60/M62 settled on for the same action (interact -- doors,
+            // people, chests), and frees 'F' for spell-cast below.
+            bool interactKeyEdge = KeyEdge('R');
             // M62: GameCanvas.tickPlayerAction()'s own unconfirmed_Z branch
             // (real key '7', unconditional -- no hotbarActionSet gate).
-            // 'I' is a new pragmatic stand-in key, same class as 'C'/'F'
+            // 'I' is a pragmatic stand-in key, same class as camp/interact
             // above (this port has no hotbarActionSet-driven numeral-key
-            // system, an already-documented M29/M31 gap). Bound to its own
-            // independent key rather than folded into tickPlayerAction()'s
-            // real exclusive if/else-if chain (camp/interact/spellcast/
-            // spellcycle/attack all outrank inventory-open there, which
-            // itself outranks movement) -- same "each action gets its own
-            // dedicated key, checked independently" simplification M39/
-            // M41/M46 already established for camp/interact/attack/
-            // spellcast/spellcycle, not a new deviation this milestone
-            // introduces.
+            // system, an already-documented M29/M31 gap), and is already
+            // the modern "I for Inventory" convention -- M75 leaves it
+            // unchanged. Bound to its own independent key rather than
+            // folded into tickPlayerAction()'s real exclusive if/else-if
+            // chain (camp/interact/spellcast/spellcycle/attack all outrank
+            // inventory-open there, which itself outranks movement) --
+            // same "each action gets its own dedicated key, checked
+            // independently" simplification M39/M41/M46 already
+            // established for camp/interact/attack/spellcast/spellcycle,
+            // not a new deviation this milestone introduces.
             bool inventoryKeyEdge = KeyEdge('I');
-            // M63: see the shouldRunTick-gated dispatch below for why this
-            // is checked there rather than immediately here.
-            bool pauseKeyEdge = KeyEdge('P');
+            // M75: remapped from 'P' to Tab -- this screen (Stats/
+            // Inventory/Skills/Spells/Save/Load/Help/Quit, see ui/
+            // pause_menu.h's own class comment) is this port's own direct
+            // analog of dawnstar's own single "options menu", which its
+            // own M61 moved to Tab for the same reason: the common
+            // "open a menu overlay" key in modern PC games, a closer fit
+            // than a mnemonic letter key. See the shouldRunTick-gated
+            // dispatch below for why this is checked there rather than
+            // immediately here.
+            bool pauseKeyEdge = KeyEdge(VK_TAB);
             if (GetAsyncKeyState(VK_SPACE) & 0x8000) attackRequested = true;
-            // M46: real key codes ('3'/'5'), not stand-ins -- see
-            // spellCastRequested/spellCycleRequested's own comment above.
-            if (KeyEdge('3')) spellCastRequested = true;
-            if (KeyEdge('5')) spellCycleRequested = true;
+            // M75: remapped off the real key codes ('3'/'5') onto 'F'/'C'
+            // -- dawnstar's own M60 made the identical cast/cycle choice
+            // (a common "use ability" key in modern action/RPG layouts,
+            // and a letter that reads more directly as "cycle" than a
+            // bare digit ever did). Unlike camp/interact/inventory above,
+            // '3'/'5' were the real, unconditional original key codes, not
+            // stand-ins -- this trades that literal fidelity for the same
+            // modern-ergonomics tradeoff the user already asked for and
+            // dawnstar's own port already made for its own analogous keys.
+            if (KeyEdge('F')) spellCastRequested = true;
+            if (KeyEdge('C')) spellCycleRequested = true;
 
             // M60: dismisses the NPC dialogue screen -- a port-only "Ok"
             // stand-in for the original's own real command-bar button
@@ -750,9 +868,33 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 if (KeyEdge(VK_DOWN)) stormhold::NpcChoicesMenu::MoveSelection(npcChoicesMenu, 1, player);
                 if (KeyEdge(VK_RETURN)) {
                     stormhold::NpcChoicesMenu::Confirm(npcChoicesMenu, player, shop, dialogue, charData, items,
-                                                        levelLookup(1), combatRng, nextSpawnIdCounter);
+                                                        levelLookup(1), combatRng, nextSpawnIdCounter, levelLookup);
                 }
                 if (KeyEdge(VK_ESCAPE)) stormhold::NpcChoicesMenu::Cancel(npcChoicesMenu);
+            }
+
+            // ESGame screenGroup 39 -- no Escape, cmdBack is removed from
+            // this screen in the original.
+            if (levelUpMenu.active) {
+                if (KeyEdge(VK_UP)) stormhold::LevelUpMenu::MoveSelection(levelUpMenu, -1);
+                if (KeyEdge(VK_DOWN)) stormhold::LevelUpMenu::MoveSelection(levelUpMenu, 1);
+                if (KeyEdge(VK_RETURN)) stormhold::LevelUpMenu::Confirm(levelUpMenu, player, charData, shop);
+            }
+
+            // ESGame screenGroups 200/201: Ok on "Victory!" shows its
+            // backTarget "Game Over"; Ok on "Game Over" shows mainMenuUI.
+            bool returnToMainMenu = false;
+            if (endOfGameScreen.active && KeyEdge(VK_RETURN)) {
+                if (endOfGameIsVictory) {
+                    endOfGameIsVictory = false;
+                    stormhold::NpcDialogue::Show(endOfGameScreen, "Game Over", dialogue.groups[7][5], -1);
+                } else {
+                    returnToMainMenu = true;
+                }
+            }
+            if (returnToMainMenu) {
+                ReturnToMainMenu();
+                return;
             }
 
             gameTimeMs += stormhold::GameClock::kTickInterval.count();
@@ -794,7 +936,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 if (KeyEdge(VK_DOWN)) stormhold::InventoryUi::MoveSelection(inventoryUi, 1, player);
                 if (KeyEdge(VK_RETURN)) {
                     stormhold::InventoryUi::Confirm(inventoryUi, player, items, spells, monsters,
-                                                     levelLookup(player.currentLevel), world, combatRng);
+                                                     levelLookup(player.currentLevel), world, combatRng, levelLookup);
                 }
                 if (KeyEdge(VK_ESCAPE)) stormhold::InventoryUi::Cancel(inventoryUi);
             }
@@ -821,28 +963,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         }
                         stormhold::PlayerMovement::RefreshCorridorView(player, levelLookup(player.currentLevel),
                                                                         levelLookup);
+                        // Same helperThreadState==6 path as Continue Game --
+                        // see the level-name message there.
+                        stormhold::MessagePopup::Show(
+                            messagePopup, stormhold::DeathSequence::RespawnMessageLines(player, dungeonNames), 1,
+                            gameTimeMs);
                     }
                 }
                 if (KeyEdge(VK_ESCAPE)) stormhold::PauseMenu::Cancel(pauseMenu);
-            }
-
-            // M42: GameCanvas.tickPlayerAction()'s own unconfirmed_I
-            // branch, gated there on unconfirmed_A -- "Cannot Camp!"
-            // instead of starting a rest when a monster is currently
-            // visible (monsterRenderedLastFrame, same flag
-            // TickStatusCountdowns's own ailment-7 coupling already
-            // reads) -- else GameCanvas.startCampOrRest() (M41, was
-            // decompiled/e.java's a(long)). Bound to a new 'C' key, the
-            // same pragmatic "no hotbar system exists" stand-in M39
-            // already used for attack (real key: '0' when
-            // hotbarActionSet==0, out of scope -- see M29/M31's own
-            // input-handling gap).
-            if (campKeyEdge && camp.state == 0) {
-                if (monsterRenderedLastFrame) {
-                    stormhold::MessagePopup::Show(messagePopup, {"Cannot", "Camp!"}, 1, gameTimeMs);
-                } else {
-                    stormhold::Camping::Start(camp, player, gameTimeMs);
-                }
             }
 
             // M42: run()'s own campState==1/2 handling (Java-
@@ -872,6 +1000,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // sequence.h's own DeathState comment).
             stormhold::DeathTickResult deathResult = stormhold::DeathSequence::Tick(player, death, items, gameTimeMs);
             if (deathResult == stormhold::DeathTickResult::Respawned) {
+                // run()'s own `Shop.showSpecialGreeting = true;` right after
+                // resetState(true): Helga (whom the respawn point faces)
+                // prefixes her next greeting with dialogue[5][21] once --
+                // ShopInteraction::HelgaDialogue already reads/clears it.
+                shop.showSpecialGreeting = true;
                 stormhold::MessagePopup::Show(
                     messagePopup, stormhold::DeathSequence::RespawnMessageLines(player, dungeonNames), 1, gameTimeMs);
             }
@@ -885,8 +1018,31 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // different UIScreen is the active displayable).
             bool shouldRunTick = campResult != stormhold::CampTickResult::StillWaiting &&
                                   deathResult != stormhold::DeathTickResult::Waiting && !npcDialogue.active &&
-                                  !inventoryUi.active && !pauseMenu.active && !npcChoicesMenu.active;
+                                  !inventoryUi.active && !pauseMenu.active && !npcChoicesMenu.active &&
+                                  !levelUpMenu.active && !endOfGameScreen.active;
             if (shouldRunTick) {
+                // M42: GameCanvas.tickPlayerAction()'s own unconfirmed_I
+                // branch, gated there on unconfirmed_A -- "Cannot Camp!"
+                // instead of starting a rest when a monster is currently
+                // visible (monsterRenderedLastFrame, same flag
+                // TickStatusCountdowns's own ailment-7 coupling already
+                // reads) -- else GameCanvas.startCampOrRest() (M41, was
+                // decompiled/e.java's a(long)). Bound to 'Z' (real key: '0'
+                // when hotbarActionSet==0, see M29/M31's own input-handling
+                // gap). Inside this gate, not before it: tickPlayerAction()
+                // only runs when shouldRunTick is true, so the original
+                // can't start a rest while dead, already camping, or with a
+                // menu/dialogue screen open -- this used to sit above the
+                // gate and did all three. The new camp state is picked up by
+                // Camping::Tick on the NEXT tick, same as run()'s own order.
+                if (campKeyEdge && camp.state == 0) {
+                    if (monsterRenderedLastFrame) {
+                        stormhold::MessagePopup::Show(messagePopup, {"Cannot", "Camp!"}, 1, gameTimeMs);
+                    } else {
+                        stormhold::Camping::Start(camp, player, gameTimeMs);
+                    }
+                }
+
                 // M62: GameCanvas.openInventory() -- see ui/inventory_ui.h's
                 // own class comment for the real bug (openInventory shows a
                 // screen only the not-yet-built pause menu ever populates)
@@ -899,32 +1055,47 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // M63: GameCanvas's own optionsUI -- see ui/pause_menu.h's
                 // own class comment for the confirmed "the real Command
                 // that would open this is declared but never wired to any
-                // Displayable" finding; 'P' is a new pragmatic stand-in
-                // key, same class as 'C'/'F'/'I' above.
+                // Displayable" finding. M75: bound to Tab, not a letter
+                // stand-in -- see pauseKeyEdge's own comment above.
                 if (pauseKeyEdge) {
                     stormhold::PauseMenu::Open(pauseMenu);
                 }
 
-                bool moveKeyPressed = up || down || left || right;
+                // M75: strafeLeft/strafeRight join the moveKeyPressed/
+                // dispatch chain below, reusing the turn dir values with
+                // strafe=true (dir3=right, dir4=left -- see their own
+                // comment above).
+                bool moveKeyPressed = up || down || left || right || strafeLeft || strafeRight;
                 int8_t inventoryCountBeforeMove = player.inventoryCount;
                 if (up) {
                     stormhold::PlayerMovement::Move(player, 1, false, levelLookup, world, items, monsters, warden);
                 } else if (down) {
                     stormhold::PlayerMovement::Move(player, 2, false, levelLookup, world, items, monsters, warden);
                 } else if (left) {
-                    stormhold::PlayerMovement::Move(player, 3, false, levelLookup, world, items, monsters, warden);
-                } else if (right) {
                     stormhold::PlayerMovement::Move(player, 4, false, levelLookup, world, items, monsters, warden);
+                } else if (right) {
+                    stormhold::PlayerMovement::Move(player, 3, false, levelLookup, world, items, monsters, warden);
+                } else if (strafeLeft) {
+                    stormhold::PlayerMovement::Move(player, 4, true, levelLookup, world, items, monsters, warden);
+                } else if (strafeRight) {
+                    stormhold::PlayerMovement::Move(player, 3, true, levelLookup, world, items, monsters, warden);
                 }
 
                 // M48: GameCanvas.resolveMovementSideEffects() (was
                 // decompiled/e.java's `n()`) -- see player/
                 // movement_messages.h's own header comment for why both
                 // messages below can fire from the same move, and for
-                // `lockedItemEndOfGame`'s own not-modeled end-of-game gap.
+                // `lockedItemEndOfGame` (the game's ending, M77).
                 if (moveKeyPressed) {
                     stormhold::MovementMessageResult moveMsg = stormhold::MovementMessages::Resolve(
                         player, inventoryCountBeforeMove, dungeonNames, items);
+                    // resolveMovementSideEffects(): Player.pendingLockedItemFlag
+                    // -> showScreen(newEndOfGameUI()), the game's ending --
+                    // "Victory!" with dialogue[7][4], then "Game Over".
+                    if (moveMsg.lockedItemEndOfGame && !endOfGameScreen.active) {
+                        endOfGameIsVictory = true;
+                        stormhold::NpcDialogue::Show(endOfGameScreen, "Victory!", dialogue.groups[7][4], -1);
+                    }
                     if (moveMsg.crossingMessage.has_value()) {
                         stormhold::MessagePopup::Show(messagePopup, *moveMsg.crossingMessage, 1, gameTimeMs);
                     }
@@ -987,7 +1158,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         line = stormhold::ShopInteraction::BenecaDialogue(player, shop, dialogue, items,
                                                                             nextSpawnIdCounter, 1, 0);
                     } else if (shopAhead == 5) {
-                        line = stormhold::ShopInteraction::HelgaDialogue(player, shop, dialogue, items, 1, 0);
+                        line = stormhold::ShopInteraction::HelgaDialogue(player, shop, dialogue, items, 1, 0,
+                                                                           levelLookup);
                     } else {
                         line = stormhold::ShopInteraction::VarusDialogue(player, warden, dialogue);
                     }
@@ -1208,6 +1380,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     targetMonster = std::nullopt;
                     hudState.unconfirmedAa = false;
                 }
+
+                // run()'s own `if (player.tryRankUpSkills()) { pauseTicking();
+                // levelUpUI = newLevelUpUI(1); showScreen(levelUpUI); }`,
+                // right after tickDeathAndRegen. Skill exp was already being
+                // earned (GainSkillExp) but nothing ever ranked skills up or
+                // levelled the character before this was wired.
+                if (stormhold::PlayerLeveling::TryRankUpSkills(player, charData)) {
+                    stormhold::LevelUpMenu::Open(levelUpMenu, player, charData);
+                }
             }
 
             if (mDown && !mKeyWasDown) minimapZoomedOut = !minimapZoomedOut;
@@ -1258,6 +1439,21 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 // `npcChoicesUI[shopId]` and everything it opens onto
                 // taking over `Display.setCurrent()` in the original.
                 stormhold::NpcChoicesMenu::Render(backbuffer, npcChoicesMenu, player, charData, items, shop);
+            } else if (levelUpMenu.active) {
+                stormhold::LevelUpMenu::Render(backbuffer, levelUpMenu);
+            } else if (endOfGameScreen.active) {
+                stormhold::NpcDialogue::Render(backbuffer, endOfGameScreen);
+            } else if (death.phase == 3) {
+                // GameCanvas.paint()'s own top-level dispatch: `facing == 3`
+                // (DeathState::phase, see player/death_sequence.h) outranks
+                // the camp check, and both REPLACE paintGameView() rather
+                // than overlaying it. phase 2 (the tick the player actually
+                // died) still paints the game view, exactly like the
+                // original -- run() only advances 2 -> 3 on the following
+                // tick.
+                PaintFullScreenMessage(backbuffer, "You're Dead!");
+            } else if (camp.state == 1 || camp.state == 2) {
+                PaintFullScreenMessage(backbuffer, "CAMPING");
             } else {
                 stormhold::GameRenderer::RenderCorridorView(
                     backbuffer, corridorAssets, player.corridorView,
@@ -1317,7 +1513,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 int iconSet = stormhold::ResolveHudIconSet(hudState, player, targetMonsterInfo);
                 stormhold::GameRenderer::RenderHud(backbuffer, hotbarAssets, iconSet);
 
-                if (minimapZoomedOut) {
+                // paintGameView(): both minimap zooms are gated on
+                // `!player.hasAilment(3)` -- no minimap at all while it's
+                // active.
+                if (stormhold::PlayerCombatStats::HasAilment(player, 3)) {
+                    // no minimap
+                } else if (minimapZoomedOut) {
                     stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
                         levelLookup(player.currentLevel), world, player.tileX, player.tileY, player.facing, 7,
                         levelLookup);

@@ -1,10 +1,10 @@
 // M30 smoke test: the message popup (render/message_popup.h) and its
-// two new foundations, graphics/bitmap_font.h (a hand-authored pixel
-// font -- there is no real font asset to recover, see its own doc
-// comment) and Backbuffer::FillRoundRect -- GameCanvas.showMessage()/
-// paintMessagePopup() plus run()'s own per-tick auto-hide timeout. No
-// JVM ground truth available (same reason as every prior milestone) --
-// verified via:
+// two new foundations, graphics/bitmap_font.h (M74: real Win32 GDI text
+// -- see its own doc comment for why there was never a real font asset
+// to recover here either way) and Backbuffer::FillRoundRect --
+// GameCanvas.showMessage()/paintMessagePopup() plus run()'s own per-tick
+// auto-hide timeout. No JVM ground truth available (same reason as every
+// prior milestone) -- verified via:
 //  - Pure BitmapFont/FillRoundRect primitive checks (no game data
 //    needed).
 //  - Show/Tick's exact priority-gate and auto-hide-timeout arithmetic,
@@ -39,56 +39,70 @@ void Check(bool cond, const char* what) {
 
 uint16_t PixelAt(const Backbuffer& bb, int x, int y) { return bb.Data()[static_cast<size_t>(y) * Backbuffer::kWidth + x]; }
 
+// True if any pixel in the [x0,x0+w) x [y0,y0+h) box matches
+// `targetColor` -- used for the GDI font's own text below instead of a
+// hand-picked exact pixel, since BitmapFont now (M74) renders through
+// real (anti-aliased, proportional) GDI text rather than a fixed 4x7
+// pixel table with one exact bit pattern per character to predict by
+// hand.
+bool AnyPixelInBox(const Backbuffer& bb, int x0, int y0, int w, int h, uint16_t targetColor) {
+    for (int y = y0; y < y0 + h; y++) {
+        for (int x = x0; x < x0 + w; x++) {
+            if (PixelAt(bb, x, y) == targetColor) return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 int main() {
     // --- A: BitmapFont primitives ---
+    // A real, proportional GDI font's exact glyph shapes can't be
+    // hand-predicted bit-by-bit the way the old fixed 4x7 table's could
+    // (M74) -- these check structural properties instead, same approach
+    // dawnstar's own identical M58 rewrite of this section already
+    // established.
     {
-        Check(BitmapFont::StringWidth("AB") == 2 * BitmapFont::kAdvance, "StringWidth is length*kAdvance");
+        constexpr uint16_t kWhite = PackRGB565(255, 255, 255);
 
-        // 'A' == {0110,1001,1001,1111,1001,1001,1001} (bit3=leftmost
-        // col0 .. bit0=col3) -- independently re-derived from
-        // bitmap_font.cpp's own doc comment shape, not read back from
-        // its glyph table.
+        Check(BitmapFont::StringWidth("") == 0, "an empty string measures 0 wide");
+        Check(BitmapFont::StringWidth("A") > 0, "a real character measures a positive width");
+        Check(BitmapFont::StringWidth("AB") > BitmapFont::StringWidth("A"),
+              "a longer string should measure wider than its own prefix");
+
+        // 'A' should draw SOMETHING somewhere in its own StringWidth-wide,
+        // kGlyphHeight-tall box.
         Backbuffer bb;
         bb.Fill(0);
-        constexpr uint16_t kWhite = PackRGB565(255, 255, 255);
         BitmapFont::DrawString(bb, 10, 10, "A", kWhite);
-        // row0 "0110": cols 1,2 lit, 0 and 3 dark.
-        Check(PixelAt(bb, 10 + 0, 10 + 0) == 0, "'A' row0 col0 should be dark");
-        Check(PixelAt(bb, 10 + 1, 10 + 0) == kWhite, "'A' row0 col1 should be lit");
-        Check(PixelAt(bb, 10 + 2, 10 + 0) == kWhite, "'A' row0 col2 should be lit");
-        Check(PixelAt(bb, 10 + 3, 10 + 0) == 0, "'A' row0 col3 should be dark");
-        // row3 "1111": all 4 columns lit (the crossbar).
-        Check(PixelAt(bb, 10 + 0, 10 + 3) == kWhite, "'A' row3 (crossbar) col0 should be lit");
-        Check(PixelAt(bb, 10 + 3, 10 + 3) == kWhite, "'A' row3 (crossbar) col3 should be lit");
+        bool anyLit = false;
+        for (int y = 0; y < BitmapFont::kGlyphHeight && !anyLit; y++) {
+            for (int x = 0; x < BitmapFont::StringWidth("A") && !anyLit; x++) {
+                if (PixelAt(bb, 10 + x, 10 + y) != 0) anyLit = true;
+            }
+        }
+        Check(anyLit, "'A' should draw at least one non-background pixel in its own box");
 
-        // Case-folding: lowercase 'a' should draw identically to 'A'.
+        // Mixed case is a real, deliberate feature now (see
+        // bitmap_font.h's own class comment) -- 'a' and 'A' are genuinely
+        // DIFFERENT glyphs, the opposite of the old font's own
+        // case-folding.
         Backbuffer bbLower;
         bbLower.Fill(0);
         BitmapFont::DrawString(bbLower, 10, 10, "a", kWhite);
-        bool identical = true;
-        for (int y = 0; y < BitmapFont::kGlyphHeight && identical; y++) {
-            for (int x = 0; x < BitmapFont::kGlyphWidth; x++) {
-                if (PixelAt(bb, 10 + x, 10 + y) != PixelAt(bbLower, 10 + x, 10 + y)) identical = false;
+        bool anyDifferent = false;
+        for (int y = 0; y < BitmapFont::kGlyphHeight && !anyDifferent; y++) {
+            for (int x = 0; x < BitmapFont::kGlyphWidth * 2 && !anyDifferent; x++) {
+                if (PixelAt(bb, 10 + x, 10 + y) != PixelAt(bbLower, 10 + x, 10 + y)) anyDifferent = true;
             }
         }
-        Check(identical, "lowercase 'a' should draw identically to uppercase 'A' (case-folded font)");
+        Check(anyDifferent, "lowercase 'a' should draw DIFFERENTLY from uppercase 'A' -- real mixed case, not folded");
 
-        // An unsupported character ('?' -- not in bitmap_font.h's own
-        // supported set, see its class comment) draws nothing but still
-        // advances -- check the SECOND character lands exactly
-        // kAdvance further, regardless. (Digits were still unsupported
-        // when this check was first written, M30; M31 defined them, so
-        // this now uses a character that stays outside the set either
-        // way.)
-        Backbuffer bbUnsupported;
-        bbUnsupported.Fill(0);
-        BitmapFont::DrawString(bbUnsupported, 0, 0, "?A", kWhite);
-        Check(PixelAt(bbUnsupported, 0, 0) == 0 && PixelAt(bbUnsupported, 1, 0) == 0,
-              "an unsupported character ('?') should draw nothing");
-        Check(PixelAt(bbUnsupported, BitmapFont::kAdvance + 1, 0) == kWhite,
-              "the character after an unsupported one should still land kAdvance further along");
+        // Real strings this port displays (shop names, item names) are
+        // never case-folded before reaching DrawString anymore.
+        Check(BitmapFont::StringWidth("Heavy Armor Peddler") > BitmapFont::StringWidth("Heavy"),
+              "a real mixed-case string should measure wider than one of its own words");
     }
 
     // --- B: Backbuffer::FillRoundRect ---
@@ -153,9 +167,8 @@ int main() {
         Check(PixelAt(bb, 100, 120) == 0, "Paint should draw nothing while not visible");
 
         // Real content: MSG_REST_COMPLETE (../../../src/GameCanvas.java),
-        // mixed-case with a trailing '!' -- exercises case-folding and
-        // punctuation together on an actual message string, not just a
-        // synthetic all-caps one.
+        // mixed-case with a trailing '!' -- a real message string, not
+        // just a synthetic all-caps one.
         MessagePopupState visible;
         visible.visible = true;
         visible.lines = {"Rest", "complete!"};
@@ -164,11 +177,15 @@ int main() {
         // is well inside the rect and outside any rounded corner.
         constexpr uint16_t kPopupBg = PackRGB565(0xC7, 0x99, 0x67);
         Check(PixelAt(bb, 100, 120) == kPopupBg, "Paint should draw the popup background while visible");
-        // Line 0 ("Rest") drawn at (100,122): case-folded 'R's row0 "1110" -> cols 0-2 lit.
+        // Line 0 ("Rest") drawn at (100,122) and line 1 ("complete!") at
+        // (100,134) -- checked as "something drew somewhere in the real
+        // glyph box" (real proportional GDI text, not one hand-picked
+        // exact pixel -- see this file's own AnyPixelInBox doc comment).
         constexpr uint16_t kBlack = PackRGB565(0, 0, 0);
-        Check(PixelAt(bb, 100 + 0, 122 + 0) == kBlack, "Paint should draw line 0's text (case-folded) at (100,122)");
-        // Line 1 ("complete!") drawn at (100,134): case-folded 'C's row0 "0111" -> cols 1-3 lit.
-        Check(PixelAt(bb, 100 + 1, 134 + 0) == kBlack, "Paint should draw line 1's text (case-folded) at (100,134)");
+        Check(AnyPixelInBox(bb, 100, 122, BitmapFont::StringWidth("Rest"), BitmapFont::kGlyphHeight, kBlack),
+              "Paint should draw line 0's text at (100,122)");
+        Check(AnyPixelInBox(bb, 100, 134, BitmapFont::StringWidth("complete!"), BitmapFont::kGlyphHeight, kBlack),
+              "Paint should draw line 1's text at (100,134)");
     }
 
     if (g_ok) {

@@ -8,6 +8,7 @@
 // line).
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
 
 #include "assets/asset_root.h"
@@ -132,6 +133,22 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
     WorldRegistry world(1);
     JavaRandom rng(1);
 
+    // M74: id 87 (below) now runs MarkCampAndReturnToTown/WarpToCampMark's
+    // own internal RefreshCorridorView -- see player_inventory.h's own doc
+    // comment -- so UseItem needs a real LevelLookup, not just a level
+    // number.
+    std::map<int, GeneratedLevel> levelCache;
+    GameAdvancement::LevelLookup levels = [&](int n) -> GeneratedLevel& {
+        auto it = levelCache.find(n);
+        if (it != levelCache.end()) return it->second;
+        GeneratedLevel level;
+        level.number = n;
+        level.width = 35;
+        level.height = 35;
+        level.tiles.assign(35, std::vector<uint8_t>(35, 0));
+        return levelCache.emplace(n, std::move(level)).first->second;
+    };
+
     auto freshPlayerWithItem = [&](int id, int packedValue) {
         PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
         p.inventoryCount = 0;
@@ -152,7 +169,7 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
         PlayerState p = freshPlayerWithItem(87, 0);
         Expect(!PlayerInventory::HasCampMark(p), "a fresh character should start with no camp mark");
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.inventoryCount == 0, "using id 87 should always consume the slot");
         Expect(PlayerInventory::HasCampMark(p), "with no existing camp mark, id 87 should mark one (not warp)");
     }
@@ -164,7 +181,7 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
         p.campFacing = 2;
         p.currentLevel = 1;
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.currentLevel == 3 && p.tileX == 5 && p.tileY == 6,
                "with an existing camp mark on currentLevel==1, id 87 should warp to it instead of re-marking");
     }
@@ -174,7 +191,7 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
         PlayerState p = freshPlayerWithItem(88, 0);
         p.ailmentMask = static_cast<int8_t>(1 << 2);  // Exactly one active ailment -- CureRandomAilment's pick is deterministic.
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.ailmentMask == 0, "id 88 with exactly one active ailment should clear it");
         Expect(p.inventoryCount == 0, "id 88 should consume the slot");
     }
@@ -185,7 +202,7 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
         p.coreStats[2] = 1;
         p.coreStats[3] = 50;
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.coreStats[2] == 50, "id 89 should fully restore HP");
     }
     {
@@ -195,7 +212,7 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
         p.coreStats[4] = 2;
         p.coreStats[5] = 40;
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.coreStats[2] == 50 && p.coreStats[4] == 40, "id 93 should restore both HP and Magicka");
     }
 
@@ -217,7 +234,7 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
         p.coreStats[6] = 10;
         p.coreStats[7] = 9999;  // Deliberately never read by this branch -- see the quirk note above.
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.coreStats[6] == 10 + 3 * 15,
                "id 91 should add 3*coreStats[5] (max Magicka, NOT max Fatigue) to current Fatigue -- see this "
                "case's own comment for the confirmed quirk");
@@ -228,7 +245,7 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
         PlayerState p = freshPlayerWithItem(92, 0);
         p.coreStats[1] = 4;
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.coreStats[1] == 5, "id 92 should increment level-exp by 1");
     }
 
@@ -236,19 +253,19 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
     {
         PlayerState p = freshPlayerWithItem(94, 0);
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.increaseHarmBuff, "id 94 should set increaseHarmBuff");
     }
     {
         PlayerState p = freshPlayerWithItem(95, 0);
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.increaseArmorBuff, "id 95 should set increaseArmorBuff");
     }
     {
         PlayerState p = freshPlayerWithItem(96, 0);
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.safeCampingBuff, "id 96 should set safeCampingBuff");
         Expect(p.inventoryCount == 1, "id 96 is the one gift item that should NOT consume its slot");
     }
@@ -264,7 +281,7 @@ void TestUseItemGiftIds(const CharacterData& charData, const ItemDatabase& items
     for (int id : {97, 98, 99}) {
         PlayerState p = freshPlayerWithItem(id, 0);
         int slot = p.inventoryCount - 1;
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
         Expect(p.inventoryCount == 0, "an instant-kill scroll with target=nullptr (the real call site's own "
                                        "shape) should still just consume the slot and do nothing else");
     }
@@ -283,6 +300,20 @@ void TestUseItemInstantKillGate(const CharacterData& charData, const ItemDatabas
     }
     WorldRegistry world(1);
     JavaRandom rng(1);
+
+    // UseItem's own `levels` parameter (M74) -- unused by id 97's own
+    // instant-kill branches, but every call still needs one in scope.
+    std::map<int, GeneratedLevel> levelCache;
+    GameAdvancement::LevelLookup levels = [&](int n) -> GeneratedLevel& {
+        auto it = levelCache.find(n);
+        if (it != levelCache.end()) return it->second;
+        GeneratedLevel level;
+        level.number = n;
+        level.width = 35;
+        level.height = 35;
+        level.tiles.assign(35, std::vector<uint8_t>(35, 0));
+        return levelCache.emplace(n, std::move(level)).first->second;
+    };
 
     // Find a monster type whose stat(4)/stat(10) are both <= 13, so id 97
     // (the tightest gate) should succeed against it.
@@ -306,7 +337,7 @@ void TestUseItemInstantKillGate(const CharacterData& charData, const ItemDatabas
         target.typeIndex = static_cast<int8_t>(easyType);
         target.currentHp = 100;
         target.dungeonLevel = 1;
-        PlayerInventory::UseItem(p, slot, &target, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, &target, items, monsters, world, rng, levels);
         Expect(target.currentHp == 0, "a monster passing id 97's gate should have currentHp forced to 0");
         Expect(world.monsters[0].count(target.spawnId) == 1, "the killed monster should be stored into the registry");
     }
@@ -332,7 +363,7 @@ void TestUseItemInstantKillGate(const CharacterData& charData, const ItemDatabas
         target.typeIndex = static_cast<int8_t>(hardType);
         target.currentHp = 100;
         target.dungeonLevel = 1;
-        PlayerInventory::UseItem(p, slot, &target, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, &target, items, monsters, world, rng, levels);
         Expect(target.currentHp == 100, "a monster failing id 97's gate should be left completely untouched");
     }
 }

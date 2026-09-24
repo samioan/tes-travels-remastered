@@ -19,6 +19,7 @@
 //    arguments directly, not read back from game_renderer.cpp.
 #include <cstdio>
 
+#include "graphics/bitmap_font.h"
 #include "render/game_renderer.h"
 
 namespace {
@@ -37,6 +38,21 @@ bool Expect(bool cond, const char* what) {
 
 uint16_t PixelAt(const Backbuffer& bb, int x, int y) { return bb.Data()[static_cast<size_t>(y) * Backbuffer::kWidth + x]; }
 
+// True if any pixel in the glyph-sized [x0,x0+kGlyphWidth) x
+// [y0,y0+kGlyphHeight) box matches `targetColor` -- used for the compass
+// glyph below instead of a hand-picked exact pixel, since BitmapFont now
+// (M74) renders through real (anti-aliased, proportional) GDI text
+// rather than a fixed 4x7 pixel table with one exact bit pattern per
+// character to predict by hand.
+bool AnyPixelInGlyphBox(const Backbuffer& bb, int x0, int y0, uint16_t targetColor) {
+    for (int y = y0; y < y0 + BitmapFont::kGlyphHeight; y++) {
+        for (int x = x0; x < x0 + BitmapFont::kGlyphWidth; x++) {
+            if (PixelAt(bb, x, y) == targetColor) return true;
+        }
+    }
+    return false;
+}
+
 SquareViewGrid MakeGrid(int size) { return SquareViewGrid(static_cast<size_t>(size), std::vector<uint8_t>(static_cast<size_t>(size), 0)); }
 
 void TestZoomedOutCompassAndBackdrop() {
@@ -46,10 +62,9 @@ void TestZoomedOutCompassAndBackdrop() {
     SquareViewGrid grid = MakeGrid(7);
     GameRenderer::RenderMinimapZoomedOut(bb, grid, 2);  // facing 2 = 'E'
 
-    // 'E' == {1111,1000,1000,1110,1000,1000,1111}, drawn white at (16,10).
-    // row0 "1111": all 4 cols lit.
-    Expect(PixelAt(bb, 16, 10) == PackRGB565(255, 255, 255), "the compass glyph 'E' row0 col0 should be white");
-    Expect(PixelAt(bb, 16 + 3, 10) == PackRGB565(255, 255, 255), "the compass glyph 'E' row0 col3 should be white");
+    // COMPASS_GLYPHS[2] = 'E', drawn white at (16,10).
+    Expect(AnyPixelInGlyphBox(bb, 16, 10, PackRGB565(255, 255, 255)),
+           "the compass glyph 'E' should draw at least one white pixel in its own box");
 
     // Backdrop: fillRect(10,20,23,23), black.
     Expect(PixelAt(bb, 10, 20) == PackRGB565(0, 0, 0), "the zoomed-out backdrop's own top-left pixel should be black");
@@ -63,9 +78,9 @@ void TestNormalCompassAndBackdrop() {
     SquareViewGrid grid = MakeGrid(17);
     GameRenderer::RenderMinimapNormal(bb, grid, 4);  // facing 4 = 'W'
 
-    // 'W' == {1001,1001,1001,1001,1111,1111,1001}, drawn white at (58,10).
-    Expect(PixelAt(bb, 58, 10) == PackRGB565(255, 255, 255), "the compass glyph 'W' row0 col0 should be white");
-    Expect(PixelAt(bb, 58 + 1, 10) == PackRGB565(9, 9, 9), "the compass glyph 'W' row0 col1 should be dark (untouched)");
+    // COMPASS_GLYPHS[4] = 'W', drawn white at (58,10).
+    Expect(AnyPixelInGlyphBox(bb, 58, 10, PackRGB565(255, 255, 255)),
+           "the compass glyph 'W' should draw at least one white pixel in its own box");
 
     // Backdrop: fillRect(15,25,89,89), black.
     Expect(PixelAt(bb, 15, 25) == PackRGB565(0, 0, 0), "the normal backdrop's own top-left pixel should be black");

@@ -6,8 +6,10 @@
 //
 // No JVM ground truth possible (same reasoning every other rendering
 // milestone's own tests already give) -- verified via:
-//  - BitmapFont's new digit glyphs (shape + StringWidth), independently
-//    re-derived from bitmap_font.cpp's own doc comment shapes.
+//  - BitmapFont's digit glyphs: structural StringWidth/box-presence
+//    checks (M74: real proportional GDI text, not a hand-predictable
+//    fixed pixel table -- see graphics/bitmap_font.h's own class
+//    comment).
 //  - Synthetic per-iconSet checks: the exact 4 (icon, glyph) index pairs
 //    each of the 3 branches selects, cross-checked against
 //    GameCanvas.paintHud()'s own literal index lists, not read back
@@ -42,6 +44,21 @@ bool Expect(bool cond, const char* what) {
 
 uint16_t PixelAt(const Backbuffer& bb, int x, int y) { return bb.Data()[static_cast<size_t>(y) * Backbuffer::kWidth + x]; }
 
+// True if any pixel in the [x0,x0+w) x [y0,y0+h) box differs from the
+// (black-filled) background -- used for the digit glyphs below instead
+// of a hand-picked exact pixel, since BitmapFont now (M74) renders
+// through real (anti-aliased, proportional) GDI text rather than a
+// fixed 4x7 pixel table with one exact bit pattern per character to
+// predict by hand.
+bool AnyNonBlackInBox(const Backbuffer& bb, int x0, int y0, int w, int h) {
+    for (int y = y0; y < y0 + h; y++) {
+        for (int x = x0; x < x0 + w; x++) {
+            if (PixelAt(bb, x, y) != 0) return true;
+        }
+    }
+    return false;
+}
+
 DecodedImage MakeImage(int width, int height, uint8_t r, uint8_t g, uint8_t b) {
     DecodedImage img;
     img.width = width;
@@ -60,19 +77,21 @@ DecodedImage MakeImage(int width, int height, uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void TestBitmapFontDigits() {
-    std::printf("-- BitmapFont: new digit glyphs --\n");
-    Expect(BitmapFont::StringWidth("0123456789") == 10 * BitmapFont::kAdvance, "digits contribute a normal kAdvance each");
+    std::printf("-- BitmapFont: digit glyphs --\n");
+    // A real, proportional GDI font's exact glyph shapes can't be
+    // hand-predicted bit-by-bit the way the old fixed 4x7 table's could
+    // (M74) -- these check structural properties instead, same approach
+    // dawnstar's own identical M58 rewrite of this test already
+    // established.
+    Expect(BitmapFont::StringWidth("0123456789") > BitmapFont::StringWidth("0"),
+           "10 digits should measure wider than a single one");
 
-    // '1' == {0010,0110,0010,0010,0010,0010,0111} -- row1 "0110": cols 1,2 lit.
     Backbuffer bb;
     bb.Fill(0);
     constexpr uint16_t kWhite = PackRGB565(255, 255, 255);
     BitmapFont::DrawString(bb, 0, 0, "1", kWhite);
-    Expect(PixelAt(bb, 1, 1) == kWhite && PixelAt(bb, 2, 1) == kWhite, "'1' row1 cols 1-2 should be lit");
-    Expect(PixelAt(bb, 0, 1) == 0 && PixelAt(bb, 3, 1) == 0, "'1' row1 cols 0,3 should be dark");
-    // row6 "0111": cols 1-3 lit, col0 dark (the base).
-    Expect(PixelAt(bb, 0, 6) == 0 && PixelAt(bb, 1, 6) == kWhite && PixelAt(bb, 3, 6) == kWhite,
-           "'1' row6 (base) should be 0111");
+    Expect(AnyNonBlackInBox(bb, 0, 0, BitmapFont::StringWidth("1") + 1, BitmapFont::kGlyphHeight + 1),
+           "'1' should draw at least one non-background pixel in its own box");
 }
 
 // Cross-checked directly against GameCanvas.paintHud()'s own literal
@@ -122,17 +141,27 @@ void TestHotbarRowSelection() {
     }
 
     // Glyph placement: iconSet 1's first glyph is hotbarKeyGlyphs[0]='1',
-    // drawn at (5,180) -- '1' row0 "0010": only col2 lit, drawn in black
-    // -- confirmed against the panel background (0xC79967, NOT black)
-    // so a lit pixel here can only be the glyph, not background left
-    // in place.
+    // drawn at (5,180) in black -- checked as "something non-background
+    // drew somewhere in its own box" (real proportional GDI text, not
+    // one hand-picked exact pixel -- see AnyNonBlackInBox's own doc
+    // comment), against a solid black canvas so a lit (non-black) pixel
+    // can only be the panel background or the icon, and a specifically
+    // panel-bg-colored pixel can only be the glyph's own drawn box
+    // minus its glyph strokes.
     {
         Backbuffer bb;
         bb.Fill(0);
         GameRenderer::RenderHud(bb, assets, 1);
         uint16_t panelBg = PackRGB565(0xC7, 0x99, 0x67);
-        Expect(PixelAt(bb, 5 + 2, 180 + 0) == PackRGB565(0, 0, 0), "'1's lit column (col2) at (7,180) should be exactly black");
-        Expect(PixelAt(bb, 5 + 0, 180 + 0) == panelBg, "'1's dark column (col0) at (5,180) should still show the panel background");
+        Expect(PixelAt(bb, 5, 180) == panelBg,
+               "'1's glyph box should start on the panel background (not yet inside a glyph stroke)");
+        bool anyBlackInGlyphBox = false;
+        for (int y = 0; y < BitmapFont::kGlyphHeight && !anyBlackInGlyphBox; y++) {
+            for (int x = 0; x < BitmapFont::StringWidth("1") && !anyBlackInGlyphBox; x++) {
+                if (PixelAt(bb, 5 + x, 180 + y) == PackRGB565(0, 0, 0)) anyBlackInGlyphBox = true;
+            }
+        }
+        Expect(anyBlackInGlyphBox, "'1' should draw at least one black pixel in its own box at (5,180)");
     }
 }
 

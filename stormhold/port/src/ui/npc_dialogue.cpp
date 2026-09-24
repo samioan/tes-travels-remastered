@@ -87,7 +87,10 @@ void NpcDialogue::Render(Backbuffer& bb, const NpcDialogueState& state) {
     bb.FillRect(0, 12, Backbuffer::kWidth, kBarTop - 12, kBodyBg);
     bb.FillRect(0, 0, Backbuffer::kWidth, 12, kTitleBg);
     int titleWidth = BitmapFont::StringWidth(state.title);
-    BitmapFont::DrawString(bb, (Backbuffer::kWidth - titleWidth) / 2, 3, state.title, kTitleFg);
+    // M74: y nudged from 3 to 1 -- see graphics/bitmap_font.cpp's own
+    // kFontHeightPx comment for why the new GDI font needs the extra
+    // headroom to stay inside this 12px bar.
+    BitmapFont::DrawString(bb, (Backbuffer::kWidth - titleWidth) / 2, 1, state.title, kTitleFg);
 
     std::vector<std::string> lines = WordWrap(state.body, Backbuffer::kWidth - 2 * kMargin);
     int y = kContentTop;

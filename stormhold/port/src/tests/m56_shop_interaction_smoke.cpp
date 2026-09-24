@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
 
 #include "assets/asset_root.h"
@@ -497,11 +498,30 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
     std::printf("-- Helga (shop 5): greet/rumor, item turn-in, charge, camp buff, cure, warp, heal --\n");
     const auto& lines = text.groups[5];
 
+    // M74: HelgaDialogue's own action 11 (Warp) now takes a LevelLookup,
+    // to close the WarpToCampMark stale-corridor-view gap -- see
+    // player_inventory.h's own MarkCampAndReturnToTown/WarpToCampMark doc
+    // comment. Neither of this file's own two action-11 cases below ever
+    // reaches the real WarpToCampMark call (both return early -- 0 points,
+    // then no camp mark), so this lookup is never actually dereferenced,
+    // but every call site still needs one in scope.
+    std::map<int, GeneratedLevel> levelCache;
+    GameAdvancement::LevelLookup levels = [&](int n) -> GeneratedLevel& {
+        auto it = levelCache.find(n);
+        if (it != levelCache.end()) return it->second;
+        GeneratedLevel level;
+        level.number = n;
+        level.width = 35;
+        level.height = 35;
+        level.tiles.assign(35, std::vector<uint8_t>(35, 0));
+        return levelCache.emplace(n, std::move(level)).first->second;
+    };
+
     // Greet: first visit (plain, then special-greeting-prefixed).
     {
         ShopState shop;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0, levels);
         Expect(result.has_value() && *result == lines[0] + "\n" + lines[2],
                "a plain first visit should return line 0 + line 2");
         Expect(!shop.firstVisit[5], "firstVisit should clear");
@@ -511,7 +531,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         ShopState shop;
         shop.showSpecialGreeting = true;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0, levels);
         Expect(result.has_value() && *result == lines[21] + "\n" + lines[0] + "\n" + lines[2],
                "a special-greeting first visit should be prefixed with line 21");
         Expect(!shop.showSpecialGreeting, "showSpecialGreeting should clear after being consumed");
@@ -524,7 +544,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         PlayerState p = baseline;
         p.giftPointsFound = 9;  // GameAdvancement::Level(9) == 1
         p.rumorRevealStep = 0;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0, levels);
         Expect(result.has_value() && *result == lines[3], "advancement > rumorRevealStep should reveal lines[2+1]");
         Expect(p.rumorRevealStep == 1, "rumorRevealStep should advance by exactly 1");
     }
@@ -535,7 +555,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         PlayerState p = baseline;
         p.giftPointsFound = 9;
         p.rumorRevealStep = 0;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0, levels);
         Expect(result.has_value() && *result == lines[21] + "\n" + lines[3],
                "a special-greeting advancement reveal should be prefixed with line 21");
     }
@@ -547,7 +567,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         PlayerState p = baseline;
         p.giftPointsFound = 0;
         p.rumorRevealStep = 0;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0, levels);
         Expect(!result.has_value(), "no new advancement and no special greeting should return std::nullopt");
     }
     {
@@ -557,7 +577,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         PlayerState p = baseline;
         p.giftPointsFound = 0;
         p.rumorRevealStep = 0;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 1, 0, levels);
         Expect(result.has_value() && *result == lines[21],
                "no new advancement but a pending special greeting should return line 21 alone");
     }
@@ -567,7 +587,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         ShopState shop;
         PlayerState p = baseline;
         p.rumorRevealStep = 2;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 13, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 13, 0, levels);
         Expect(result.has_value() && *result == lines[4], "action 13 should return lines[2 + rumorRevealStep]");
         Expect(p.rumorRevealStep == 2, "action 13 should not itself change rumorRevealStep");
     }
@@ -587,7 +607,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         PlayerState p = baseline;
         Expect(PlayerInventory::AddInventoryItemRaw(p, highQualityId, 0, 0), "adding the high-quality item should succeed");
         int slot = p.inventoryCount - 1;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 4, slot);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 4, slot, levels);
         Expect(result.has_value() && *result == lines[11], "a category-13 turn-in should return line 11");
         Expect(shop.helgaPoints == 5, "a quality > 3 item should award 5 points");
         Expect(p.inventoryItemIds[static_cast<size_t>(slot)] != highQualityId, "the item should be removed");
@@ -599,7 +619,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         PlayerState p = baseline;
         Expect(PlayerInventory::AddInventoryItemRaw(p, lowQualityId, 0, 0), "adding the low-quality item should succeed");
         int slot = p.inventoryCount - 1;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 4, slot);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 4, slot, levels);
         Expect(result.has_value() && *result == lines[11], "a category-13 turn-in should return line 11");
         Expect(shop.helgaPoints == 3, "a quality <= 3 item should award 3 points");
     } else {
@@ -610,7 +630,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         PlayerState p = baseline;
         Expect(PlayerInventory::AddInventoryItemRaw(p, nonCategory13Id, 0, 0), "adding the non-category-13 item should succeed");
         int slot = p.inventoryCount - 1;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 4, slot);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 4, slot, levels);
         Expect(result.has_value() && *result == lines[12], "a non-category-13 item should return line 12");
         Expect(shop.helgaPoints == 0, "a refused item should award no points");
         Expect(p.inventoryItemIds[static_cast<size_t>(slot)] == nonCategory13Id, "a refused item should NOT be removed");
@@ -622,7 +642,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         ShopState shop;
         shop.helgaPoints = 6;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, 0, levels);
         Expect(result.has_value() && *result == lines[1], "fewer than 7 points should return line 1");
     }
     {
@@ -634,7 +654,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         ShopState shop;
         shop.helgaPoints = 7;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, 0, levels);
         Expect(result.has_value() && *result == lines[13], "charging an uncharged equipment slot should return line 13");
         Expect(shop.helgaPoints == 0, "a successful charge should spend exactly 7 points");
         Expect(PlayerInventory::IsItemCharged(p, 0), "the item should actually be marked charged afterward");
@@ -643,7 +663,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         // silently re-stamped -- see this milestone's own double-gate note.
         ShopState shop2;
         shop2.helgaPoints = 7;
-        auto second = ShopInteraction::HelgaDialogue(p, shop2, text, items, 8, 0);
+        auto second = ShopInteraction::HelgaDialogue(p, shop2, text, items, 8, 0, levels);
         Expect(second.has_value() && *second == lines[14], "charging an ALREADY-charged item should return line 14");
         Expect(shop2.helgaPoints == 7, "a refused charge should not spend any points");
     }
@@ -660,7 +680,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         PlayerState p = baseline;
         Expect(PlayerInventory::AddInventoryItemRaw(p, nonEquipmentId, 0, 0), "adding a non-equipment item should succeed");
         int slot = p.inventoryCount - 1;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, slot);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 8, slot, levels);
         Expect(result.has_value() && *result == lines[14], "a non-equipment item should return line 14");
         Expect(shop.helgaPoints == 7, "a refused charge should not spend any points");
     } else {
@@ -672,19 +692,19 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         ShopState shop;
         shop.helgaPoints = 1;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0, levels);
         Expect(result.has_value() && *result == lines[1], "fewer than 2 points should return line 1");
     }
     {
         ShopState shop;
         shop.helgaPoints = 2;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0, levels);
         Expect(result.has_value() && *result == lines[16], "a successful camping buff should return line 16");
         Expect(p.safeCampingBuff, "safeCampingBuff should be set");
         Expect(shop.helgaPoints == 0, "a successful camping buff should spend exactly 2 points");
 
-        auto again = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0);
+        auto again = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0, levels);
         Expect(again.has_value() && *again == lines[1],
                "a repeat request with 0 points should now be gated by points, not the already-buffed line");
     }
@@ -693,7 +713,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         shop.helgaPoints = 2;
         PlayerState p = baseline;
         p.safeCampingBuff = true;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 9, 0, levels);
         Expect(result.has_value() && *result == lines[15], "an already-buffed character should return line 15");
         Expect(shop.helgaPoints == 2, "an already-buffed request should not spend any points");
     }
@@ -702,7 +722,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
     {
         ShopState shop;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 10, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 10, 0, levels);
         Expect(result.has_value() && *result == lines[1], "0 points should return line 1");
     }
     {
@@ -710,7 +730,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         shop.helgaPoints = 1;
         PlayerState p = baseline;
         p.ailmentMask = static_cast<int8_t>(0xFF);
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 10, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 10, 0, levels);
         Expect(result.has_value() && *result == lines[17], "a successful cure should return line 17");
         Expect(p.ailmentMask == 0, "ailmentMask should clear entirely");
         Expect(shop.helgaPoints == 0, "a successful cure should spend exactly 1 point");
@@ -720,7 +740,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
     {
         ShopState shop;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 11, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 11, 0, levels);
         Expect(result.has_value() && *result == lines[1], "0 points should return line 1");
     }
     {
@@ -728,7 +748,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         shop.helgaPoints = 1;
         PlayerState p = baseline;
         Expect(!PlayerInventory::HasCampMark(p), "a fresh character should have no camp mark yet");
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 11, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 11, 0, levels);
         Expect(result.has_value() && *result == lines[18], "no camp mark should return line 18");
         Expect(shop.helgaPoints == 1, "a refused warp should not spend any points");
     }
@@ -741,7 +761,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
         p.coreStats[3] = 50;
         p.coreStats[4] = 2;
         p.coreStats[5] = 30;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 12, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 12, 0, levels);
         Expect(result.has_value() && *result == lines[20], "action 12 should return line 20");
         Expect(p.coreStats[2] == 50, "curHP should be set to maxHP");
         Expect(p.coreStats[4] == 30, "curMagicka should be set to maxMagicka");
@@ -751,7 +771,7 @@ void TestHelgaDialogue(const PlayerState& baseline, const ItemDatabase& items, c
     {
         ShopState shop;
         PlayerState p = baseline;
-        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 42, 0);
+        auto result = ShopInteraction::HelgaDialogue(p, shop, text, items, 42, 0, levels);
         Expect(!result.has_value(), "an unrecognized action should return std::nullopt");
     }
 }

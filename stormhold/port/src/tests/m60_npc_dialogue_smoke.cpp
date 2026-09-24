@@ -135,7 +135,8 @@ void TestNpcDialogueState() {
 // 0)` call regardless of which NPC group answers it.
 std::optional<std::string> TalkTo(int shopId, PlayerState& player, ShopState& shop, WardenState& warden,
                                    const ShopDialogue& text, const CharacterData& charData, const ItemDatabase& items,
-                                   GeneratedLevel& hub, JavaRandom& rng, int16_t& spawnIdCounter) {
+                                   GeneratedLevel& hub, JavaRandom& rng, int16_t& spawnIdCounter,
+                                   const GameAdvancement::LevelLookup& levels) {
     if (shopId <= 3) {
         return ShopInteraction::QuestShopDialogue(player, shop, text, charData, items, hub, rng, shopId, 1, 0);
     }
@@ -143,7 +144,7 @@ std::optional<std::string> TalkTo(int shopId, PlayerState& player, ShopState& sh
         return ShopInteraction::BenecaDialogue(player, shop, text, items, spawnIdCounter, 1, 0);
     }
     if (shopId == 5) {
-        return ShopInteraction::HelgaDialogue(player, shop, text, items, 1, 0);
+        return ShopInteraction::HelgaDialogue(player, shop, text, items, 1, 0, levels);
     }
     return ShopInteraction::VarusDialogue(player, warden, text);
 }
@@ -174,7 +175,7 @@ void TestEndToEndGreeting(const DungeonGeometry& geometry, const CharacterData& 
         Expect(found == shopId, "ShopAheadOfPlayer should find this shop before dispatching");
 
         std::optional<std::string> line =
-            TalkTo(found, player, shop, warden, text, charData, items, cache.at(1), rng, spawnIdCounter);
+            TalkTo(found, player, shop, warden, text, charData, items, cache.at(1), rng, spawnIdCounter, lookup);
         Expect(line.has_value(), "a fresh, never-greeted NPC should always have a first-visit line to say");
 
         NpcDialogueState dialogueState;

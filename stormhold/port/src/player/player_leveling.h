@@ -27,13 +27,10 @@ namespace stormhold {
 // real via `world/shop_state.h`'s `Shop::ClearQuestTurnInState` (M53's
 // own `ShopState`, with its corrected, faithful `Shop.reset()` defaults).
 // `ConsumeLevelExp`/`ApplyLevelUpAttributeChoices` below both take a new
-// `ShopState&` to do it. Currently inert in the live port either way --
-// neither this class nor `ApplyLevelUpAttributeChoices` has a call site
-// in `main.cpp`'s own tick loop yet (the real level-up-confirm flow needs
-// a 3-step attribute-choice UI screen this port doesn't have, same gap
-// this class's own header comment already notes for the UI itself) --
-// same "wire the primitive correctly, live UI wiring is later" shape
-// M53 itself used for `ShopState`.
+// `ShopState&` to do it. M77: live -- main.cpp calls TryRankUpSkills
+// every tick (GameCanvas.run()'s own position, right after
+// tickDeathAndRegen) and ui/level_up_menu.h's three-pick screen calls
+// ApplyLevelUpAttributeChoices.
 class PlayerLeveling {
 public:
     // Player.gainSkillExp(skillIndex, amount): adds to skills[i][2] (exp

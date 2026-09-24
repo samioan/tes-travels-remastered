@@ -84,6 +84,7 @@ void TestSelectSlotBuildsActionMenu(const CharacterData& charData, const ItemDat
     std::printf("-- InventoryUi::Confirm (List -> ItemAction) --\n");
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
     GeneratedLevel level = MakeSyntheticLevel(1);
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return level; };
     WorldRegistry world(1);
     JavaRandom rng(1);
 
@@ -95,7 +96,7 @@ void TestSelectSlotBuildsActionMenu(const CharacterData& charData, const ItemDat
     InventoryUiState state;
     InventoryUi::Open(state);
     state.selectedIndex = slot;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
 
     Expect(state.screen == InventoryScreen::ItemAction, "selecting a valid slot should move to the ItemAction screen");
     Expect(state.selectedSlot == slot, "selectedSlot should record which slot the action menu is about");
@@ -118,7 +119,7 @@ void TestSelectSlotBuildsActionMenu(const CharacterData& charData, const ItemDat
     InventoryUiState state2;
     InventoryUi::Open(state2);
     state2.selectedIndex = -1;
-    InventoryUi::Confirm(state2, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state2, p, items, spells, monsters, level, world, rng, levels);
     Expect(state2.screen == InventoryScreen::List, "an out-of-range slot selection should stay on the List screen");
 }
 
@@ -130,6 +131,7 @@ void TestDropAction(const CharacterData& charData, const ItemDatabase& items, co
     p.tileX = 5;
     p.tileY = 5;
     GeneratedLevel level = MakeSyntheticLevel(1);
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return level; };
     WorldRegistry world(1);
     JavaRandom rng(1);
 
@@ -140,7 +142,7 @@ void TestDropAction(const CharacterData& charData, const ItemDatabase& items, co
     InventoryUiState state;
     InventoryUi::Open(state);
     state.selectedIndex = slot;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     Expect(state.screen == InventoryScreen::ItemAction, "should be on the action menu after selecting slot 0");
 
     // "Drop" is always action code 0 -- find its cursor position.
@@ -150,7 +152,7 @@ void TestDropAction(const CharacterData& charData, const ItemDatabase& items, co
     }
     Expect(dropCursor >= 0, "Drop should always be present");
     state.selectedIndex = dropCursor;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
 
     Expect(state.screen == InventoryScreen::List, "after Drop, control should return to the List screen");
     Expect(state.selectedSlot == -1, "after Drop, selectedSlot should be cleared");
@@ -165,6 +167,7 @@ void TestEquipUnequipToggle(const CharacterData& charData, const ItemDatabase& i
     std::printf("-- InventoryUi::Confirm: Equip/Unequip toggle --\n");
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
     GeneratedLevel level = MakeSyntheticLevel(1);
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return level; };
     WorldRegistry world(1);
     JavaRandom rng(1);
 
@@ -183,7 +186,7 @@ void TestEquipUnequipToggle(const CharacterData& charData, const ItemDatabase& i
     InventoryUiState state;
     InventoryUi::Open(state);
     state.selectedIndex = slot;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     int equipCursor = -1;
     for (size_t i = 0; i < state.actionCodes.size(); i++) {
         if (state.actionCodes[i] == 1) equipCursor = static_cast<int>(i);
@@ -193,7 +196,7 @@ void TestEquipUnequipToggle(const CharacterData& charData, const ItemDatabase& i
            "an unequipped item's label should read Equip");
 
     state.selectedIndex = equipCursor;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     Expect(PlayerInventory::IsEquippedSlot(p, slot, items), "confirming Equip should actually equip the slot");
 
     // Reselect the same underlying item (still at `slot`, item ids don't
@@ -201,7 +204,7 @@ void TestEquipUnequipToggle(const CharacterData& charData, const ItemDatabase& i
     // reads Unequip.
     InventoryUi::Open(state);
     state.selectedIndex = slot;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     equipCursor = -1;
     for (size_t i = 0; i < state.actionCodes.size(); i++) {
         if (state.actionCodes[i] == 1) equipCursor = static_cast<int>(i);
@@ -210,7 +213,7 @@ void TestEquipUnequipToggle(const CharacterData& charData, const ItemDatabase& i
            "once equipped, the same slot's label should read Unequip");
 
     state.selectedIndex = equipCursor;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     Expect(!PlayerInventory::IsEquippedSlot(p, slot, items), "confirming Unequip should actually unequip the slot");
 }
 
@@ -240,13 +243,14 @@ void TestLearnAction(const CharacterData& charData, const ItemDatabase& items, c
     p.skills[static_cast<size_t>(skillIdx)][0] = 5;  // Meets CanLearnSpellFromScroll's own rank-prerequisite gate.
 
     GeneratedLevel level = MakeSyntheticLevel(1);
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return level; };
     WorldRegistry world(1);
     JavaRandom rng(1);
 
     InventoryUiState state;
     InventoryUi::Open(state);
     state.selectedIndex = slot;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     int learnCursor = -1;
     for (size_t i = 0; i < state.actionCodes.size(); i++) {
         if (state.actionCodes[i] == 2) learnCursor = static_cast<int>(i);
@@ -254,7 +258,7 @@ void TestLearnAction(const CharacterData& charData, const ItemDatabase& items, c
     Expect(learnCursor >= 0, "a learnable scroll should offer a Learn action");
 
     state.selectedIndex = learnCursor;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     Expect((p.knownSpellsMask & (1u << (spellId - 1))) != 0, "confirming Learn should set the matching knownSpellsMask bit");
     Expect(p.inventoryCount == 0, "confirming Learn should consume the scroll slot");
     Expect(state.screen == InventoryScreen::List, "after Learn, control should return to the List screen");
@@ -281,6 +285,7 @@ void TestUseAction(const CharacterData& charData, const ItemDatabase& items, con
     int16_t beforeLevel = p.coreStats[1];
 
     GeneratedLevel level = MakeSyntheticLevel(1);
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return level; };
     WorldRegistry world(1);
     MonsterDatabase emptyMonsters;
     JavaRandom rng(1);
@@ -288,7 +293,7 @@ void TestUseAction(const CharacterData& charData, const ItemDatabase& items, con
     InventoryUiState state;
     InventoryUi::Open(state);
     state.selectedIndex = slot;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     int useCursor = -1;
     for (size_t i = 0; i < state.actionCodes.size(); i++) {
         if (state.actionCodes[i] == 3) useCursor = static_cast<int>(i);
@@ -296,7 +301,7 @@ void TestUseAction(const CharacterData& charData, const ItemDatabase& items, con
     Expect(useCursor >= 0, "a category-13 gift item should offer a Use action");
 
     state.selectedIndex = useCursor;
-    InventoryUi::Confirm(state, p, items, spells, emptyMonsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, emptyMonsters, level, world, rng, levels);
     Expect(p.coreStats[1] == beforeLevel + 1, "confirming Use on id 92 should increment coreStats[1]");
     Expect(p.inventoryCount == 0, "confirming Use should consume the slot");
 }
@@ -306,13 +311,14 @@ void TestCancelFromItemActionGoesBackToList(const CharacterData& charData, const
     std::printf("-- InventoryUi::Cancel from the ItemAction screen --\n");
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
     GeneratedLevel level = MakeSyntheticLevel(1);
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return level; };
     WorldRegistry world(1);
     JavaRandom rng(1);
 
     InventoryUiState state;
     InventoryUi::Open(state);
     state.selectedIndex = 0;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     Expect(state.screen == InventoryScreen::ItemAction, "should be on the action menu");
 
     InventoryUi::Cancel(state);
@@ -326,6 +332,7 @@ void TestRenderDoesNotCrash(const CharacterData& charData, const ItemDatabase& i
     std::printf("-- InventoryUi::Render (both screens) --\n");
     PlayerState p = PlayerCreation::CreateCharacter(0, "Tester", 1, charData, items);
     GeneratedLevel level = MakeSyntheticLevel(1);
+    GameAdvancement::LevelLookup levels = [&](int) -> GeneratedLevel& { return level; };
     WorldRegistry world(1);
     JavaRandom rng(1);
     Backbuffer bb;
@@ -335,7 +342,7 @@ void TestRenderDoesNotCrash(const CharacterData& charData, const ItemDatabase& i
     InventoryUi::Render(bb, state, p, items, spells, charData);
 
     state.selectedIndex = 0;
-    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng);
+    InventoryUi::Confirm(state, p, items, spells, monsters, level, world, rng, levels);
     InventoryUi::Render(bb, state, p, items, spells, charData);
 }
 

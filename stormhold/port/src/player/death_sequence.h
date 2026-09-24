@@ -16,16 +16,19 @@ namespace stormhold {
 // `rollAtMs`) already established for GameCanvas-level fields this port
 // doesn't fold into PlayerState.
 //
-// Unlike CampState, this state machine's actual STATE (alive/dead-
-// waiting) is NOT modeled here at all -- it reuses PlayerState::facing
-// directly (1=alive/normal, 2=just died this tick, 3=waiting out the 5s
-// respawn window), the exact same field player/player_movement.h's own
-// CommitMove/ComputeMoveTarget already drive for ordinary movement.
-// Confirmed directly from ../../../src/GameCanvas.java's own run(): there
-// is no separate "death state" field in the original either -- it really
-// does overload `facing` this way, and run()'s own campState==1/campState
-// ==2/facing!=1 dispatch is one shared else-if chain, so a player can
-// never be simultaneously camping and dead in the original. This port's
+// `phase` is GameCanvas's own `facing` instance field (1=alive/normal,
+// 2=just died this tick, 3=waiting out the 5s respawn window) -- a
+// DIFFERENT field from Player.facing (the compass direction), despite
+// the shared name: ../../../src/GameCanvas.java declares its own `byte
+// facing` (line 194) and run()/tickDeathAndRegen() only ever write
+// `this.facing`, never `this.player.facing`. An earlier version of this
+// port conflated the two onto PlayerState::facing, so turning with
+// Q/E/Left/Right (anything leaving compass facing != 1) was read as
+// "dead" and respawned the player 5s later at the hub point (12,14)
+// facing north -- directly in front of Helga (Shop kShopX/Y[5] =
+// (12,13)). run()'s own campState==1/campState==2/facing!=1 dispatch is
+// one shared else-if chain, so a player can never be simultaneously
+// camping and dead in the original. This port's
 // own Camping::Tick (player/camp_state.h) is NOT structurally exclusive
 // with DeathSequence::Tick below the same way -- both are independent
 // calls in main.cpp's tick loop -- but this is harmless: reaching HP<=0
@@ -35,6 +38,7 @@ namespace stormhold {
 // can't overlap in practice.
 struct DeathState {
     int64_t deathAtMs = 0;
+    int8_t phase = 1;  // GameCanvas.facing -- NOT PlayerState::facing, see above.
 };
 
 // What DeathSequence::Tick found this call, so the caller (main.cpp) can
@@ -44,8 +48,8 @@ struct DeathState {
 // the message" pattern player/camp_state.h's CampTickResult and
 // combat/spell_casting.h's Result already use.
 enum class DeathTickResult {
-    Alive,      // facing==1 -- an ordinary tick, caller runs normally.
-    Waiting,    // facing==2 or 3 -- still waiting out the 5s window
+    Alive,      // phase==1 -- an ordinary tick, caller runs normally.
+    Waiting,    // phase==2 or 3 -- still waiting out the 5s window
                 // (matches CampTickResult::StillWaiting's own role: the
                 // caller's normal per-tick movement/attack/spellcast/
                 // monster-AI work should be skipped, same as run()'s own
@@ -62,11 +66,11 @@ public:
     // "StillWaiting means skip the caller's normal per-tick work" pattern
     // player/camp_state.h's own Camping::Tick/CampTickResult::StillWaiting
     // already established) -- the caller's job to gate this call
-    // accordingly, this method does not check `p.facing` itself.
+    // accordingly, this method does not check `death.phase` itself.
     //
     // Checks the player's CURRENT HP via
     // PlayerCombatStats::EffectiveStat(p, charData, 2): if it's already <=
-    // 0, stamps `death.deathAtMs = now`, sets `p.facing = 2` (Tick's own
+    // 0, stamps `death.deathAtMs = now`, sets `death.phase = 2` (Tick's own
     // job to notice and advance that next call), and returns true so the
     // caller can clear its own "target monster" state (GameCanvas's own
     // `unconfirmed_aa` -- this port's `targetMonster`/`hudState.
@@ -92,7 +96,7 @@ public:
     // the caller's own shouldRunTick-gated work, the same position
     // Camping::Tick already occupies in main.cpp.
     //
-    // Returns Alive when facing==1 (does nothing else). On facing==2,
+    // Returns Alive when phase==1 (does nothing else). On phase==2,
     // advances it to 3 (the original's own transition-tick side effect,
     // `unconfirmed_ad = false; messagePriority = 0`, clearing whatever
     // message is currently shown, is NOT reproduced here -- already a
@@ -102,7 +106,7 @@ public:
     // it's this death-sequence transition, not a camp one) then, same as
     // the original's own unconditional post-transition check, tests the
     // 5s window immediately (in practice always still fresh the instant
-    // facing becomes 2, since this only just got stamped THIS same real-
+    // phase becomes 2, since this only just got stamped THIS same real-
     // time tick by TickDeathAndRegen above). Returns Waiting while the
     // window hasn't elapsed.
     //
@@ -112,12 +116,10 @@ public:
     // backward through inventoryCount, matching the original's own
     // reverse loop exactly -- PlayerInventory::IsSlotEquipped/
     // RemoveInventorySlot), then PlayerCreation::RespawnAfterDeath(p)
-    // (resetState(classIndex, true)), then resets `death.deathAtMs = 0`
-    // and `p.facing = 1` (this last write is confirmed REDUNDANT --
-    // RespawnAfterDeath's own setHubSpawnPosition(true) already sets
-    // `p.facing = 1` as part of the hub-position write -- preserved
-    // anyway, matching the original's own identical redundant
-    // `this.facing = 1;` right after its own resetState(true) call).
+    // (resetState(classIndex, true), which itself sets the PLAYER's
+    // compass facing to 1 via setHubSpawnPosition(true)), then resets
+    // `death.deathAtMs = 0` and `death.phase = 1` (the original's own
+    // `this.facing = 1;` -- GameCanvas's field, not the player's).
     // Returns Respawned.
     //
     // **NOT modeled here, same "render/HUD state stays in main.cpp"

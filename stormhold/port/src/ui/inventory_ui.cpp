@@ -71,7 +71,10 @@ void PaintPanel(Backbuffer& bb, const std::string& title) {
     bb.FillRect(0, 12, Backbuffer::kWidth, kBarTop - 12, kBodyBg);
     bb.FillRect(0, 0, Backbuffer::kWidth, 12, kTitleBg);
     int titleWidth = BitmapFont::StringWidth(title);
-    BitmapFont::DrawString(bb, (Backbuffer::kWidth - titleWidth) / 2, 3, title, kTitleFg);
+    // M74: y nudged from 3 to 1 -- see bitmap_font.cpp's own kFontHeightPx
+    // comment for why the new GDI font needs the extra headroom to stay
+    // inside this 12px bar.
+    BitmapFont::DrawString(bb, (Backbuffer::kWidth - titleWidth) / 2, 1, title, kTitleFg);
 }
 
 void PaintBottomBar(Backbuffer& bb, const std::string& leftLabel, const std::string& rightLabel) {
@@ -167,7 +170,7 @@ void InventoryUi::MoveSelection(InventoryUiState& state, int delta, const Player
 
 void InventoryUi::Confirm(InventoryUiState& state, PlayerState& p, const ItemDatabase& items,
                            const SpellDatabase& spells, const MonsterDatabase& monsters, GeneratedLevel& level,
-                           WorldRegistry& world, JavaRandom& rng) {
+                           WorldRegistry& world, JavaRandom& rng, const GameAdvancement::LevelLookup& levels) {
     if (!state.active) return;
 
     if (state.screen == InventoryScreen::List) {
@@ -201,7 +204,7 @@ void InventoryUi::Confirm(InventoryUiState& state, PlayerState& p, const ItemDat
         // target is always nullptr -- see this file's own header comment
         // and PlayerInventory::UseItem's doc comment for the confirmed
         // "real call site always passes null" finding.
-        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng);
+        PlayerInventory::UseItem(p, slot, nullptr, items, monsters, world, rng, levels);
     }
 
     state.selectedSlot = -1;

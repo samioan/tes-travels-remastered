@@ -175,13 +175,20 @@ add_library(stormhold_render STATIC
   src/render/visible_object_renderer.cpp
   src/ui/boot_splash.cpp
   src/ui/inventory_ui.cpp
+  src/ui/level_up_menu.cpp
   src/ui/menu_flow.cpp
   src/ui/npc_choices_menu.cpp
   src/ui/npc_dialogue.cpp
   src/ui/pause_menu.cpp
 )
 target_include_directories(stormhold_render PUBLIC src)
-target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets stormhold_player stormhold_combat)
+# M74: gdi32 PUBLIC (not PRIVATE), same reasoning as dawnstar's own M58:
+# src/graphics/bitmap_font.cpp's own real-font text rendering needs it
+# directly, and PUBLIC here makes every executable that links
+# stormhold_render -- transitively including every smoke test below, not
+# just stormhold_port itself -- automatically link it too, without each one
+# needing its own explicit gdi32 entry.
+target_link_libraries(stormhold_render PUBLIC stormhold_dungeon stormhold_assets stormhold_player stormhold_combat gdi32)
 
 # M1: real tick loop + backbuffer + present. Software-rendered raw Win32
 # (no SDL/D3D/GL dependency), matching the sibling shadowkey-decomp/
@@ -502,6 +509,10 @@ target_link_libraries(beneca_choices_menu_smoke PRIVATE stormhold_render stormho
 # M66 milestone smoke test -- see src/tests/m66_helga_choices_menu_smoke.cpp.
 add_executable(helga_choices_menu_smoke src/tests/m66_helga_choices_menu_smoke.cpp)
 target_link_libraries(helga_choices_menu_smoke PRIVATE stormhold_render stormhold_player)
+
+# M77 smoke test -- see src/tests/m77_level_up_menu_smoke.cpp.
+add_executable(level_up_menu_smoke src/tests/m77_level_up_menu_smoke.cpp)
+target_link_libraries(level_up_menu_smoke PRIVATE stormhold_render stormhold_player)
 
 # M67 milestone smoke test -- see src/tests/m67_paint_unknown_b_smoke.cpp.
 add_executable(paint_unknown_b_smoke src/tests/m67_paint_unknown_b_smoke.cpp)

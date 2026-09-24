@@ -122,8 +122,14 @@ public:
     // wrapper method, matching how `QuestShopDialogue`/`BenecaDialogue`
     // already read `items.category`/`items.questFlags` directly for
     // equally one-line original reads.
+    // `levels` is only actually used by action 11 (Warp), to close the
+    // `PlayerInventory::WarpToCampMark` stale-corridor-view gap -- see
+    // that method's own header comment. Every other action ignores it,
+    // same as every other unused-in-most-branches parameter this class
+    // already threads through uniformly (e.g. `extra`).
     static std::optional<std::string> HelgaDialogue(PlayerState& player, ShopState& shop, const ShopDialogue& text,
-                                                      const ItemDatabase& items, int action, int extra);
+                                                      const ItemDatabase& items, int action, int extra,
+                                                      const GameAdvancement::LevelLookup& levels);
 
     // Shop.dialogue(player, 6, action, extra) -- shop 6 (Varus) only.
     // Unlike every other shop, Varus's own branch ignores `action`/`extra`

@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 #include "player/player_combat_stats.h"
+#include "player/player_movement.h"
 
 namespace stormhold {
 
@@ -183,7 +184,7 @@ int PlayerInventory::CollectChestItem(PlayerState& p, std::array<int8_t, 8> reco
 
 bool PlayerInventory::HasCampMark(const PlayerState& p) { return p.campLevel > 0; }
 
-void PlayerInventory::MarkCampAndReturnToTown(PlayerState& p) {
+void PlayerInventory::MarkCampAndReturnToTown(PlayerState& p, const GameAdvancement::LevelLookup& levels) {
     p.campLevel = p.currentLevel;
     p.campX = p.tileX;
     p.campY = p.tileY;
@@ -197,13 +198,17 @@ void PlayerInventory::MarkCampAndReturnToTown(PlayerState& p) {
     p.tileY = p.pendingTileY = 14;
     p.facing = p.pendingFacing = 1;
 
+    // Player.java line 2509 -- see this method's own header comment.
+    PlayerMovement::RefreshCorridorView(p, levels(p.currentLevel), levels);
     p.justMarkedCamp = true;
 }
 
-void PlayerInventory::WarpToCampMark(PlayerState& p) {
+void PlayerInventory::WarpToCampMark(PlayerState& p, const GameAdvancement::LevelLookup& levels) {
     p.currentLevel = p.pendingLevel = p.campLevel;
     p.tileX = p.pendingTileX = p.campX;
     p.tileY = p.pendingTileY = p.campY;
+    // Player.java line 2517 -- see this method's own header comment.
+    PlayerMovement::RefreshCorridorView(p, levels(p.currentLevel), levels);
     p.justMarkedCamp = true;
 }
 
@@ -251,7 +256,8 @@ bool PlayerInventory::CanUseItem(const PlayerState& p, int slot, const ItemDatab
 }
 
 void PlayerInventory::UseItem(PlayerState& p, int slot, MonsterState* target, const ItemDatabase& items,
-                               const MonsterDatabase& monsters, WorldRegistry& world, JavaRandom& rng) {
+                               const MonsterDatabase& monsters, WorldRegistry& world, JavaRandom& rng,
+                               const GameAdvancement::LevelLookup& levels) {
     int id = std::abs(p.inventoryItemIds[static_cast<size_t>(slot)]);
     int8_t cat = items.category[static_cast<size_t>(id - 1)];
     if (cat != 13 && cat != 15) return;
@@ -260,10 +266,10 @@ void PlayerInventory::UseItem(PlayerState& p, int slot, MonsterState* target, co
     switch (id) {
         case 87:
             if (p.currentLevel == 1 && HasCampMark(p)) {
-                WarpToCampMark(p);
+                WarpToCampMark(p, levels);
                 break;
             }
-            MarkCampAndReturnToTown(p);
+            MarkCampAndReturnToTown(p, levels);
             break;
         case 88:
             PlayerCombatStats::CureRandomAilment(p, rng);

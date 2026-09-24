@@ -225,10 +225,12 @@ public:
     // `spawnIdCounter` is `BenecaDialogue`'s own action-7 parameter (a
     // fresh item needs a fresh spawn id) -- unused for every other
     // action/screen, threaded through regardless since it's the same
-    // function either way.
+    // function either way. `levels` is `HelgaDialogue`'s own Warp
+    // (action 11) parameter, same "unused everywhere else, threaded
+    // through anyway" reasoning -- see that method's own doc comment.
     static void Confirm(NpcChoicesMenuState& state, PlayerState& p, ShopState& shop, const ShopDialogue& text,
                          const CharacterData& charData, const ItemDatabase& items, GeneratedLevel& hub,
-                         JavaRandom& rng, int16_t& spawnIdCounter);
+                         JavaRandom& rng, int16_t& spawnIdCounter, const GameAdvancement::LevelLookup& levels);
 
     // Choices: closes the whole menu back to live gameplay, matching the
     // real `npcChoicesUI[shopId].nextScreen = gameCanvas` exactly for

@@ -197,28 +197,35 @@ public:
     // fixed points in the original (../../../src/Player.java's own
     // setHubSpawnPosition() header comment).
     //
-    // **Real, deliberately unwired gap (M25), NARROWED this session:** the
-    // original calls `this.refreshCorridorView()` as its own very next
-    // statement after this (Player.java line 2493) -- not reproduced HERE,
-    // since doing so faithfully needs a `PlayerMovement::LevelLookup` this
-    // method doesn't take. `p.corridorView` is left stale (still
-    // describing the pre-camp position) until the player's next
-    // `CommitMove`, which DOES refresh it (see
-    // `PlayerMovement::RefreshCorridorView`). This was flagged "harmless"
-    // for every caller "so far" -- turned out to be wrong once
-    // `main.cpp`'s own nameplate-portrait gate started reading
-    // `player.corridorView` bits directly (this session's other fix): a
-    // caller that renders in that window sees garbage. The one caller that
-    // COULD reach `levels` cheaply (`player_movement.cpp`'s own
-    // auto-camp-on-tile branch, `CommitMove`) now calls
-    // `PlayerMovement::RefreshCorridorView` itself right after this
-    // returns -- see that call site. The other two real callers
-    // (`PlayerInventory::UseItem`, `ShopInteraction::VarusDialogue`'s own
-    // Warp action) still don't take a `LevelLookup` at all, so this method
-    // itself still can't close the gap generally; still worth widening
-    // properly (threading `LevelLookup` through both) if either one is
-    // ever shown to hit the same stale-render window in practice.
-    static void MarkCampAndReturnToTown(PlayerState& p);
+    // **Real gap CLOSED this session:** the original calls
+    // `this.refreshCorridorView()` as its own very next statement after
+    // this, UNCONDITIONALLY, for every caller (Player.java line 2509 --
+    // confirmed by reading markCampAndReturnToTown() directly, not
+    // assumed). This method now does the same, via the new `levels`
+    // parameter -- matching the fix dawnstar's own sibling port already
+    // made for its own identical `PlayerMovement::MarkCampAndReturnToTown`
+    // (dawnstar keeps this method in `PlayerMovement`, which already has
+    // `levels`, for exactly this reason; this port keeps it here in
+    // `PlayerInventory` instead, so it takes `levels` explicitly).
+    // Previously NARROWED (M68) to just `player_movement.cpp`'s own
+    // auto-camp-on-tile `CommitMove` branch calling `RefreshCorridorView`
+    // itself right after -- that caller-side call is now redundant (this
+    // method does it internally) and has been removed there. The other
+    // two real callers, `PlayerInventory::UseItem`'s camp-marker item and
+    // `ShopInteraction::HelgaDialogue`'s own Warp action (`ShopInteraction
+    // ::VarusDialogue` was never a real caller of this at all -- a stale
+    // doc-comment claim, corrected this session), previously left
+    // `p.corridorView` pointing at the OLD (pre-warp) position/level
+    // indefinitely, until whatever the player's next SUCCESSFUL
+    // `CommitMove` happened to be -- which, if fatigue was empty
+    // (`Move()`'s own `coreStats[6] <= 0` guard returns before ever
+    // reaching `CommitMove`), could never come, leaving the corridor
+    // renderer painting a completely unrelated level/position forever:
+    // the real, user-reported symptom behind this fix ("teleported back
+    // to the dungeon camp", "position keeps resetting", "movement doesn't
+    // work" -- all exactly what a frozen, stale corridor render over a
+    // silently-already-moved player looks like from the player's side).
+    static void MarkCampAndReturnToTown(PlayerState& p, const GameAdvancement::LevelLookup& levels);
 
     // Player.warpToCampMark(): restores position from the camp bookmark.
     // Faithfully does NOT touch `facing`/`pendingFacing` at all -- reading
@@ -226,13 +233,10 @@ public:
     // facing here, unlike markCampAndReturnToTown()'s own
     // setHubSpawnPosition(true) call, which does.
     //
-    // Same real, deliberately unwired `refreshCorridorView()` gap as
-    // MarkCampAndReturnToTown above (Player.java line 2501) -- see that
-    // method's own header comment. Both of THIS method's own real callers
-    // (`PlayerInventory::UseItem`, `ShopInteraction::VarusDialogue`) still
-    // lack a `LevelLookup`, so this one gap is still fully open, unlike
-    // MarkCampAndReturnToTown's now-narrowed one above.
-    static void WarpToCampMark(PlayerState& p);
+    // Same real gap, closed the same way, as MarkCampAndReturnToTown
+    // above (Player.java line 2517 calls `this.refreshCorridorView()`
+    // unconditionally here too) -- see that method's own doc comment.
+    static void WarpToCampMark(PlayerState& p, const GameAdvancement::LevelLookup& levels);
 
     // Player.isSlotEquipped(slot) (M47, phase-3 port): true iff inventory
     // `slot` holds an equippable item (ItemDatabase::IsEquippable) AND
@@ -309,7 +313,8 @@ public:
     // need) rather than dropped, on the chance a caller this pass missed
     // exists, or a future milestone adds one.
     static void UseItem(PlayerState& p, int slot, MonsterState* target, const ItemDatabase& items,
-                         const MonsterDatabase& monsters, WorldRegistry& world, JavaRandom& rng);
+                         const MonsterDatabase& monsters, WorldRegistry& world, JavaRandom& rng,
+                         const GameAdvancement::LevelLookup& levels);
 
     // Player.itemTooltip(slot): category-dependent tooltip text
     // (weapon/armor slots show their value, spells show "Spell: <name>",

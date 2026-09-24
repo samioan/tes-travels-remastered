@@ -76,10 +76,9 @@ public:
     // shows ESGame.newEndOfGameUI() and disables auto-repaint instead of
     // any popup message at all** (`GameCanvas.java`'s own header comment
     // on this method: the confirmed real trigger for Stormhold's
-    // end-of-game/victory sequence) -- NOT modeled, this port has no
-    // end-of-game screen at all yet. `lockedItemEndOfGame` is set so the
-    // caller at least knows this happened, but there is nothing further
-    // to do with it today. **Also confirmed, by grepping every reference
+    // end-of-game/victory sequence). M77: main.cpp opens the "Victory!" ->
+    // "Game Over" -> main menu screens off `lockedItemEndOfGame`. **Also
+    // confirmed, by grepping every reference
     // to the field: `pendingLockedItemFlag` is never reset to `false`
     // anywhere in the whole original codebase either** (Player.java's own
     // two write sites -- both inside CommitMove's dropped-item block,
