@@ -77,9 +77,16 @@ public class Shop {
    // easy to conflate since both are per-shop short counters read/reset
    // the same way) -- gates both the greeting branch (action 1) and the
    // reward-claim branch (action 5) with a ">50" cooldown-shaped check.
-   // No increment site found anywhere in this file, so its producer is
-   // external (a per-tick decay driven by ESGame/GameCanvas, most likely)
-   // -- name and exact unit unconfirmed.
+   // CONFIRMED, not just unconfirmed-producer speculation (phase-3 port
+   // M71): exhaustively grepped every renamed file in this directory
+   // (GameCanvas.java/ESGame.java included, the two most likely per-tick
+   // drivers) for any write to this field -- the ONLY one anywhere is this
+   // class's own action==4 branch below, which only ever DECREMENTS it
+   // (clamped at 0). reset() zeroes it; nothing increments it. So it can
+   // never exceed 0 in real play, and both ">50" checks below are
+   // confirmed dead code in the ORIGINAL shipped game, not a gap in this
+   // decompilation pass -- name/exact unit still unconfirmed, but "is
+   // there a live producer" no longer is.
    static short[] unconfirmedCooldownH;
 
    // Beneca's own spendable-points counter (was `a`) -- earned via her

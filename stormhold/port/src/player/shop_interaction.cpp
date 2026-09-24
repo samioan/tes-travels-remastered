@@ -64,6 +64,16 @@ std::optional<std::string> ShopInteraction::QuestShopDialogue(PlayerState& playe
             shop.firstVisit[id] = false;
             return lines[0];
         }
+        // Confirmed dead in the original, not just "unconfirmed producer"
+        // (Shop.java's own header comment's original phrasing): exhaustively
+        // grepped every renamed source file in ../../../src/ for a write to
+        // Shop.unconfirmedCooldownH/`h` -- the ONLY one anywhere is this
+        // action's own category-15-item decrement below (QuestShopDialogue's
+        // action==4 branch), which only ever subtracts and clamps at 0.
+        // reset() zeroes it and nothing else increments it, so it can never
+        // exceed 0 in practice -- this check, and its action==5 twin below,
+        // are both faithfully-preserved dead branches in the ORIGINAL game
+        // too, not a port gap.
         if (shop.unconfirmedCooldownH[id] > 50) return lines[1];
         if (player.coreStats[8] > 50) return lines[2];
         int line = RandomInt0Based(rng, 3);

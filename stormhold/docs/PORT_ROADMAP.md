@@ -4782,6 +4782,73 @@ starts and stays up.
       stayed up throughout and the log file showed no `FATAL` line from
       the M68 exception logger.
 
+- [x] **M71 -- source-vs-port comparison audit, no functional bugs found (a
+      first for a session dedicated to this).** Systematically re-read
+      several high-risk areas (numeric-formula-heavy, index-heavy, or
+      recently-built) side by side against `../../../src/`, looking for the
+      same class of "silent gap" M67-M70 kept finding:
+      - `Monster.java` (spawn/move/chase/isStairwayTile/tick/onDeath) vs
+        `monster/monster_runtime.cpp`/`combat/combat_resolution.cpp`,
+        including the `tickMonsterAI` aiPhase state machine
+        (`GameCanvas.java`'s `b(long)`) vs `TickMonstersOnLevel`.
+      - `Item.rollLoot` vs `ItemDatabase::RollLoot`, including the signed-
+        byte sign-extension subtlety in `int result = low` (`lootTable` is
+        `int8_t`, confirmed to sign-extend the same way).
+      - `Shop.dialogue()`'s FULL dispatcher, all 7 NPCs, every action
+        branch (shops 0-3's quest-turn-in pattern, Beneca, Helga, Varus)
+        vs `ShopInteraction::QuestShopDialogue`/`BenecaDialogue`/
+        `HelgaDialogue`/`VarusDialogue` -- byte-for-byte match, including
+        the `rumorFor`/`Util.replace` multi-tag substitution order and the
+        cross-group `dialogue[7][0]` return in Beneca's own training-
+        failed branch.
+      - `Player.java`'s combat-stat formulas (`defenseSkillValue`/
+        `baseEvasion`/`armorValue`/`defenseSkillIndex`/`attackPower`/
+        `weaponDamage`) vs `player/player_combat_stats.cpp`, including the
+        `Math.abs()` placement (on the CATEGORY value, not the item id) and
+        the questFlags-column-doubles-as-magnitude reuse in `armorValue`.
+      - The NPC choices menu's numeric hand-offs (`ShopActionCode` reused
+        as a rumor-step `extra`; `selectedIndex + 87` for Beneca's Kill/
+        Take item id) vs `ui/npc_choices_menu.cpp` -- both match exactly.
+      - `Player.toBytes(true)`/`readFrom(..., true)`'s full save-format
+        field order vs `player/player_save.cpp` -- every field, in order,
+        same type, no drift (the `full=false` lightweight variant is
+        already confirmed-and-documented dead code, `toBytes(false)` has
+        no real caller anywhere in `../../../src/`).
+      - `GameCanvas.java`'s dead-respawn message selection (reusing
+        whatever `enteredNewLevelZone`/`leftLevelZone` happen to still be
+        set to from the player's last real move, not reset by
+        `resetState`) vs `death/death_sequence.cpp`'s `RespawnMessageLines`
+        -- already correctly documented and preserved.
+      - Re-grepped the whole port for the exact M70 bug SHAPE (a
+        `GeneratedLevel&` bound once and reused across a scope that could
+        also change `player.currentLevel`) -- the only other bindings of
+        that shape are all short-lived, single-function-scope locals in
+        `player/player_movement.cpp` that don't cross a later independent
+        call, so no second instance of that bug exists.
+
+      **One real finding, upgraded from speculation to confirmed:**
+      `Shop.unconfirmedCooldownH`'s own header comment used to say "no
+      increment site found in this file, producer likely external, unit
+      unconfirmed." Exhaustively grepped across EVERY renamed file in
+      `../../../src/` (not just `Shop.java`) for any write to it -- the
+      only one anywhere is `Shop.dialogue()`'s own action==4 DECREMENT
+      (clamped at 0); `reset()` zeroes it; nothing else touches it. Both
+      `> 50` gates that read it (action 1's greeting-cooldown branch and
+      action 5's rumor-cooldown branch, mirrored in `QuestShopDialogue`)
+      are therefore confirmed dead code in the ORIGINAL shipped game, not
+      a decompilation or port gap -- updated both `Shop.java`'s own header
+      comment and `shop_interaction.cpp`'s two call sites to say so
+      plainly instead of leaving it as an open question. No behavior
+      change (the port already only ever decremented it, same as the
+      original) -- documentation-confidence only.
+
+      All 57 smoke tests pass, zero new `/W4` warnings. This was a
+      targeted sample, not exhaustive -- `Dungeon.java`/`UIScreen.java`/
+      the rest of `Player.java` (3155 lines, the largest single file)
+      weren't re-read start to finish this session -- but every area
+      sampled, including several not touched by M67-M70's own fixes,
+      came back a faithful, correct match.
+
 ## What's next
 
 With M66, every one of the 7 real NPCs' own `npcChoicesUI` interactive
