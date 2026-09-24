@@ -133,6 +133,21 @@ public:
     // return type) wherever the original does: no neighbor to cross into,
     // off the hub, or no shop tile with its own `questRewardClaimable`
     // flag still set at that position.
+    //
+    // Corrected note, M67 session: in the original, `r()` (this method)
+    // has exactly ONE real call site -- `GameCanvas.paintUnknown_b()`'s own
+    // paint-time call, itself gated on a SEPARATE condition (`W`, a bit-32
+    // corridor-view test set once per tick by `c()`). Every OTHER original
+    // caller that looks "ahead" for an NPC (the interact-key dispatch, the
+    // nameplate popup) inlines the same `pendingTile`/`QuestShopAt` logic
+    // independently rather than calling `r()` -- this port's own
+    // `ShopAheadOfPlayer` consolidates all of those into one function,
+    // which is fine for the TILE computation (M60 already proved that part
+    // identical across all 3 original call sites), but a caller standing in
+    // for the paint-time site specifically also needs that separate bit-32
+    // gate -- see main.cpp's own `facingShopPortrait`/
+    // `facingShopPortraitForPaint` locals, not something this function
+    // folds in itself.
     static int ShopAheadOfPlayer(PlayerState& p, const LevelLookup& levels, const ShopState& shop);
 
     // Player.commitMove(dir) -- see class header comment for what's

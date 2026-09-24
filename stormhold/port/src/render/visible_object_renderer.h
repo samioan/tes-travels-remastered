@@ -23,17 +23,24 @@ public:
     // RenderMonsters' own job.
     static void RenderObjects(Backbuffer& bb, const VisibleObjectAssets& assets, const PlayerState& p);
 
-    // M67: GameCanvas.paintUnknown_b() (was decompiled/e.java's
-    // b(Graphics,int)) -- the NPC/shop-portrait icon overhead the
-    // look-ahead tile, shown while a quest-turn-in shop (0-5) with an
-    // unclaimed reward, or Varus/the Warden (6), sits directly ahead of
-    // the player. `stat` is `Player.questShopAtPendingTile()`'s return
-    // value, which -- now that phase-3 port M67 resolved the LOW
-    // CONFIDENCE flag on that method (see ../../../docs/PORT_ROADMAP.md's
-    // "what's next") -- is exactly PlayerMovement::ShopAheadOfPlayer's own
-    // return value; callers should NOT call this when that's < 0, mirroring
-    // the original's `if (unconfirmed_W) { ... }` gate (itself already
-    // confirmed equivalent to `shopAhead >= 0`, M60). Cases 0-5 reuse
+    // M67, corrected the same session: GameCanvas.paintUnknown_b() (was
+    // decompiled/e.java's b(Graphics,int)) -- the NPC/shop-portrait icon
+    // overhead the look-ahead tile, shown while a quest-turn-in shop (0-5)
+    // with an unclaimed reward, or Varus/the Warden (6), sits directly
+    // ahead of the player. `stat` is `Player.questShopAtPendingTile()`'s
+    // return value, exactly `PlayerMovement::ShopAheadOfPlayer`'s own
+    // return value; callers should NOT call this when that's < 0. **This
+    // is NOT the original's only gate, though:** `if (W) { stat = ...;
+    // paintUnknown_b(...); }` (decompiled/e.java) tests a SEPARATE
+    // condition first -- bit 32 on the corridor-view cell one tile ahead
+    // (`c()`'s own `W = f.a(32, var1.a(0, 1, this.ae))`), permanently set
+    // for shops 0-5's own tiles but only while `WardenState::present` for
+    // shop 6/Varus. M60's original claim that `shopAhead >= 0` alone is
+    // "confirmed equivalent" to `W` was wrong for shop 6 specifically --
+    // caught live when a fresh character (who spawns one tile from Varus)
+    // crashed on the very first frame of every new game. Callers MUST also
+    // gate on that bit-32 test now (main.cpp's own call site does); this
+    // method itself has no way to enforce that from inside. Cases 0-5 reuse
     // RenderMonsterOrIconSprite() with small literal indices instead of
     // real monster typeIndexes -- an NPC/shop-portrait sprite sheet
     // apparently laid out in the same row-index space as the monster

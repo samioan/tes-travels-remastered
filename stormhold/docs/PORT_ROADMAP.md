@@ -4590,6 +4590,104 @@ starts and stays up.
       crash-preservation logic IS exercised directly by the smoke test
       above, just not the live rendering/input path end to end.
 
+- [x] **M68 -- fixed a real, reachable crash on every new game: `RenderUnknownB`
+      (M67) and the NPC-nameplate popup (M60) were both missing a gate the
+      original always requires alongside the quest-shop-tile check.** Found
+      by actually doing the "not independently re-verified" live check
+      M67's own entry above flagged as skipped -- driving the real windowed
+      exe through character creation via Win32 `SendKeys` immediately threw
+      the `tier < 0` guard M67 added, on the very first frame of every new
+      game, every time.
+
+      Root cause: `decompiled/e.java`'s `paint(Graphics)` only ever calls
+      `paintUnknown_b()` from behind `if (W) { ... }` -- a SEPARATE
+      condition from `stat = player.questShopAtPendingTile()`'s own tile
+      check, set once per tick by `c()`: `W = f.a((byte)32, var1.a(0, 1,
+      this.ae))`, i.e. bit 32 on the corridor-view cell one tile straight
+      ahead (`DungeonRuntime::ViewGridAt(corridorView, 0, 1) & 32`, this
+      port's own equivalent grid read, already existed for other purposes).
+      M67 (this session's own earlier work) and M60 (an prior session) both
+      substituted plain `shopAheadOfPlayer() >= 0` for `W`, reasoning both
+      reduce to "the same tile" -- true of the TILE COORDINATES, but not of
+      whether that tile is actually a live shop-portrait marker. For shops
+      0-5, `dungeon_generator.cpp` marks their tiles bit-32 permanently at
+      hub construction, so the substitution happened to hold. For shop 6
+      (Varus), bit 32 is only set while `WardenState::present`
+      (`world/warden.cpp`'s own `Arrive`/`Leave`), while
+      `Shop::QuestShopAt`'s `questRewardClaimable[6]` starts (and normally
+      stays) true regardless of the Warden -- so `shopAheadOfPlayer()`
+      returns 6, unconditionally, any tick spent near Varus's fixed hub
+      tile. A fresh character SPAWNS one tile from Varus, facing him
+      (`player_creation.cpp`'s own `ResetForNewCharacter`: (9, 10) facing
+      1, one step from his (9, 9)) -- so `RenderUnknownB` ran, with
+      `wardenVisitCount == 0`, throwing M67's own (correctly added, but
+      wrongly assumed rare) `tier < 0` guard immediately.
+
+      Fixed both call sites in `main.cpp` to additionally require
+      `DungeonRuntime::ViewGridAt(player.corridorView, 0, 1) & 32` before
+      treating `shopAheadOfPlayer()`'s result as real -- matching the
+      original's own `if (W)` gate at the paint call site, and its
+      documented-but-previously-unrestored twin at the nameplate call site
+      (main.cpp's own M60-era comment already said the original used "a
+      separate bit-32 test" there and consolidated anyway; that
+      consolidation is what this milestone corrects). Also revisits M67's
+      own "second real crash" framing: with `W` restored, `tier < 0` is now
+      believed UNREACHABLE in practice (`WardenState::Arrive` increments
+      `visitCount` in the same call that sets bit 32, so `W` can only be
+      true once `visitCount >= 1`) -- the guard is kept anyway (faithful to
+      a real risk the original's own code shape carries, and "believed
+      unreachable" isn't "proven unreachable"), but it was never really an
+      independent second crash; it was this same missing-gate bug wearing
+      a different face.
+
+      While tracing this, also closed a related, previously-documented-but-
+      accepted gap: `PlayerInventory::MarkCampAndReturnToTown` (the
+      dungeon-camp-tile auto-warp-to-town mechanic, `player_movement.cpp`'s
+      `autoMarkCampOnTile` branch, tile bit 8) was flagged back at M25 as
+      not re-running `refreshCorridorView()` for the new hub position the
+      way the original does immediately afterward, on the reasoning that no
+      caller rendered off `player.corridorView` in the resulting stale
+      window. That reasoning no longer holds now that this SAME
+      milestone's nameplate-portrait fix reads `player.corridorView`
+      directly -- a stale corridor view (still describing wherever the
+      player triggered the auto-warp FROM, inside a dungeon) feeding that
+      bit-32 check at the hub is a real, if narrower, source of wrong
+      nameplate/portrait flashes for however many ticks pass before the
+      player's next real move. Fixed at the one call site that already had
+      a `LevelLookup` in scope (`CommitMove`'s own auto-camp branch); the
+      other two real callers (`PlayerInventory::UseItem`'s camp-marker
+      item, `ShopInteraction::VarusDialogue`'s own Warp action) still don't
+      take one, so that narrower slice of the original gap remains open --
+      see `MarkCampAndReturnToTown`/`WarpToCampMark`'s own header comments.
+
+      Also added a small, port-only (no original counterpart) diagnostic:
+      `main.cpp`'s own tick callback now catches `std::exception` at its
+      outermost scope, logs `e.what()` to stderr (already redirected to
+      `<userDir>/stormhold_port.log` whenever a launcher sets
+      `STORMHOLD_USER_DIR`), and only then aborts -- so the NEXT time one of
+      this codebase's many deliberate "preserve a real bug as a throw"
+      guards fires, whoever's playing has a log line identifying exactly
+      which one, instead of a bare crash. Every one of those throws was
+      already written with a specific, identifying message; this just
+      makes sure at least one of them gets read before the process dies.
+
+      Verified: all 57 smoke tests pass (including the existing
+      `paint_unknown_b_smoke.exe`, unchanged -- it tests `RenderUnknownB`
+      directly, below the new gate, which lives in `main.cpp` at the call
+      site instead). Full clean rebuild, zero `/W4` warnings. **Live-
+      verified this time, not just smoke-tested:** drove the real windowed
+      exe through character creation via `SendKeys` -- previously reproduced
+      the crash exactly (caught via a temporary stderr-logging harness,
+      confirmed it was the `tier < 0` throw, before adding the permanent
+      diagnostic wrapper above), then confirmed a fresh character now
+      spawns, stays up, and remains stable while facing Varus and pressing
+      into his door repeatedly, on the fixed build. The camp/corridorView
+      fix itself was NOT live-verified the same way (reaching a dungeon's
+      one-per-level bit-8 tile needs real pathing through generated
+      geometry, not attempted this session) -- fixed on code-reading
+      grounds (a direct, narrow instance of an already-documented M25 gap)
+      and smoke-test coverage only.
+
 ## What's next
 
 With M66, every one of the 7 real NPCs' own `npcChoicesUI` interactive

@@ -286,14 +286,27 @@ bool PlayerMovement::CommitMove(PlayerState& p, int dir, const LevelLookup& leve
 
     if (isStep && (tileBits & 8)) {
         // Player.commitMove()'s own ordering: refreshCorridorView() runs
-        // BEFORE autoMarkCampOnTile(), matching the statement order
-        // above exactly. autoMarkCampOnTile() -> markCampAndReturnToTown()
-        // calls refreshCorridorView() AGAIN in the original (Player.java
-        // line 2493, for the NEW hub position) -- not reproduced here,
-        // see PlayerInventory::MarkCampAndReturnToTown's own header
-        // comment on why that one's still deliberately unwired.
+        // BEFORE autoMarkCampOnTile(), matching the statement order above
+        // exactly. autoMarkCampOnTile() -> markCampAndReturnToTown() calls
+        // refreshCorridorView() AGAIN in the original (Player.java line
+        // 2493, for the NEW hub position) -- restored here this session
+        // (this call site is the one place that gap is actually reachable
+        // with a `levels` already in scope to do it faithfully; the other
+        // two real callers, PlayerInventory::UseItem and
+        // ShopInteraction::VarusDialogue's own Warp action, still don't
+        // take a LevelLookup at all -- see MarkCampAndReturnToTown/
+        // WarpToCampMark's own header comments for that narrower
+        // remaining gap). Confirmed live: leaving `p.corridorView`
+        // pointing at the OLD dungeon tile after an auto-camp warp, for
+        // however many ticks pass before the player's next real move, fed
+        // straight into `main.cpp`'s own `ViewGridAt(player.corridorView,
+        // 0, 1) & 32` nameplate-portrait gate (this session's other fix)
+        // off completely stale data -- a real source of the "flashing"
+        // symptom a stale corridor view could cause at the hub right after
+        // stepping onto a dungeon's camp-mark tile.
         PlayerInventory::MarkCampAndReturnToTown(p);
         p.justMarkedCamp = false;
+        RefreshCorridorView(p, levels(p.currentLevel), levels);
     }
 
     return true;

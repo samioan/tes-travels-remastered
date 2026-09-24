@@ -539,6 +539,24 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     };
 
     window.RunMessageLoop([&]() {
+        // Port-only diagnostic wrapper, no original counterpart -- added
+        // this session after a real crash (M67's `RenderUnknownB`, fixed
+        // above) reached the user with zero information beyond "the game
+        // crashed": every one of this codebase's many deliberate
+        // "preserve a real original bug as a C++ throw" guards (see
+        // docs/PORT_ROADMAP.md's own "Decisions carried through every
+        // milestone") previously had nothing catching it before it
+        // unwound out of wWinMain, so it manifested as a bare process
+        // death / Windows Error Reporting dialog with no clue which guard
+        // fired. This logs `e.what()` (which every one of those guards
+        // already writes a specific, identifying message into) to
+        // stderr -- OpenLogFile above already redirects that to
+        // <userDir>/stormhold_port.log whenever a launcher sets
+        // STORMHOLD_USER_DIR -- then still aborts: these throws represent
+        // real bugs this port is deliberately faithful to, not errors to
+        // paper over, so the crash itself is correct behavior; only the
+        // silence around it wasn't.
+        try {
         if (menuState.screen != stormhold::MenuScreen::Finished) {
             if (KeyEdge(VK_UP)) stormhold::MenuFlow::MoveSelection(menuState, -1, charData);
             if (KeyEdge(VK_DOWN)) stormhold::MenuFlow::MoveSelection(menuState, 1, charData);
@@ -958,15 +976,39 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     warden.Arrive(levelLookup(1));
                 }
 
-                // M43/M60: GameCanvas.refreshNpcNameplateAndWardenLeave() --
-                // both halves now wired. The nameplate half (M60) reuses
-                // `shopAhead`, already computed above, instead of the
-                // original's own separate `viewGridAt(0, 1, corridorView)`
-                // bit-32 test -- see `shopAhead`'s own declaration comment
-                // for why that's a provably-equivalent consolidation, not a
-                // behavior change. The Warden-leaving half (M43) is
-                // unchanged.
-                if (shopAhead >= 0) {
+                // M43/M60, corrected this session: GameCanvas.
+                // refreshNpcNameplateAndWardenLeave() -- both halves wired.
+                // The nameplate half (M60) originally substituted plain
+                // `shopAhead >= 0` for the original's own SEPARATE
+                // `viewGridAt(0, 1, corridorView)` bit-32 test, on the
+                // theory that both reduce to "the same tile" and are
+                // therefore interchangeable. That equivalence holds for
+                // shops 0-3/4/5 (dungeon_generator.cpp marks their tiles
+                // bit-32 unconditionally at hub construction, permanently),
+                // but NOT for shop 6 (Varus): his tile's bit 32 is only set
+                // while `WardenState::present` (world/warden.h's own
+                // `Arrive`/`Leave`), while `Shop::QuestShopAt`'s own
+                // `questRewardClaimable[6]` starts (and normally stays)
+                // true regardless -- so `shopAhead == 6` was true, and this
+                // nameplate fired, every single tick spent anywhere near
+                // Varus's tile, Warden visiting or not (confirmed live: a
+                // fresh character SPAWNS one tile from Varus, so this fired
+                // from the very first frame of every new game). `viewGrid`
+                // below is the missing gate, restored; `shopAhead` still
+                // supplies the actual index/name, unchanged. Not a perfect
+                // match to the original's own `if (bit32test) {...} else
+                // {...}` shape -- this branches on `facingShopPortrait &&
+                // shopAhead >= 0` rather than `facingShopPortrait` alone, so
+                // the else (Warden-leave) arm can run a tick early/late
+                // relative to the original in the narrow window where the
+                // two conditions briefly disagree (bit-32 set but
+                // `questRewardClaimable` already false, or vice versa) --
+                // strictly safer than reproducing that gap exactly, not
+                // worth chasing further without a concrete symptom tied to
+                // it.
+                stormhold::CorridorViewGrid viewGrid = player.corridorView;
+                bool facingShopPortrait = (stormhold::DungeonRuntime::ViewGridAt(viewGrid, 0, 1) & 32) != 0;
+                if (facingShopPortrait && shopAhead >= 0) {
                     stormhold::MessagePopup::Show(
                         messagePopup, {stormhold::Shop::kNames[static_cast<size_t>(shopAhead)], ""}, 1, gameTimeMs);
                 } else {
@@ -1162,20 +1204,45 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     /*ailment3Active=*/stormhold::PlayerCombatStats::HasAilment(player, 3),
                     /*ailment4Active=*/stormhold::PlayerCombatStats::HasAilment(player, 4));
                 stormhold::VisibleObjectRenderer::RenderObjects(backbuffer, objectAssets, player);
-                // M67: GameCanvas.paintGameView()'s own `if (unconfirmed_W)
-                // { stat = player.questShopAtPendingTile(); paintUnknown_b(g,
-                // stat); }`, right here between paintObjects() and
-                // paintMonsters() in the original's own call order.
-                // `questShopAtPendingTile()` IS `ShopAheadOfPlayer` -- both
-                // reduce to the identical pendingLevel==1 && Shop::
-                // QuestShopAt(pendingTileX, pendingTileY) check (M67, see
-                // docs/PORT_ROADMAP.md's "what's next"), so this recomputes
-                // it fresh here rather than threading the tick-time `int
-                // shopAhead` above into this separate block -- matching the
-                // original's own paint-time-fresh-call behavior (it never
-                // caches `stat` either), not a shortcut.
+                // M67: GameCanvas.paintGameView()'s own `if (W) { stat =
+                // player.questShopAtPendingTile(); paintUnknown_b(g, stat);
+                // }`, right here between paintObjects() and paintMonsters()
+                // in the original's own call order. `questShopAtPendingTile()`
+                // IS `ShopAheadOfPlayer` for the STAT value, but `W` itself
+                // is a SEPARATE gate (decompiled/e.java's `c()`: `W = f.a(32,
+                // var1.a(0, 1, this.ae))`, i.e. bit 32 on the corridor-view
+                // cell one step straight ahead) -- corrected this session
+                // after a live crash traced back to this milestone's
+                // original wiring calling RenderUnknownB off
+                // `shopAheadForPaint >= 0` ALONE, with no `W` equivalent at
+                // all. That's exactly equivalent to `W` for shops 0-5 (whose
+                // tiles are permanently bit-32-marked at hub construction),
+                // but NOT for shop 6 (Varus): his tile's bit 32 only comes on
+                // while `WardenState::present`, while `ShopAheadOfPlayer`
+                // returns 6 any time the player is one tile from his fixed
+                // hub position, Warden visiting or not -- and a fresh
+                // character SPAWNS one tile from Varus, facing him, so this
+                // ran, and threw (the `tier < 0` guard below, `wardenVisitCount
+                // == 0` on every fresh character) on the very first frame of
+                // every new game. With the `W` gate restored, `tier < 0` is
+                // now believed UNREACHABLE in practice: `WardenState::Arrive`
+                // (world/warden.cpp) increments `visitCount` and sets the
+                // bit-32 tile in the same call, so `W` can only be true once
+                // `visitCount >= 1` -- but the guard is left in place anyway,
+                // both because it faithfully mirrors a real risk the
+                // original's own `case 6` code shape carries regardless, and
+                // because "believed unreachable" isn't "proven unreachable"
+                // (same standard docs/PORT_ROADMAP.md's other preserved-but-
+                // likely-unreachable throws already hold to). Recomputes
+                // fresh here (not threading the tick-time `shopAhead`/
+                // `facingShopPortrait` above into this separate block) --
+                // matching the original's own paint-time-fresh-call
+                // behavior (it never caches `stat` OR `W` across the two call
+                // sites either), not a shortcut.
                 int shopAheadForPaint = stormhold::PlayerMovement::ShopAheadOfPlayer(player, levelLookup, shop);
-                if (shopAheadForPaint >= 0) {
+                bool facingShopPortraitForPaint =
+                    (stormhold::DungeonRuntime::ViewGridAt(player.corridorView, 0, 1) & 32) != 0;
+                if (facingShopPortraitForPaint && shopAheadForPaint >= 0) {
                     stormhold::VisibleObjectRenderer::RenderUnknownB(backbuffer, objectAssets, shopAheadForPaint,
                                                                        warden.visitCount);
                 }
@@ -1209,6 +1276,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             }
         }
         window.Present(backbuffer);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "FATAL: %s\n", e.what());
+            std::fflush(stderr);
+            std::abort();
+        }
     });
 
     return 0;
