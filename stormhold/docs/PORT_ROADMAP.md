@@ -4974,154 +4974,48 @@ starts and stays up.
 
 ## What's next
 
-With M66, every one of the 7 real NPCs' own `npcChoicesUI` interactive
-follow-up menus is built (Varus, shopId 6, is the sole exception -- he has
-no real menu content to build at all, per his own confirmed array-bounds
-crash finding, M64's own entry). `IsValidShopAction`/`ShopActionCode`
-(M56) still only cover shops 0-3's own menu-choice mapping, now confirmed
-moot for Beneca/Helga specifically -- neither needed an equivalent (Beneca
-never had one; Helga's own Enchant picker turned out to need nothing more
-than a plain full-inventory list, M66's own `BuildEnchantWhatList`). No
-bug-preservation dilemma blocks any of it -- see M53's own entry for the
-corrected `Shop.reset()` finding (it genuinely runs in the real game, via
-a static initializer); the one real surviving caveat is that `reset()`
-only ever runs ONCE per app launch there, not once per New Game, so
-quest-economy state carries over across a same-session death-restart --
-not modeled by `ShopState` either way (this port has no live app-lifetime
-`Shop` instance to carry state between a
-death-restart and the next), just worth keeping in mind for whoever
-eventually adds one.
+Every NPC interaction (all 7 shops), the full M41 dispatch web, the
+in-game pause menu, and the main menu (including Help, M72) are wired and
+working. Two source-vs-port audit passes (M71/M72) came back clean beyond
+what they fixed. There's no real backlog -- what follows is one small
+loose end plus the standing deliberate divergences, kept here so nobody
+re-litigates or re-discovers them from scratch.
 
-Beyond that, M41's dispatch web is now FULLY wired -- M62 closed the last
-branch (`openInventory`), and M63 built and wired the in-game pause/
-Options menu (Stats/Inventory/Skills/Spells/Save Game/Load Game) plus a
-real Save/Load trigger against M50's `GameSave`.
+### Small loose end
 
-**RESOLVED, then WIRED (M67):** the confidence gate that used to keep
-`paintUnknown_b()`/its C++ wiring deferred is closed, and the C++ side is
-now built and live (see M67's own entry above for the full writeup).
-`Player.questShopAtPendingTile()` (was `r()`), the value `paintUnknown_b()`
-switches on, was flagged LOW CONFIDENCE because `this.ab`/`this.z`/
-`this.w` weren't cross-checked against this file's other fields. They
-turned out to be confirmable: `r()`'s two sibling methods in
-`decompiled/j.java` (`n()`/`h()`, the monster-at/chest-at-pending-tile
-lookups, sitting immediately above it) open with the exact same
-`this.g(1); if (this.ab<=0) ...` guard and are already ported using
-`pendingLevel`/`pendingTileX`/`pendingTileY` -- confirming `r()` uses the
-same three fields, not an unconfirmed alias. dawnstar's own `Player.java`
-independently corroborates: it names the identical shared-engine
-mechanic `pendingLevel`/`pendingTileX`/`pendingTileY` with full
-confidence. `src/Player.java`/`src/Shop.java` (the Java reference tree)
-updated accordingly (dropped the placeholder `stateByteAb` field, reused
-`pendingLevel` directly, both already existed on the C++ `PlayerState`
-too). `paintFlashOverlays()`, previously bundled with `paintUnknown_b()`
-in `main.cpp`'s own "deliberately NOT wired here" header comment, turned
-out to be a stale claim on ITS side too, independent of this session's
-fix -- `FlashOverlay::Paint` is already called in the real render pass
-(confirmed by reading `main.cpp` directly), just never updated in that
-comment. Fixed there now; nothing left in that "what's next" bucket.
-**Note for whoever eventually revisits
-M62's own `ui/inventory_ui.h` class comment:** the real `openInventory()`
-softlock it deliberately didn't reproduce is STILL not reproduced now
-that the pause menu exists -- `PauseMenu`'s own "Inventory" entry
-(`ui/pause_menu.cpp`) calls `InventoryUi::Open` directly too, the same
-"always build fresh" choice M62 made, rather than introducing an
-`inventoryUI`-style cache field the hotkey path could skip. This port
-simply has no equivalent construct at all, by design, not by oversight --
-so that particular real bug remains permanently out of reach here, unlike
-the M52 Continue-Game-softlock note below (which IS newly reachable as of
-M63's real Save/Load wiring). "Help" (pause-menu item 6) is now fully
-wired -- see M69's own entry above; the transcription gap M63 flagged
-turned out to be a stalled hand-copy, not a real decompiler gap, and is
-closed. M64's own
-`npcHelloUI`/`backTarget` softlock finding is now fully closed out end to
-end: M65 widened `main.cpp`'s own dismiss handling to cover Beneca and M66
-to cover Helga too (`shopId >= 0 && shopId <= 5`), each honoring
-`nextScreen`'s own intended target, the same exception M64's own entry
-first established. Following dawnstar's own later milestones roughly but
-expecting further Stormhold-specific divergences the way
-M3/M6/M7/M8/M9/M10/M12/M13/M14/M16/M17/M18/M19/M20/M21/M22/M41/M42/M43/M44/M45/M46/M47/M48/M49/M50/M51/M52/M53/M54/M55/M56/M57/M58/M59/M60/M61/M62/M63/M64/M65/M66
-already found.
+- `PlayerInventory::UseItem`'s camp-marker item (consumable, action id 87)
+  and `ShopInteraction::VarusDialogue`'s own Warp action still don't
+  refresh `player.corridorView` after warping the player, unlike
+  `PlayerMovement::CommitMove`'s own auto-camp-tile trigger (fixed in
+  M68, which had a `LevelLookup` already in scope). Both would need one
+  threaded through to close this the same way -- see
+  `player/player_inventory.h`'s own `MarkCampAndReturnToTown`/
+  `WarpToCampMark` doc comments for the exact gap.
 
-**Researched but deliberately NOT built this session: `GameCanvas.
-isNpcDialogueDue()`'s own proactive "Warden speaks" trigger
-(`run()`'s own `if (isNpcDialogueDue() && Shop.wardenVisitCount >
-player.wardenLoreStep) { ... Shop.dialogue(player, 6, -1, -1) ... }`,
-main.cpp's own comment on the `warden.ShouldVisit`/`Arrive` call site
-already flagged this as unwired, same gap M43/M49/M50's own "what's next"
-notes once carried). Investigated properly while scoping the next
-milestone, and found it's a poor fit for one, for two independent
-reasons:**
-1. **The dialogue this produces is confirmed to NEVER actually reach the
-   player.** `Shop.dialogue(player, 6, -1, -1)` (which, per
-   `ShopInteraction::VarusDialogue`'s own doc comment, ignores its
-   `action`/`extra` arguments entirely -- this is exactly Varus's own
-   greeting state machine, just invoked automatically instead of via
-   player interaction) runs, its real side effect on `player.
-   wardenLoreStep` genuinely applies, and its result text is used to
-   build a real screen (`newWardenSpeaksUI`, screenGroup 102, correctly
-   titled "Varus", no dead-write bug this time) -- but that screen is
-   only ever ASSIGNED to `this.game.rumorsUI`, never passed to
-   `showScreen()` anywhere in the file (confirmed: `rumorsUI` has exactly
-   one other reference in the whole of `GameCanvas.java`, this exact
-   assignment). screenGroup 102 even has its own real, correctly-working
-   dispatch handler (`showScreen(gameCanvas); resumeTicking();`,
-   unconditional) -- entirely moot, since nothing ever makes that screen
-   the active one. **So standing near Varus silently advances his own
-   lore-reveal state every tick once new lore is available, with the
-   player never shown the line at all** -- a genuine, confirmed dead-UI
-   bug, and a real behavioral coupling worth knowing about (a player who
-   lingers near Varus before ever pressing "interact" could find his
-   interactive greeting already "caught up," returning a repeat instead
-   of fresh lore) but not one with any screen worth building, since the
-   original itself never shows one.
-2. ~~**The gating condition itself carries a confirmed, unresolved
-   transcription gap.**~~ **RESOLVED this session:** found the actual
-   original method (`decompiled/k.java:450`, `static boolean a(j var0)`)
-   -- `Shop.isAdjacentToVarus(player)`'s transcribed `currentLevel==1
-   && adjacent-to-Varus` body is a byte-for-byte-complete match, not an
-   approximation; `player.j` is just `currentLevel` under another name
-   (confirmed via `decompiled/j.java`'s `g(int)`), already covered by the
-   `currentLevel==1` check. See `Shop.java`'s updated doc comment. Reason
-   1 above (confirmed dead code, no player-visible screen) still stands
-   on its own regardless. The OTHER trigger
-   (`isNpcDialogueDue()`'s own level-37/monster-typeIndex-41 branch,
-   presumably the final boss, given `newEndOfGameUI`'s own `Shop.
-   dialogue[7][4]` "Victory!" text) is completely unexplored by this
-   project so far, and -- since the SAME hardcoded `Shop.dialogue(player,
-   6, -1, -1)` call fires regardless of which of the two triggers fired --
-   its only real, confirmed observable effect would ALSO be silently
-   advancing Varus's own `wardenLoreStep`, an odd, likely-unintentional
-   coupling between the final boss and the Warden that would need
-   independent confirmation before treating as faithful rather than a
-   transcription artifact.
+### Deliberate divergences (working as intended, not bugs to fix)
 
-Building this now would still mean reproducing confirmed dead code with no
-player-visible behavior -- not worth a milestone on its own, even with
-reason 2 above now resolved rather than an open gap. Left here as a
-confirmed, thoroughly-researched finding, not a "what's next" action item.
-
-**Resolved by M63 (was: "heads up for whoever eventually wires a real Save
-trigger", M52's own finding):** `savegame.dat` now actually gets written,
-via the in-game pause menu's own "Save Game"/"Load Game" items
-(`ui/pause_menu.cpp`), so the confirmed real softlock M52 documented
-(`world/game_advancement.h`'s own class comment) is reachable for the
-first time in THIS PORT specifically -- a Continue Game (main menu) OR
-Load Game (pause menu, same `GameSave::Load` underneath) resumed past
-zone 0 leaves the player **completely unable to move, not even in place**
-(M52's own words), faithfully matching the original engine's own confirmed
-bug. **The conscious decision this section already called for was made,
-and the answer is: stay faithful, no exception.** This is a narrower call
-than it first looks: M52's own entry already rejected building the fix (a
-load-time zone catch-up into `GameSave::Load`) on its OWN terms, before
-Load had any real trigger at all -- reasoning it would make this port
-STRICTLY MORE correct than the shipped original ever was, "the same
-'behavioral gain, not reimplementation' trap M51's own note already warns
-future work away from." M63 doesn't reopen that decision; it just makes
-the already-accepted consequence reachable for the first time. That's a
-different situation from M62's own `openInventory` exception, which
-existed BECAUSE the necessary machinery (a pause menu) didn't exist yet --
-here the machinery (a `GameAdvancement::OpenUpTo`-equivalent) was always a
-choice, deliberately declined on principle, not blocked on anything M63
-just built. Every OTHER "not modeled"/"not fixed" note elsewhere in this
-doc likewise stays faithful, unaffected by this resolution.
+- **`openInventory()`'s real cache-skip softlock** is not reproduced --
+  every path into the inventory screen (pause menu, hotkey) always
+  builds a fresh one. This port has no `inventoryUI`-style cache field
+  for the bug to live in at all. See `ui/inventory_ui.h`'s class comment.
+- **Continue Game / Load Game resumed past zone 0** faithfully reproduces
+  the original's own confirmed movement softlock (player completely
+  unable to move) rather than "fixing" it -- a deliberate call, not an
+  oversight. See `world/game_advancement.h`'s class comment.
+- **Viewing Help before ever visiting the in-game Stats screen** does not
+  reproduce the original's own real null-target softlock there
+  (`newHelpTopicUI(topicIndex).nextScreen = this.statsUI`, which is
+  `null` until Stats has been opened at least once) -- both the
+  main-menu and pause-menu Help screens land somewhere sane instead. See
+  `ui/pause_menu.h`/`ui/menu_flow.h`'s class comments (M72).
+- **`Shop.reset()` runs once per app launch**, not once per New Game, so
+  quest-economy state (`ShopState`) carries over across a same-session
+  death-restart in the original. Not modeled either way here -- this port
+  has no live app-lifetime `Shop` instance to carry state between runs.
+- **The Warden's own proactive "Warden speaks" dialogue trigger**
+  (`GameCanvas.isNpcDialogueDue()`) is confirmed dead code in the
+  ORIGINAL game, not just unported: the screen its result gets assigned
+  to is never actually shown (confirmed by reading `GameCanvas.java`'s
+  every reference to `rumorsUI`). Its only real effect is silently
+  advancing `player.wardenLoreStep` in the background. Not worth
+  building; the player was never shown this in the shipped game either.
