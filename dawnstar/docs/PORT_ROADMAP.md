@@ -3807,3 +3807,13 @@ back), `ui/character_creation_flow.h:56` (Save/Load file I/O, done M42),
 `ui/options_menu.cpp:651` (ambush spawner, done M44), `util/text.h:40`
 (boot splash, mode 2 done M48, mode 1 is dead code in the original),
 `ui/menu_flow.h:52-54`/`menu_flow.cpp:74` (New Game's real flow, done M40).
+
+- **Display settings** (`platform/win32/display`, `ui/display_control.h`, the Settings
+  screen, launcher Fullscreen button): ported from the Oblivion port / rac-j2me-decomp.
+  The window is resizable with borderless fullscreen (F11 / Alt+Enter) and Fit or
+  Integer scaling; the 176x208 picture is never stretched (a first-person view of
+  pre-rendered sprites cannot be widened, so "resolution" is the window size, 2x..6x,
+  and wide monitors get black bars). A Settings item sits before Exit in the main
+  menu and before Quit Game in the in-game Options menu. The launcher's display row
+  gained a Fullscreen button (`fullscreen=` in launcher.cfg -> `--fullscreen` /
+  `--windowed`). `display_smoke` drives both menus against a fake display.

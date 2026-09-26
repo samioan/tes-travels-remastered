@@ -2,6 +2,8 @@
 
 #include <windows.h>
 
+#include <algorithm>
+
 namespace stormhold {
 
 namespace {
@@ -13,13 +15,18 @@ struct Rgb565BitmapInfo {
     DWORD masks[3];
 };
 
+constexpr DWORD kWindowedStyle = WS_OVERLAPPEDWINDOW;
+
 }  // namespace
 
 struct Window::Impl {
     HWND hwnd = nullptr;
-    int clientWidth = 0;
-    int clientHeight = 0;
     bool closed = false;
+    bool fullscreen = false;
+    DWORD windowedStyle = 0;
+    WINDOWPLACEMENT windowedPlacement = {sizeof(WINDOWPLACEMENT)};
+    KeyCallback onKey;
+    Scaling scaling = Scaling::Fit;
     Rgb565BitmapInfo bmi{};
 };
 
@@ -34,6 +41,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
             return 0;
         }
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            // Alt+Enter is fullscreen too (reported as F11); other Alt combos stay with the system.
+            if (msg == WM_SYSKEYDOWN && wParam == VK_RETURN) {
+                if (impl && impl->onKey && !(lParam & (1 << 30))) impl->onKey(VK_F11);
+                return 0;
+            }
+            if (msg == WM_SYSKEYDOWN && wParam != VK_F10) return DefWindowProcW(hwnd, msg, wParam, lParam);
+            if (impl && impl->onKey && !(lParam & (1 << 30))) impl->onKey(static_cast<unsigned>(wParam));
+            return 0;
+        case WM_ERASEBKGND:
+            return 1;  // Present paints everything, bars included
         case WM_CLOSE:
             if (impl) impl->closed = true;
             DestroyWindow(hwnd);
@@ -50,8 +69,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 Window::Window(int clientWidth, int clientHeight, const std::wstring& title) {
     impl_ = new Impl();
-    impl_->clientWidth = clientWidth;
-    impl_->clientHeight = clientHeight;
 
     impl_->bmi.header.biSize = sizeof(BITMAPINFOHEADER);
     impl_->bmi.header.biWidth = Backbuffer::kWidth;
@@ -75,14 +92,19 @@ Window::Window(int clientWidth, int clientHeight, const std::wstring& title) {
         classRegistered = true;
     }
 
+    // Never open bigger than the desktop's work area.
+    RECT work = {};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
     RECT rect = {0, 0, clientWidth, clientHeight};
-    DWORD style = WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX;
-    AdjustWindowRect(&rect, style, FALSE);
+    AdjustWindowRect(&rect, kWindowedStyle, FALSE);
+    int w = rect.right - rect.left, h = rect.bottom - rect.top;
+    if (work.right > work.left) {
+        w = std::min<int>(w, work.right - work.left);
+        h = std::min<int>(h, work.bottom - work.top);
+    }
 
-    impl_->hwnd = CreateWindowExW(
-        0, kClassName, title.c_str(), style, CW_USEDEFAULT, CW_USEDEFAULT,
-        rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr,
-        GetModuleHandleW(nullptr), impl_);
+    impl_->hwnd = CreateWindowExW(0, kClassName, title.c_str(), kWindowedStyle, CW_USEDEFAULT, CW_USEDEFAULT, w, h,
+                                  nullptr, nullptr, GetModuleHandleW(nullptr), impl_);
 
     ShowWindow(impl_->hwnd, SW_SHOWNORMAL);
 }
@@ -91,6 +113,8 @@ Window::~Window() {
     if (impl_->hwnd) DestroyWindow(impl_->hwnd);
     delete impl_;
 }
+
+void Window::SetKeyCallback(KeyCallback cb) { impl_->onKey = std::move(cb); }
 
 void Window::RunMessageLoop(const IdleCallback& onIdle) {
     MSG msg;
@@ -108,21 +132,86 @@ void Window::RunMessageLoop(const IdleCallback& onIdle) {
 
 void Window::RequestClose() { impl_->closed = true; }
 
+void Window::SetScaling(Scaling scaling) {
+    impl_->scaling = scaling;
+    InvalidateRect(impl_->hwnd, nullptr, TRUE);
+}
+
 void Window::Present(const Backbuffer& backbuffer) {
+    const Scaling scaling = impl_->scaling;
     HDC hdc = GetDC(impl_->hwnd);
 
     RECT client;
     GetClientRect(impl_->hwnd, &client);
-    int w = client.right - client.left;
-    int h = client.bottom - client.top;
+    const int cw = client.right - client.left;
+    const int ch = client.bottom - client.top;
+    const int sw = Backbuffer::kWidth, sh = Backbuffer::kHeight;
+
+    int w = cw, h = ch;
+    if (cw > 0 && ch > 0) {
+        if (scaling == Scaling::Integer && cw >= sw && ch >= sh) {
+            const int k = std::min(cw / sw, ch / sh);
+            w = sw * k;
+            h = sh * k;
+        } else if (static_cast<long long>(cw) * sh >= static_cast<long long>(ch) * sw) {
+            h = ch;  // pillarbox
+            w = static_cast<int>(static_cast<long long>(ch) * sw / sh);
+        } else {
+            w = cw;  // letterbox
+            h = static_cast<int>(static_cast<long long>(cw) * sh / sw);
+        }
+    }
+    const int x = (cw - w) / 2, y = (ch - h) / 2;
+
+    HBRUSH black = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    const RECT bars[4] = {{0, 0, cw, y}, {0, y + h, cw, ch}, {0, y, x, y + h}, {x + w, y, cw, y + h}};
+    for (const RECT& b : bars)
+        if (b.right > b.left && b.bottom > b.top) FillRect(hdc, &b, black);
 
     SetStretchBltMode(hdc, COLORONCOLOR);
-    StretchDIBits(
-        hdc, 0, 0, w, h, 0, 0, Backbuffer::kWidth, Backbuffer::kHeight,
-        backbuffer.Data(), reinterpret_cast<const BITMAPINFO*>(&impl_->bmi),
-        DIB_RGB_COLORS, SRCCOPY);
+    StretchDIBits(hdc, x, y, w, h, 0, 0, sw, sh, backbuffer.Data(),
+                  reinterpret_cast<const BITMAPINFO*>(&impl_->bmi), DIB_RGB_COLORS, SRCCOPY);
 
     ReleaseDC(impl_->hwnd, hdc);
+}
+
+void Window::SetFullscreen(bool on) {
+    HWND hwnd = impl_->hwnd;
+    if (on == impl_->fullscreen) return;
+    if (on) {
+        impl_->windowedStyle = static_cast<DWORD>(GetWindowLongW(hwnd, GWL_STYLE));
+        GetWindowPlacement(hwnd, &impl_->windowedPlacement);
+        MONITORINFO mi = {sizeof(mi)};
+        if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) return;
+        SetWindowLongW(hwnd, GWL_STYLE, static_cast<LONG>((impl_->windowedStyle & ~WS_OVERLAPPEDWINDOW) | WS_POPUP));
+        SetWindowPos(hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                     mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+    } else {
+        SetWindowLongW(hwnd, GWL_STYLE, static_cast<LONG>(impl_->windowedStyle ? impl_->windowedStyle : kWindowedStyle));
+        SetWindowPlacement(hwnd, &impl_->windowedPlacement);
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
+    impl_->fullscreen = on;
+    InvalidateRect(hwnd, nullptr, TRUE);
+}
+
+bool Window::IsFullscreen() const { return impl_->fullscreen; }
+
+void Window::SetClientSize(int width, int height) {
+    if (impl_->fullscreen) return;
+    RECT rect = {0, 0, width, height};
+    AdjustWindowRect(&rect, kWindowedStyle, FALSE);
+    RECT work = {};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
+    int w = rect.right - rect.left, h = rect.bottom - rect.top;
+    if (work.right > work.left) {
+        w = std::min<int>(w, work.right - work.left);
+        h = std::min<int>(h, work.bottom - work.top);
+    }
+    if (IsZoomed(impl_->hwnd)) ShowWindow(impl_->hwnd, SW_RESTORE);
+    SetWindowPos(impl_->hwnd, nullptr, 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    InvalidateRect(impl_->hwnd, nullptr, TRUE);
 }
 
 }  // namespace stormhold

@@ -119,6 +119,7 @@ add_library(dawnstar_render STATIC
   src/ui/screen.cpp
   src/ui/menu_flow.cpp
   src/ui/options_menu.cpp
+  src/ui/settings_menu.cpp
   src/ui/name_entry.cpp
   src/ui/character_creation_flow.cpp
   src/ui/loading_screen.cpp
@@ -293,6 +294,7 @@ add_executable(dawnstar_port WIN32
   src/main.cpp
   src/platform/win32/exe_dir.cpp
   src/platform/win32/window.cpp
+  src/platform/win32/display.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
 target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_death dawnstar_passive dawnstar_save dawnstar_npc)
@@ -607,5 +609,14 @@ target_link_libraries(shop_interaction_smoke PRIVATE dawnstar_npc dawnstar_inter
 # M46 milestone smoke test -- see src/tests/m46_npc_menu_smoke.cpp.
 add_executable(npc_menu_smoke src/tests/m46_npc_menu_smoke.cpp)
 target_link_libraries(npc_menu_smoke PRIVATE dawnstar_render dawnstar_npc)
+
+# Display settings: the Settings screen in the main / in-game menus, driven through
+# a fake DisplayControl (see src/tests/display_smoke.cpp).
+add_executable(display_smoke src/tests/display_smoke.cpp src/platform/win32/display.cpp src/platform/win32/window.cpp)
+target_link_libraries(display_smoke PRIVATE dawnstar_render)
+if(WIN32)
+  target_compile_definitions(display_smoke PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+  target_link_libraries(display_smoke PRIVATE user32 gdi32)
+endif()
 
 endif()  # NOT DAWNSTAR_DIST

@@ -1,9 +1,12 @@
 #pragma once
+#include <optional>
 #include <string>
 
 #include "assets/help_text.h"
 #include "graphics/backbuffer.h"
+#include "ui/display_control.h"
 #include "ui/screen.h"
+#include "ui/settings_menu.h"
 
 namespace dawnstar {
 
@@ -105,10 +108,19 @@ public:
     // load); this class only owns the resulting screen state.
     void ShowNoSavedGame();
 
+    // PC-only: adds a "Settings" item (resolution / fullscreen / scaling) between
+    // Credits and Exit. Not called by tests of the original menu, which keep the
+    // original five items.
+    void EnableSettings(DisplayControl* display);
+    // Re-reads the option values into the Settings screen (a hotkey changed one).
+    void RefreshSettings() {
+        if (settings_) settings_->Refresh();
+    }
+
     void Render(Backbuffer& bb) const;
 
 private:
-    enum class Active { MainMenu, HelpTopics, Info, QuitConfirm };
+    enum class Active { MainMenu, HelpTopics, Info, QuitConfirm, Settings };
 
     Screen& ActiveScreen();
     const Screen& ActiveScreen() const;
@@ -136,6 +148,7 @@ private:
     Screen helpTopics_;
     Screen info_;
     Screen quitConfirm_;
+    std::optional<SettingsMenu> settings_;  // engaged by EnableSettings
 };
 
 }  // namespace dawnstar

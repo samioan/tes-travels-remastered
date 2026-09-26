@@ -10,6 +10,7 @@
 #include "dungeon/dungeon_runtime.h"
 #include "graphics/backbuffer.h"
 #include "player/player_state.h"
+#include "ui/display_control.h"
 #include "ui/inventory_ui.h"
 #include "world/shop_state.h"
 #include "world/warden.h"
@@ -153,6 +154,7 @@ enum class PauseScreen : uint8_t {
     Credits,
     Help,
     HelpTopic,
+    Settings,
 };
 
 // What `PauseMenu::Confirm` just did, so `main.cpp` can run the same
@@ -183,6 +185,10 @@ struct PauseMenuState {
     // index into the fixed 12-topic table, NOT a `ShopDialogue` row --
     // see pause_menu.cpp's own `kHelpTitleRow`/`kHelpBodyRows`).
     int helpTopicIndex = -1;
+
+    // PC-only Settings screen (resolution / fullscreen / scaling), an Options item before
+    // Quit Game: set by main.cpp; null keeps the original eight items.
+    DisplayControl* display = nullptr;
 };
 
 class PauseMenu {

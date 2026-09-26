@@ -40,6 +40,20 @@ Everything you add is copied into this folder, so you can delete or move
 your original download afterwards and nothing breaks.
 
 
+DISPLAY SETTINGS
+----------------
+
+Pick a window size (2x-4x) or Fullscreen (borderless) in the launcher. In the
+game, Settings is in the main menu and in the in-game Options menu:
+  Resolution   window size, 2x..6x the native 176x208 picture
+  Display      Fullscreen (borderless) or Windowed  (F11 / Alt+Enter too)
+  Scaling      Fit (any size) or Integer (whole multiples: crisp pixels)
+The game is a fixed 176x208 picture, so a widescreen monitor shows it centred
+with black bars rather than stretched. The window can be resized freely. The
+launcher's choice applies at every start; changes made in the game last for
+that session (the scaling mode is remembered).
+
+
 CONTROLS
 --------
 

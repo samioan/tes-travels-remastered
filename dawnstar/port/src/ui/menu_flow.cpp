@@ -51,6 +51,8 @@ Screen& MenuFlow::ActiveScreen() {
             return info_;
         case Active::QuitConfirm:
             return quitConfirm_;
+        case Active::Settings:
+            return settings_->screen();
     }
     return mainMenu_;
 }
@@ -61,13 +63,30 @@ void MenuFlow::OnUp() { ActiveScreen().MoveSelectionUp(); }
 
 void MenuFlow::OnDown() { ActiveScreen().MoveSelectionDown(); }
 
+void MenuFlow::EnableSettings(DisplayControl* display) {
+    settings_.emplace(display);
+    mainMenu_.SetupList("Main Menu", {"New Game", "Continue Game", "Help", "Credits", "Settings", "Exit"}, false);
+}
+
 MenuFlowAction MenuFlow::OnSelect() {
     switch (active_) {
+        case Active::Settings:
+            if (settings_->OnSelect()) active_ = Active::MainMenu;
+            return MenuFlowAction::None;
         case Active::MainMenu: {
             // ESGame's own secondaryParam==2 branch (see this class's
             // own header doc comment on why `.mode` would have been the
             // WRONG field to key this on).
-            switch (mainMenu_.SelectedIndexOrMinusOne()) {
+            int choice = mainMenu_.SelectedIndexOrMinusOne();
+            if (settings_) {  // PC-only item at index 4 pushes Exit to 5
+                if (choice == 4) {
+                    settings_->Refresh();
+                    active_ = Active::Settings;
+                    return MenuFlowAction::None;
+                }
+                if (choice == 5) choice = 4;
+            }
+            switch (choice) {
                 case 0:  // "New Game" -- see this class's own header
                          // doc comment: main.cpp hands this off to M40's
                          // own real CharacterCreationFlow, not modeled
@@ -136,6 +155,9 @@ MenuFlowAction MenuFlow::OnSelect() {
 
 void MenuFlow::OnCancel() {
     switch (active_) {
+        case Active::Settings:
+            active_ = Active::MainMenu;
+            return;
         case Active::HelpTopics:
             // The top-level `if (var1 == cancelCommand && uic.backTarget
             // != null) { setCurrentDisplay(uic.backTarget); return; }`

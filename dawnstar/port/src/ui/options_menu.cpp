@@ -186,8 +186,18 @@ OptionsMenu::OptionsMenu(HelpText helpText, ShopDialogue shopDialogue)
     noSavedGame_.SetupMessage("Unavailable", "No game is available for loading. Press OK to return to main menu.");
 }
 
+void OptionsMenu::EnableSettings(DisplayControl* display) {
+    settings_.emplace(display);
+    options_.SetupList("Options",
+                       {"Stats", "Inventory", "Clue Log", "Skills", "Spells", "Save Game", "Load Game", "Help",
+                        "Reveal Traitor", "Settings", "Quit Game"},
+                       false);
+}
+
 Screen& OptionsMenu::ActiveScreen() {
     switch (active_) {
+        case Active::Settings:
+            return settings_->screen();
         case Active::Options:
             return options_;
         case Active::ClueLog:
@@ -325,9 +335,21 @@ OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData
                                         const SpellDatabase& spells, std::vector<GeneratedLevel>& levels,
                                         WorldRegistry& world, int16_t& nextItemSpawnId) {
     switch (active_) {
+        case Active::Settings:
+            if (settings_->OnSelect()) active_ = Active::Options;
+            return OptionsMenuAction::None;
         case Active::Options: {
             // secondaryParam==31's own Select branch.
-            switch (options_.SelectedIndexOrMinusOne()) {
+            int choice = options_.SelectedIndexOrMinusOne();
+            if (settings_) {  // PC-only item at index 9 pushes Quit Game to 10
+                if (choice == 9) {
+                    settings_->Refresh();
+                    active_ = Active::Settings;
+                    return OptionsMenuAction::None;
+                }
+                if (choice == 10) choice = 9;
+            }
+            switch (choice) {
                 case 0:  // "Stats": secondaryParam 32.
                     info_.SetupMessage("Stats", BuildCharacterSheet(player, charData));
                     infoBackTarget_ = Active::Options;
@@ -666,6 +688,9 @@ OptionsMenuAction OptionsMenu::OnSelect(PlayerState& player, const CharacterData
 
 OptionsMenuAction OptionsMenu::OnCancel() {
     switch (active_) {
+        case Active::Settings:
+            active_ = Active::Options;
+            return OptionsMenuAction::None;
         case Active::Options:
             // `else if (var1 == backCommand) { this.setCurrentDisplay(
             // this.gameCanvas); }` -- the one real way out of this whole

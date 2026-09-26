@@ -9,6 +9,7 @@
 #include "graphics/backbuffer.h"
 #include "player/game_save.h"
 #include "player/player_state.h"
+#include "ui/display_control.h"
 
 namespace stormhold {
 
@@ -67,6 +68,7 @@ enum class MenuScreen {
     // (screenGroup 206) -- see this file's own class comment.
     Help,
     HelpTopic,
+    Settings,
     Welcome,
     Intro,
     // Hand-off point: main.cpp's own live tick/render loop takes over
@@ -106,6 +108,9 @@ struct MenuFlowState {
     // index into `HelpTopics` (assets/help_topics.h), not a `ShopDialogue`
     // row. Mirrors `PauseMenuState::helpTopicIndex`.
     int helpTopicIndex = -1;
+    // PC-only Settings screen (resolution / fullscreen / scaling): set by main.cpp; null keeps
+    // the original five main-menu items (and is what every original-menu test uses).
+    DisplayControl* display = nullptr;
 };
 
 class MenuFlow {

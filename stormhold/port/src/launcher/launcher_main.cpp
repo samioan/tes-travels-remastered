@@ -94,6 +94,7 @@ constexpr int kRow2Button = 88;
 constexpr int kRow3Caption = 142;
 constexpr int kScaleY = 162;
 constexpr int kScaleWidth = 44;
+constexpr int kFullscreenWidth = 104;
 constexpr int kScaleHeight = 28;
 constexpr int kPlayY = 140;
 constexpr int kPlayHeight = 44;
@@ -106,7 +107,7 @@ enum ControlId : int {
     IDC_PLAY = 1002,
     IDC_UPDATE = 1003,
     IDC_CHOOSE_FONT = 1004,
-    IDC_SCALE_FIRST = 1010,  // +0 => 2x, +1 => 3x, +2 => 4x
+    IDC_SCALE_FIRST = 1010,  // +0 => 2x, +1 => 3x, +2 => 4x windowed, +3 => fullscreen
 };
 
 constexpr int kScaleChoices[] = {2, 3, 4};
@@ -245,7 +246,7 @@ struct Impl {
     Button chooseFont;
     Button play;
     Button update;
-    Button scale[3];
+    Button scale[4];  // 2x, 3x, 4x windowed, and borderless fullscreen
 
     UpdateState updateState = UpdateState::Checking;
     stormhold::launcher::ReleaseInfo availableRelease;
@@ -367,8 +368,9 @@ void Refresh(Impl& impl) {
     EnableWindow(impl.play.hwnd, impl.dataOk && !busy);
     EnableWindow(impl.chooseData.hwnd, !busy);
     EnableWindow(impl.chooseFont.hwnd, !busy);
-    for (int i = 0; i < 3; ++i) {
-        impl.scale[i].style.selected = kScaleChoices[i] == impl.config.scale;
+    for (int i = 0; i < 4; ++i) {
+        impl.scale[i].style.selected = i == 3 ? impl.config.fullscreen
+                                              : (!impl.config.fullscreen && kScaleChoices[i] == impl.config.scale);
         EnableWindow(impl.scale[i].hwnd, !busy);
     }
 
@@ -585,6 +587,9 @@ void Play(Impl& impl) {
     // quoted because both routinely contain spaces.
     std::wstring command = L"\"" + Widen(exe) + L"\" \"" + Widen(impl.dataPath) + L"\"";
     if (impl.fontOk) command += L" \"" + Widen(impl.fontPath) + L"\"";
+    // Borderless fullscreen or a window of the chosen size; either way the in-game
+    // Settings menu (and F11) can change it for the session.
+    command += impl.config.fullscreen ? L" --fullscreen" : L" --windowed";
 
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
@@ -781,7 +786,7 @@ void PaintWindow(Impl& impl, HDC target) {
 
     // Row 3 -- the window size.
     DrawTextLine(dc, impl.captionFont, kCaption, margin, impl.P(kRow3Caption), impl.S(400),
-                 impl.S(18), L"WINDOW SIZE");
+                 impl.S(18), L"DISPLAY   ·   WINDOWED SIZE OR FULLSCREEN");
 
     // The status line, and the version in the corner.
     if (!impl.status.empty()) {
@@ -895,10 +900,10 @@ void CreateControls(Impl& impl) {
     MakeButton(impl, impl.update, L"Update", IDC_UPDATE, buttonX, impl.P(kUpdateY),
                kButtonWidth, kButtonHeight, ButtonStyle{});
     ShowWindow(impl.update.hwnd, SW_HIDE);  // only shown when one exists
-    for (int i = 0; i < 3; ++i) {
-        const std::wstring caption = std::to_wstring(kScaleChoices[i]) + L"×";
+    for (int i = 0; i < 4; ++i) {
+        const std::wstring caption = i == 3 ? std::wstring(L"Fullscreen") : std::to_wstring(kScaleChoices[i]) + L"×";
         MakeButton(impl, impl.scale[i], caption.c_str(), IDC_SCALE_FIRST + i,
-                   impl.S(kMargin + i * (kScaleWidth + 8)), impl.P(kScaleY), kScaleWidth,
+                   impl.S(kMargin + i * (kScaleWidth + 8)), impl.P(kScaleY), i == 3 ? kFullscreenWidth : kScaleWidth,
                    kScaleHeight, ButtonStyle{});
     }
 }
@@ -932,7 +937,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 case IDC_UPDATE: button = &impl->update; break;
                 default:
                     if (static_cast<int>(wParam) >= IDC_SCALE_FIRST &&
-                        static_cast<int>(wParam) < IDC_SCALE_FIRST + 3) {
+                        static_cast<int>(wParam) < IDC_SCALE_FIRST + 4) {
                         button = &impl->scale[static_cast<int>(wParam) - IDC_SCALE_FIRST];
                     }
                     break;
@@ -957,8 +962,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
                                      L". Please don't close this window.",
                           kCaption);
                 StartInstall(hwnd, impl->installRoot, impl->availableRelease);
-            } else if (id >= IDC_SCALE_FIRST && id < IDC_SCALE_FIRST + 3) {
-                impl->config.scale = kScaleChoices[id - IDC_SCALE_FIRST];
+            } else if (id >= IDC_SCALE_FIRST && id < IDC_SCALE_FIRST + 4) {
+                if (id == IDC_SCALE_FIRST + 3) {
+                    impl->config.fullscreen = true;
+                } else {
+                    impl->config.fullscreen = false;
+                    impl->config.scale = kScaleChoices[id - IDC_SCALE_FIRST];
+                }
                 Save(*impl);
                 Refresh(*impl);
             }

@@ -5365,3 +5365,13 @@ scratch.
   every reference to `rumorsUI`). Its only real effect is silently
   advancing `player.wardenLoreStep` in the background. Not worth
   building; the player was never shown this in the shipped game either.
+
+- **Display settings** (`platform/win32/display`, `ui/display_control.h`, the Settings
+  screen, launcher Fullscreen button): ported from the Oblivion port / rac-j2me-decomp.
+  The window is resizable with borderless fullscreen (F11 / Alt+Enter) and Fit or
+  Integer scaling; the 176x208 picture is never stretched (a first-person view of
+  pre-rendered sprites cannot be widened, so "resolution" is the window size, 2x..6x,
+  and wide monitors get black bars). A Settings item sits before Exit in the main
+  menu and before Quit Game in the in-game Options menu. The launcher's display row
+  gained a Fullscreen button (`fullscreen=` in launcher.cfg -> `--fullscreen` /
+  `--windowed`). `display_smoke` drives both menus against a fake display.

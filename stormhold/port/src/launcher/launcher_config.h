@@ -34,6 +34,10 @@ struct LauncherConfig {
     // before this milestone, which stays the default.
     int scale = 2;
 
+    // Borderless fullscreen instead of a window (passed to the game as --fullscreen /
+    // --windowed; its Settings menu and F11 can still change it for the session).
+    bool fullscreen = false;
+
     static constexpr int kMinScale = 1;
     static constexpr int kMaxScale = 8;
 

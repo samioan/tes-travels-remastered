@@ -56,13 +56,23 @@ const std::string kCreditsText =
 
 bool IsListScreen(MenuScreen s) {
     return s == MenuScreen::MainMenu || s == MenuScreen::ClassSelect || s == MenuScreen::ClassConfirm ||
-           s == MenuScreen::Help;
+           s == MenuScreen::Help || s == MenuScreen::Settings;
 }
 
-int ListItemCount(MenuScreen s, const CharacterData& charData) {
+std::vector<std::string> MainMenuItems(const MenuFlowState& state) {
+    std::vector<std::string> items = {"New Game", "Continue Game", "Help", "Credits"};
+    if (state.display) items.push_back("Settings");  // PC-only, between Credits and Exit
+    items.push_back("Exit");
+    return items;
+}
+
+int ListItemCount(const MenuFlowState& state, const CharacterData& charData) {
+    const MenuScreen s = state.screen;
     switch (s) {
+        case MenuScreen::Settings:
+            return static_cast<int>(SettingsRows(state.display).size());
         case MenuScreen::MainMenu:
-            return 5;
+            return state.display ? 6 : 5;
         case MenuScreen::ClassSelect:
             return charData.ClassCount();
         case MenuScreen::ClassConfirm:
@@ -181,7 +191,7 @@ void PaintMessage(Backbuffer& bb, const std::string& title, const std::string& b
 
 void MenuFlow::MoveSelection(MenuFlowState& state, int delta, const CharacterData& charData) {
     if (IsListScreen(state.screen)) {
-        int count = ListItemCount(state.screen, charData);
+        int count = ListItemCount(state, charData);
         state.selectedIndex = std::max(0, std::min(state.selectedIndex + delta, count - 1));
     } else {
         // Message-shaped screens: up/down scrolls instead of selecting --
@@ -194,8 +204,24 @@ void MenuFlow::MoveSelection(MenuFlowState& state, int delta, const CharacterDat
 void MenuFlow::Confirm(MenuFlowState& state, const CharacterData& charData, const ItemDatabase& items,
                         const std::string& savePath) {
     switch (state.screen) {
-        case MenuScreen::MainMenu:
-            switch (state.selectedIndex) {
+        case MenuScreen::Settings:
+            if (ApplySettingsRow(state.display, state.selectedIndex)) {  // Back
+                state.screen = MenuScreen::MainMenu;
+                state.selectedIndex = 4;  // the Settings item
+            }
+            break;
+
+        case MenuScreen::MainMenu: {
+            int choice = state.selectedIndex;
+            if (state.display) {
+                if (choice == 4) {  // Settings
+                    state.screen = MenuScreen::Settings;
+                    state.selectedIndex = 0;
+                    break;
+                }
+                if (choice == 5) choice = 4;  // Exit moved down one
+            }
+            switch (choice) {
                 case 0:  // New Game
                     state.screen = MenuScreen::ClassSelect;
                     state.selectedIndex = state.chosenClassIndex;
@@ -225,6 +251,7 @@ void MenuFlow::Confirm(MenuFlowState& state, const CharacterData& charData, cons
                     break;
             }
             break;
+        }
 
         case MenuScreen::ClassSelect:
             state.chosenClassIndex = state.selectedIndex;
@@ -333,6 +360,11 @@ void MenuFlow::Cancel(MenuFlowState& state) {
             state.selectedIndex = 0;
             break;
 
+        case MenuScreen::Settings:
+            state.screen = MenuScreen::MainMenu;
+            state.selectedIndex = 4;  // the Settings item
+            break;
+
         case MenuScreen::NoSavedGame:
         case MenuScreen::Credits:
         case MenuScreen::Help:
@@ -366,8 +398,7 @@ void MenuFlow::Render(Backbuffer& bb, const MenuFlowState& state, const Characte
                        const ShopDialogue& dialogue) {
     switch (state.screen) {
         case MenuScreen::MainMenu: {
-            std::vector<std::string> items = {"New Game", "Continue Game", "Help", "Credits", "Exit"};
-            PaintList(bb, "Main Menu", {}, items, state.selectedIndex);
+            PaintList(bb, "Main Menu", {}, MainMenuItems(state), state.selectedIndex);
             PaintBottomBar(bb, "", "Select");
             break;
         }
@@ -417,6 +448,10 @@ void MenuFlow::Render(Backbuffer& bb, const MenuFlowState& state, const Characte
         case MenuScreen::Credits:
             PaintMessage(bb, "Credits", kCreditsText, state.selectedIndex);
             PaintBottomBar(bb, "", "Ok");
+            break;
+        case MenuScreen::Settings:
+            PaintList(bb, "Settings", {}, SettingsRows(state.display), state.selectedIndex);
+            PaintBottomBar(bb, "Cancel", "Select");
             break;
         case MenuScreen::Help:
             PaintList(bb, "Help", {}, HelpTopics::Titles(dialogue), state.selectedIndex);

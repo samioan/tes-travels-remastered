@@ -69,6 +69,7 @@ extern wchar_t** __wargv;
 #include "npc/shop_interaction.h"
 #include "passive/passive_tick.h"
 #include "platform/win32/exe_dir.h"
+#include "platform/win32/display.h"
 #include "platform/win32/window.h"
 #include "player/player_combat_stats.h"
 #include "player/player_creation.h"
@@ -153,8 +154,16 @@ std::string ResolveAssetRoot() {
 // dev build looks in port/assets/fonts/ (gitignored: Nokia firmware, never
 // committed), next to the build/ directory the exe runs from. Either way a
 // missing file is fine -- graphics/bitmap_font.h falls back to its stand-in.
+// --fullscreen / --windowed (the launcher's display choice) may follow the
+// positional arguments; anything starting with "--" is a flag, not a path.
+bool HasFlag(const wchar_t* flag) {
+    for (int i = 1; i < __argc; i++)
+        if (__wargv && __wargv[i] && !wcscmp(__wargv[i], flag)) return true;
+    return false;
+}
+
 std::string ResolveFontPath() {
-    if (__argc > 2 && __wargv && __wargv[2] && __wargv[2][0] != L'\0') {
+    if (__argc > 2 && __wargv && __wargv[2] && __wargv[2][0] != L'\0' && wcsncmp(__wargv[2], L"--", 2) != 0) {
         return NarrowArg(__wargv[2]);
     }
     return (std::filesystem::path(dawnstar::ExecutableDirectory()) / ".." / "assets" / "fonts" / "Ceurope.gdr")
@@ -207,6 +216,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     const int scale = ResolveScale();
     dawnstar::Window window(dawnstar::Backbuffer::kWidth * scale, dawnstar::Backbuffer::kHeight * scale,
                              L"Dawnstar Port");
+    // PC-only display settings (Settings screen, F11 / Alt+Enter). The launcher's own
+    // choices -- window size and fullscreen -- win at every start; the scaling mode is
+    // remembered in display.cfg.
+    dawnstar::Display display(userDir.empty() ? std::string()
+                                              : (std::filesystem::path(userDir) / "display.cfg").string());
+    if (GetEnvironmentVariableA("DAWNSTAR_SCALE", nullptr, 0) > 0) display.settings().scale = std::max(dawnstar::Display::kMinScale, std::min(dawnstar::Display::kMaxScale, scale));
+    if (HasFlag(L"--fullscreen")) display.settings().fullscreen = true;
+    else if (HasFlag(L"--windowed")) display.settings().fullscreen = false;
+    display.Attach(&window);
+    bool toggleFullscreenRequested = false;
+    window.SetKeyCallback([&](unsigned vk) {
+        if (vk == VK_F11) toggleFullscreenRequested = true;
+    });
     dawnstar::Backbuffer backbuffer;
     dawnstar::MinimapSurface minimap;
     dawnstar::MessagePopupState messagePopup;
@@ -537,6 +559,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // Game" is actually selected, not unconditionally at startup
         // like M20's own original simplification.
         dawnstar::MenuFlow menuFlow(helpText);
+        menuFlow.EnableSettings(&display);
         // M39: the real in-game options menu -- constructed here (not
         // lazily once a game starts) since HelpText/ShopDialogue are
         // both already loaded and it needs nothing else at construction
@@ -545,6 +568,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // Passed BY VALUE (copied, not moved) below, same convention
         // `menuFlow`'s own HelpText parameter already uses.
         dawnstar::OptionsMenu optionsMenu(helpText, shopDialogue);
+        optionsMenu.EnableSettings(&display);
         // M40: the real class-selection/name-entry character-creation
         // flow -- "New Game" now leads here instead of immediately
         // constructing M20's own fixed class-0 stand-in character (see
@@ -557,6 +581,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::BootSplash bootSplash = dawnstar::BootSplash::Load(root, imageArchive);
 
         window.RunMessageLoop([&] {
+            if (toggleFullscreenRequested) {  // F11 / Alt+Enter
+                toggleFullscreenRequested = false;
+                display.ToggleFullscreen();
+                menuFlow.RefreshSettings();
+                optionsMenu.RefreshSettings();
+            }
             if (inSplash) {
                 const int64_t now = static_cast<int64_t>(GetTickCount64());
                 if (splashStartMs < 0) splashStartMs = now;

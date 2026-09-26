@@ -49,6 +49,8 @@ bool LoadLauncherConfig(const std::string& path, LauncherConfig& out) {
             out.gameData = value;
         } else if (key == "font") {
             out.font = value;
+        } else if (key == "fullscreen") {
+            out.fullscreen = value == "1" || value == "true";
         } else if (key == "scale") {
             // A garbage or out-of-range scale keeps the default rather than
             // opening a 1-pixel or 20000-pixel window.
@@ -73,7 +75,8 @@ bool SaveLauncherConfig(const std::string& path, const LauncherConfig& config) {
          << "# Rewritten by the launcher; hand-edits to known keys are kept.\n"
          << "gameData=" << ToForwardSlashes(config.gameData) << "\n"
          << "font=" << ToForwardSlashes(config.font) << "\n"
-         << "scale=" << config.scale << "\n";
+         << "scale=" << config.scale << "\n"
+         << "fullscreen=" << (config.fullscreen ? 1 : 0) << "\n";
     return static_cast<bool>(file);
 }
 

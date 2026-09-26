@@ -198,6 +198,7 @@ add_executable(stormhold_port WIN32
   src/main.cpp
   src/platform/win32/exe_dir.cpp
   src/platform/win32/window.cpp
+  src/platform/win32/display.cpp
 )
 target_include_directories(stormhold_port PRIVATE src)
 target_compile_definitions(stormhold_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -530,5 +531,14 @@ target_link_libraries(paint_unknown_b_smoke PRIVATE stormhold_render)
 # M73 milestone smoke test -- see src/tests/m73_boot_splash_smoke.cpp.
 add_executable(boot_splash_smoke src/tests/m73_boot_splash_smoke.cpp)
 target_link_libraries(boot_splash_smoke PRIVATE stormhold_render)
+
+# Display settings: the Settings screen in the main / pause menus, driven through
+# a fake DisplayControl (see src/tests/display_smoke.cpp).
+add_executable(display_smoke src/tests/display_smoke.cpp src/platform/win32/display.cpp src/platform/win32/window.cpp)
+target_link_libraries(display_smoke PRIVATE stormhold_render stormhold_player stormhold_combat)
+if(WIN32)
+  target_compile_definitions(display_smoke PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+  target_link_libraries(display_smoke PRIVATE user32 gdi32)
+endif()
 
 endif()  # NOT STORMHOLD_DIST

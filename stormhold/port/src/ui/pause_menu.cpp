@@ -38,6 +38,13 @@ constexpr int kMargin = 8;
 const std::vector<std::string> kOptionsItems = {"Stats",     "Inventory", "Skills", "Spells",
                                                  "Save Game", "Load Game", "Help",   "Quit Game"};
 
+// With the PC-only Settings item (index 7) pushing Quit Game to index 8.
+std::vector<std::string> OptionsItems(const PauseMenuState& state) {
+    std::vector<std::string> items = kOptionsItems;
+    if (state.display) items.insert(items.end() - 1, "Settings");
+    return items;
+}
+
 // ESGame.creditsText() verbatim, including its own real "Studos" typo --
 // preserved exactly, not "corrected" (see this file's own header comment
 // for why this is a DIFFERENT string than ui/menu_flow.cpp's own
@@ -180,7 +187,10 @@ void PauseMenu::MoveSelection(PauseMenuState& state, int delta, const PlayerStat
     int count = 0;
     switch (state.screen) {
         case PauseScreen::Options:
-            count = static_cast<int>(kOptionsItems.size());
+            count = static_cast<int>(OptionsItems(state).size());
+            break;
+        case PauseScreen::Settings:
+            count = static_cast<int>(SettingsRows(state.display).size());
             break;
         case PauseScreen::Skills:
             // A fresh CharacterData isn't threaded through here just to
@@ -223,6 +233,14 @@ PauseMenuAction PauseMenu::Confirm(PauseMenuState& state, PlayerState& p, const 
         return PauseMenuAction::None;
     }
 
+    if (state.screen == PauseScreen::Settings) {
+        if (ApplySettingsRow(state.display, state.selectedIndex)) {  // Back
+            state.screen = PauseScreen::Options;
+            state.selectedIndex = 7;  // the Settings item
+        }
+        return PauseMenuAction::None;
+    }
+
     if (state.screen == PauseScreen::Skills) {
         int skillIndex = PlayerLeveling::NthLearnedSkillIndex(p, state.selectedIndex);
         if (skillIndex < 0) return PauseMenuAction::None;
@@ -259,7 +277,16 @@ PauseMenuAction PauseMenu::Confirm(PauseMenuState& state, PlayerState& p, const 
     }
 
     // Options: dispatch by row, matching screenGroup 31's own switch.
-    switch (state.selectedIndex) {
+    int row = state.selectedIndex;
+    if (state.display) {
+        if (row == 7) {  // PC-only Settings item
+            state.screen = PauseScreen::Settings;
+            state.selectedIndex = 0;
+            return PauseMenuAction::None;
+        }
+        if (row == 8) row = 7;  // Quit Game moved down one
+    }
+    switch (row) {
         case 0:  // Stats
             state.screen = PauseScreen::Stats;
             state.selectedIndex = 0;
@@ -308,6 +335,11 @@ PauseMenuAction PauseMenu::Confirm(PauseMenuState& state, PlayerState& p, const 
 
 void PauseMenu::Cancel(PauseMenuState& state) {
     if (!state.active) return;
+    if (state.screen == PauseScreen::Settings) {
+        state.screen = PauseScreen::Options;
+        state.selectedIndex = 7;  // the Settings item
+        return;
+    }
     if (state.screen == PauseScreen::Options) {
         state.active = false;
         return;
@@ -319,7 +351,11 @@ void PauseMenu::Render(Backbuffer& bb, const PauseMenuState& state, const Player
                         const SpellDatabase& spells, const ShopDialogue& dialogue) {
     switch (state.screen) {
         case PauseScreen::Options:
-            PaintList(bb, "Options", {}, kOptionsItems, state.selectedIndex);
+            PaintList(bb, "Options", {}, OptionsItems(state), state.selectedIndex);
+            PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
+            return;
+        case PauseScreen::Settings:
+            PaintList(bb, "Settings", {}, SettingsRows(state.display), state.selectedIndex);
             PaintBottomBar(bb, "Enter: Ok", "Esc: Back");
             return;
         case PauseScreen::Stats:

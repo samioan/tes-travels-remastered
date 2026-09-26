@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -10,7 +11,9 @@
 #include "dungeon/dungeon_runtime.h"
 #include "graphics/backbuffer.h"
 #include "player/player_state.h"
+#include "ui/display_control.h"
 #include "ui/screen.h"
+#include "ui/settings_menu.h"
 #include "world/dungeon_generator.h"
 
 namespace dawnstar {
@@ -146,6 +149,13 @@ public:
                                const SpellDatabase& spells, std::vector<GeneratedLevel>& levels, WorldRegistry& world,
                                int16_t& nextItemSpawnId);
 
+    // PC-only: adds a "Settings" item (resolution / fullscreen / scaling) before
+    // "Quit Game". Tests of the original menu never call this.
+    void EnableSettings(DisplayControl* display);
+    void RefreshSettings() {
+        if (settings_) settings_->Refresh();
+    }
+
     // The real Cancel/Back command (both map to this port's own single
     // "back" key -- same simplification MenuFlow::OnCancel already
     // makes, see its own doc comment).
@@ -212,6 +222,7 @@ public:
 private:
     enum class Active {
         Options,
+        Settings,
         ClueLog,
         Help,
         Info,
@@ -263,6 +274,7 @@ private:
     HelpText helpText_;
     ShopDialogue shopDialogue_;
     Screen options_;
+    std::optional<SettingsMenu> settings_;  // engaged by EnableSettings
     Screen clueLog_;
     Screen helpTopics_;
     Screen info_;

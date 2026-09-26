@@ -224,6 +224,7 @@
 #include "graphics/bitmap_font.h"
 #include "platform/win32/exe_dir.h"
 #include "monster/monster_runtime.h"
+#include "platform/win32/display.h"
 #include "platform/win32/window.h"
 #include "player/camp_state.h"
 #include "player/death_sequence.h"
@@ -282,8 +283,16 @@ std::string ResolveAssetRoot() {
 // dev build looks in port/assets/fonts/ (gitignored: Nokia firmware, never
 // committed), next to the build/ directory the exe runs from. Either way a
 // missing file is fine -- graphics/bitmap_font.h falls back to its stand-in.
+// --fullscreen / --windowed (the launcher's display choice) may follow the
+// positional arguments; anything starting with "--" is a flag, not a path.
+bool HasFlag(const wchar_t* flag) {
+    for (int i = 1; i < __argc; i++)
+        if (__wargv && __wargv[i] && !wcscmp(__wargv[i], flag)) return true;
+    return false;
+}
+
 std::string ResolveFontPath() {
-    if (__argc > 2 && __wargv && __wargv[2] && __wargv[2][0] != L'\0') {
+    if (__argc > 2 && __wargv && __wargv[2] && __wargv[2][0] != L'\0' && wcsncmp(__wargv[2], L"--", 2) != 0) {
         int size = WideCharToMultiByte(CP_UTF8, 0, __wargv[2], -1, nullptr, 0, nullptr, nullptr);
         std::string narrow(static_cast<size_t>(size - 1), '\0');
         WideCharToMultiByte(CP_UTF8, 0, __wargv[2], -1, narrow.data(), size, nullptr, nullptr);
@@ -494,6 +503,31 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
 
     stormhold::Window window(stormhold::Backbuffer::kWidth * scale, stormhold::Backbuffer::kHeight * scale,
                               L"Stormhold Port");
+    // PC-only display settings (Settings screen in the main / pause menus, F11 /
+    // Alt+Enter). The launcher's own choices -- window size and fullscreen -- win at
+    // every start; the scaling mode is remembered in display.cfg.
+    const std::string displayUserDir = [] {
+        char* value = nullptr;
+        size_t size = 0;
+        std::string dir;
+        if (_dupenv_s(&value, &size, "STORMHOLD_USER_DIR") == 0 && value) dir = value;
+        free(value);
+        return dir;
+    }();
+    stormhold::Display display(displayUserDir.empty()
+                                   ? std::string()
+                                   : (std::filesystem::path(displayUserDir) / "display.cfg").string());
+    if (GetEnvironmentVariableA("STORMHOLD_SCALE", nullptr, 0) > 0)
+        display.settings().scale =
+            std::max(stormhold::Display::kMinScale, std::min(stormhold::Display::kMaxScale, scale));
+    if (HasFlag(L"--fullscreen")) display.settings().fullscreen = true;
+    else if (HasFlag(L"--windowed")) display.settings().fullscreen = false;
+    display.Attach(&window);
+    bool toggleFullscreenRequested = false;
+    window.SetKeyCallback([&](unsigned vk) {
+        if (vk == VK_F11) toggleFullscreenRequested = true;
+    });
+    menuState.display = &display;
     stormhold::GameClock clock;
     stormhold::Backbuffer backbuffer;
 
@@ -546,6 +580,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // original" finding this deliberately does NOT reproduce, and for the
     // separate confirmed "Quit Game" credits-screen bug this DOES.
     stormhold::PauseMenuState pauseMenu;
+    pauseMenu.display = &display;
     // ESGame.newLevelUpUI(step)/screenGroup 39 -- opened the tick
     // PlayerLeveling::TryRankUpSkills returns true, see ui/level_up_menu.h.
     stormhold::LevelUpMenuState levelUpMenu;
@@ -606,6 +641,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         shop = stormhold::ShopState{};
         player = stormhold::PlayerState{};
         menuState = stormhold::MenuFlowState{};
+        menuState.display = &display;
         gameStarted = false;
         camp = stormhold::CampState{};
         death = stormhold::DeathState{};
@@ -614,6 +650,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         npcChoicesMenu = stormhold::NpcChoicesMenuState{};
         inventoryUi = stormhold::InventoryUiState{};
         pauseMenu = stormhold::PauseMenuState{};
+        pauseMenu.display = &display;
         levelUpMenu = stormhold::LevelUpMenuState{};
         endOfGameScreen = stormhold::NpcDialogueState{};
         targetMonster = std::nullopt;
@@ -626,6 +663,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     };
 
     window.RunMessageLoop([&]() {
+        if (toggleFullscreenRequested) {  // F11 / Alt+Enter
+            toggleFullscreenRequested = false;
+            display.ToggleFullscreen();
+        }
         // Port-only diagnostic wrapper, no original counterpart -- added
         // this session after a real crash (M67's `RenderUnknownB`, fixed
         // above) reached the user with zero information beyond "the game
