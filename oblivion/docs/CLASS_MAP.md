@@ -63,16 +63,12 @@ Confirmed pieces (method line numbers from `decompiled/b.java`):
   byte[] b`) -- this is what both `e.a(String)` (`.scr` loader) and
   `g.a(String)` (`.cml` loader) call to get raw file bytes. 6144 is a hard
   cap (no resize), consistent with every `.scr`/`.cml` file being small.
-- **`.jtm` tile-layer loader**, inside `b(String) throws Exception` (723):
-  **format confirmed**, see updated `ASSET_FORMATS.md`. Byte 0/1 of the
-  resource = grid width/height (`f`/`g`, both `static byte`). What follows
-  is one or more layers of `width*height` tiles, each layer
-  run-length-encoded: byte `0xFF` starts an escape `(0xFF, count, tileId)`
-  -> `count` copies of `tileId`; any other byte is a literal single tile.
-  Storage is column-major (`a[col*height + row]`). Each layer becomes a
-  `byte[]` pushed onto the static `Vector a` (layer 0 = base terrain,
-  further layers = overlays/decoration -- matches the procedural generator
-  below pushing exactly 3 layers: floor, walls, "extras").
+- **`.jtm` tile-layer loader**, `loadMap(String)` (`b(String)`, 723): **format
+  confirmed and now parsed by `tools/parse_jtm.py`**, see `ASSET_FORMATS.md`.
+  Width/height bytes, then RLE layers stored row by row and indexed
+  `[x*height + y]`; **layer 0 is `collision`**, later layers go into the
+  `layers` Vector (the procedural generator below builds the same
+  collision + layer-stack shape).
 - **Procedural dungeon generator**, `a(int[],int[],int,int)` (625) plus
   helpers (420-623): builds a `width*height` grid (same layer-stack
   convention as `.jtm`), carves a random walk from a start to an end point
