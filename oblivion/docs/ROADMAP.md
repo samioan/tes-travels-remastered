@@ -51,10 +51,11 @@ from a hexdump alone), these are opaque binary streams with no visible
 structure -- the per-level content (`l01_*` through `l14_*`, one set per
 dungeon/area) is *entirely* encoded in them. All three formats' field
 layouts are now confirmed (by reading `b`/`e`/`g`'s own parsers as part
-of the phase-1 survey) and written up in `ASSET_FORMATS.md`; the ~78 `.scr` bytecode opcodes are now named
-([`SCR_OPCODES.md`](SCR_OPCODES.md)); what's left is writing standalone
-`tools/parse_scr.py`/`parse_cml.py`/`parse_jtm.py` parsers instead of
-only having the logic live inside the game engine's own loaders.
+of the phase-1 survey) and written up in `ASSET_FORMATS.md`. The ~78 `.scr`
+bytecode opcodes are named ([`SCR_OPCODES.md`](SCR_OPCODES.md)) and
+`tools/parse_scr.py` disassembles all 32 `.scr` files cleanly. What's left:
+standalone `tools/parse_cml.py`/`parse_jtm.py` parsers instead of only having
+that logic inside the game engine's own loaders.
 
 **Phase 3 (not started): PC port.** Scaffold is in `port/` (CMake + Ninja
 + MSVC, matching the shadowkey-decomp port's toolchain). Because content

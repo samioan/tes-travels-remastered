@@ -9,7 +9,7 @@ public final class ScriptInterpreter {
    // .scr bytecode opcodes (see docs/SCR_OPCODES.md for operand layouts)
    public static final int OP_INVALID0 = 0;
    public static final int OP_INVALID1 = 1;
-   public static final int OP_NOP_B = 2;
+   public static final int OP_RETURN = 2;
    public static final int OP_SAY = 3;
    public static final int OP_SET_SCREEN_SIZE = 4;
    public static final int OP_NOP_B2 = 5;
@@ -610,7 +610,7 @@ public final class ScriptInterpreter {
 
                if (this.walkTarget != null) {
                   switch (this.walkPhase) {
-                     case OP_INVALID0:
+                     case 0:
                         this.game.setInputEnabled(false);
                         this.game.cameraFollow(this.walkActor);
                         if (this.walkAxis != 0 && this.walkAxis != 1) {
@@ -623,7 +623,7 @@ public final class ScriptInterpreter {
                         ActorSystem.setStat(b.actors[this.walkActor], 7, 900, this);
                         this.walkPhase = 1;
                         return;
-                     case OP_INVALID1:
+                     case 1:
                         if (b.actors[this.walkActor].moveTarget[0] == -1) {
                            ActorSystem.setAnimState(b.actors[this.walkActor], (byte)3);
                            ActorSystem.setStat(b.actors[this.walkActor], 7, 400, this);
@@ -632,7 +632,7 @@ public final class ScriptInterpreter {
                            return;
                         }
                         break;
-                     case OP_NOP_B:
+                     case 2:
                         if (b.actors[this.walkActor].moveTarget[0] == -1) {
                            this.game.setInputEnabled(true);
                            this.walkTarget = null;
@@ -647,7 +647,7 @@ public final class ScriptInterpreter {
                      case OP_INVALID1:
                         System.err.println("2) Never should have gotten here!!!");
                         return;
-                     case OP_NOP_B:
+                     case OP_RETURN:
                         this.returnFromScript();
                         return;
                      case OP_SAY:

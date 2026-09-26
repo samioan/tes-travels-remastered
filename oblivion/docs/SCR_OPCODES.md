@@ -10,7 +10,7 @@ the code each opcode runs; operands marked `?` are read but not yet understood.
 |---|---|---|
 | 0 | `INVALID0` | - |
 | 1 | `INVALID1` | - |
-| 2 | `NOP_B` | b |
+| 2 | `RETURN` | end of script: pops the call stack |
 | 3 | `SAY` | str|0xF000+id  -> dialogue box, waits for key |
 | 4 | `SET_SCREEN_SIZE` | b w, b h |
 | 5 | `NOP_B2` | b |
