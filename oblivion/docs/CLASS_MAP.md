@@ -337,8 +337,8 @@ pixel dimensions (`b.a`/`b.b`).
 
 ## `f` -- NPC dialogue / conversation-tree UI (not yet renamed)
 
-Proposed name **`DialogueScreen`**; **not mechanically renamed this
-pass** -- on closer inspection while attempting it, this 380-line class
+Now **`DialogueScreen.java`** (renamed with the descriptor-aware renamer; the
+note below on why it was deferred is historical) -- on closer inspection while attempting it, this 380-line class
 turned out to declare **eight** unrelated fields all spelled `a`
 (`SpriteFrame`, `String`, `DialogueNode[]`, `Game`, `Image`, `byte[]`,
 `byte`, and `short`), denser than any other class surveyed except `b`.
@@ -379,10 +379,9 @@ map, regenerate, and copy the result. `Game`/`ScriptInterpreter`/
 
 `Strings.java`, `DialogueNode.java`, `SpriteFrame.java`,
 `SpriteRenderer.java`, `ProjectileManager.java`, **`Actor.java`** and
-**`ActorSystem.java`** live in `../src/`. They still refer to `b` (Game) and
+**`ActorSystem.java`** and **`DialogueScreen.java`** live in `../src/`. They still refer to `b` (Game) and
 `e` (ScriptInterpreter) by their decompiled names, plus the few mapped members
 (`b.actors`, `b.collision`, `b.random`, `e.runScript`, ...).
 
-`Game.java` (`b`), `ScriptInterpreter.java` (`e`) and `DialogueScreen.java`
-(`f`) are still `decompiled/{b,e,f}.java`. Next: `DialogueScreen` (`f`), then
-`Game`/`ScriptInterpreter` with the renamer (`--uniquify` output first).
+`Game.java` (`b`) and `ScriptInterpreter.java` (`e`) are still `decompiled/{b,e}.java`.
+Next: those two, with the renamer (`--uniquify` output first).
