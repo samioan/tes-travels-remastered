@@ -33,3 +33,4 @@ __pycache__/
 /stormhold/port/build-dist/
 /stormhold/port/dist/
 *.log
+/oblivion/tools/cls/

@@ -9,15 +9,14 @@ import javax.microedition.lcdui.Graphics;
  * as the group id, so it's really per-type animation state, not
  * per-projectile-instance.
  *
- * NOTE: `j` (Actor) is not renamed yet (see docs/CLASS_MAP.md), so its
- * fields are referenced here by their original decompiled letters, same
- * as `b` (Game)'s. Do not guess English names for them here -- that
- * disambiguation belongs to Actor.java's own dedicated rename pass.
+ * Actor/ActorSystem use their renamed members; Game (`b`) members that were
+ * named for ActorSystem (actors, ...) use the names in docs/rename.map, the
+ * rest of `b` is still obfuscated.
  */
 public final class ProjectileManager {
    private static SpriteFrame magicEffectFrames = null;
    // 11 slots * 9 shorts: [0]=packed type+facing (or, high nibble 0xF00,
-   // an encoded 1-based index into b.a[] identifying the actor this
+   // an encoded 1-based index into b.actors[] identifying the actor this
    // projectile came from), [1]/[2]=x/y, [3]=ms since last move step,
    // [4]=anim state (high byte 0xFF00 = "finished" sentinel), [5]/[6]=
    // origin x/y (or a homed-on actor's last-known x/y), [7]=lifetime ms
@@ -64,20 +63,20 @@ public final class ProjectileManager {
       }
    }
 
-   public static final int spawn(int dir, j actor) {
+   public static final int spawn(int dir, Actor actor) {
       return spawn(dir, 0, actor);
    }
 
-   public static final int spawn(int dir, j actor, int duration) {
+   public static final int spawn(int dir, Actor actor, int duration) {
       return spawnFromActor(dir, 0, actor, duration);
    }
 
-   public static final int spawn(int dir, int subtype, j actor) {
+   public static final int spawn(int dir, int subtype, Actor actor) {
       return spawnFromActor(dir, subtype, actor, 0);
    }
 
    /** Spawns a projectile at {@code actor}'s current position. */
-   public static final int spawnFromActor(int dir, int subtype, j actor, int duration) {
+   public static final int spawnFromActor(int dir, int subtype, Actor actor, int duration) {
       int slot;
       if ((slot = findFreeSlot()) == -1) {
          return slot;
@@ -105,11 +104,11 @@ public final class ProjectileManager {
          }
       }
 
-      pool[slot + 0] = (short)(-4096 | actor.c << 8 | dir);
-      pool[slot + 1] = (short)actor.b[0];
-      pool[slot + 2] = (short)actor.b[1];
-      pool[slot + 5] = (short)actor.b[0];
-      pool[slot + 6] = (short)actor.b[1];
+      pool[slot + 0] = (short)(-4096 | actor.slot << 8 | dir);
+      pool[slot + 1] = (short)actor.pos[0];
+      pool[slot + 2] = (short)actor.pos[1];
+      pool[slot + 5] = (short)actor.pos[0];
+      pool[slot + 6] = (short)actor.pos[1];
       pool[slot + 3] = 0;
       pool[slot + 4] = 0;
       pool[slot + 7] = (short)duration;
@@ -143,7 +142,7 @@ public final class ProjectileManager {
    /**
     * A projectile's move step overshot its target cell, or its timer
     * expired: identify the actor it came from (encoded in slot[0]'s high
-    * nibble as a 1-based b.a[] index) and look for the nearest actor of
+    * nibble as a 1-based b.actors[] index) and look for the nearest actor of
     * a different faction within 200 (ActorSystem's distance metric),
     * then hand off resolution to ActorSystem's hit resolver. Returns
     * true if it hit something (caller then clears the slot).
@@ -154,22 +153,22 @@ public final class ProjectileManager {
       int dist = 0;
       int bestDist = 16777215;
       int sourceIndex = (pool[slot + 0] & 4095) >> 8;
-      j source = null;
-      if (sourceIndex > 0 && sourceIndex < b.a.length) {
-         if ((source = b.a[sourceIndex - 1]) == null) {
+      Actor source = null;
+      if (sourceIndex > 0 && sourceIndex < b.actors.length) {
+         if ((source = b.actors[sourceIndex - 1]) == null) {
             clear(slot);
             return false;
          }
 
          for (int i = 0; i < 25; i++) {
-            if (b.a[i] != null && b.a[i].q != 1 && source != b.a[i] && source.r != b.a[i].r && (dist = h.a(pos, b.a[i].b)) < 200 && dist < bestDist) {
+            if (b.actors[i] != null && b.actors[i].dead != 1 && source != b.actors[i] && source.team != b.actors[i].team && (dist = ActorSystem.distance(pos, b.actors[i].pos)) < 200 && dist < bestDist) {
                bestSlot = i;
                bestDist = dist;
             }
          }
 
          if (bestSlot != -1) {
-            h.a(source, b.a[bestSlot], false);
+            ActorSystem.attack(source, b.actors[bestSlot], false);
             return true;
          } else {
             return false;
@@ -233,7 +232,7 @@ public final class ProjectileManager {
                   pos[1] = pool[i + 2];
                   origin[0] = pool[i + 5];
                   origin[1] = pool[i + 6];
-                  if (h.a(pos, origin) > 750 || onExpire(i)) {
+                  if (ActorSystem.distance(pos, origin) > 750 || onExpire(i)) {
                      if (dir == 11 || dir == 12 || dir == 13 || dir == 14) {
                         clear(i);
                      } else if (dir == 0 || dir == 2 || dir == 4 || dir == 6) {
@@ -242,13 +241,13 @@ public final class ProjectileManager {
                   }
                } else {
                   if ((pool[i + 0] & -4096) == -4096) {
-                     if ((sourceIndex = ((pool[i + 0] & 4095) >> 8) - 1) < 0 || sourceIndex > b.a.length || b.a[sourceIndex] == null) {
+                     if ((sourceIndex = ((pool[i + 0] & 4095) >> 8) - 1) < 0 || sourceIndex > b.actors.length || b.actors[sourceIndex] == null) {
                         clear(i);
                         continue;
                      }
 
-                     pool[i + 1] = (short)b.a[sourceIndex].b[0];
-                     pool[i + 2] = (short)b.a[sourceIndex].b[1];
+                     pool[i + 1] = (short)b.actors[sourceIndex].pos[0];
+                     pool[i + 2] = (short)b.actors[sourceIndex].pos[1];
                   }
 
                   if (SpriteRenderer.setFrame(magicEffectFrames, dir, pool[i + 4])) {

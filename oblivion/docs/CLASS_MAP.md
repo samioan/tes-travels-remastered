@@ -252,86 +252,72 @@ builder (`a()`, 338, standard polynomial `0xEDB88320` reversed) is built
 but its consumer wasn't found in this pass -- likely unused/dead code, or
 used by a `.jtm`/`.scr` integrity check not yet located.
 
-## `h` -- movement, combat, AI, leveling, equipment (static utility, not yet renamed)
+## `h` -> renamed `ActorSystem.java` (movement, combat, AI, leveling, equipment)
 
-Proposed name **`ActorSystem`**; **not mechanically renamed this pass** --
-2385 lines, the second-heaviest field-collision class after `b` (see
-"Reading notes"), and every method takes/returns `j` (`Actor`, also not
-yet renamed -- see below), so a safe rename here really wants to happen
-together with `Actor.java`'s own field-by-field pass, not before it.
-All-static utility class operating on `Actor` (`j`, below) instances.
-Confirmed responsibilities, each backed by directly-read code:
+All-static logic over `Actor` records. Now fully renamed (see
+`docs/rename.map` for the old-name -> new-name table and "Renaming
+tooling" below for how). Findings, several of which **correct** the
+first-pass survey:
 
-- **Construction**: `a(String cmlPath, byte type)` builds a fresh actor
-  from a `.cml` sprite path; `a(byte[] data, int offset)` deserializes a
-  **saved/pre-built actor record** (used for the player character loaded
-  from `charin`-equivalent data or a level's fixed NPC table) -- confirmed
-  binary layout: type byte, race/model byte, 3-byte color, then a run of
-  big-endian stat shorts (HP-related `o`, six shorts `s,t,u,v,w,x` =
-  attribute-like stats, `u/y` faction/behavior flags, `E`/`F` aggro-range
-  min/max), followed by a length-prefixed name string and a small
-  variable-length equipped-item list.
-- **Grid/collision**: actor position is tracked as **three points**
-  (`b`=origin, `c`/`d`=two more corners of a bounding footprint) in
-  sub-tile-precision coordinates (`>>7` converts to grid cell, matching
-  `b`'s tile grid), tested against the level's collision-flag layer
-  (`b.a[]`, values 0=open, 1=solid, 2-5=diagonal/half-tile blockers) via
-  `a(Actor,byte)`; `a(Actor)` is the "actor is fully off-grid/out of
-  bounds or blocked" check used by both player movement and the
-  procedural-dungeon monster placement.
-- **Movement**: `a(Actor,dir,dt)` (direct 4-way player input movement) and
-  the auto-move-toward-target variant inside `a(Actor,dt,boolean)` (the
-  main per-frame actor tick) which walks an actor toward `j[0]/j[1]` (a
-  set destination cell) at a speed derived from stat `w`.
-- **Combat**: `a(int dmgBase, Actor target, Actor attacker, bool, bool)`
-  is the core damage-resolution function -- rolls a crit/miss chance,
-  applies attacker's damage stat vs. target's defense/`D` multiplier,
-  shows floating damage/"MISS"/"BLOCK" text (string ids 470-472), and on
-  target death (`q<=0`) triggers XP grant (`c(Actor,int)`, handles level-
-  up: recomputes derived stats via the same 8-branch class/level table
-  used at creation, appends a "+N Strength, +N ..." level-up message using
-  string ids 415-420) and death animation state (`e=6`).
-- **AI**: `c(Actor)` (wander/return-to-spawn state machine, `A` flag),
-  `b(Actor)` (nearest-hostile-target acquisition + chase/flee decision
-  using `E`/`F` aggro range thresholds), `c(Actor,int)` -- unconfirmed
-  overload, see below -- and `c(Actor,boolean)` (special-attack trigger:
-  damage-over-time poison (`case 0`), fear/flee, spawn-more-actors
-  (spawns a scamp via `/oh_scamp.cml`), AOE around self (`case 4`),
-  heal-self (`case 3`, string-id-gated between two special effect ids
-  `61618`/`61619`), self-heal-HP (`case 5`)).
-- **Equipment/inventory**: a fixed-slot array `k: int[255]` stores worn
-  items packed as `(slotTag<<8)|itemId` (slot tags `0`=weapon, `1`=spell/
-  ability, `2`=armor-with-regen); `a`/`b(Actor,slot,item[])` equip/unequip,
-  recomputing derived max-HP/defense (`f(Actor)`, the big per-class,
-  per-level stat-bonus lookup switch, 8 cases = 8 character
-  classes/races) after every change. `a(Actor, ByteArrayOutputStream)`
-  serializes an actor back to the same binary layout `a(byte[],int)`
-  parses -- this is very likely the save-game record format, tying back
-  to `b`'s unexplored `RecordStore` usage.
+- **Construction**: `createFromCml(path, slot)` builds a bare actor from a
+  `.cml` sprite; `fromRecord(byte[], off)` loads a saved/pre-built record and
+  `serialize(actor, out)` writes the same layout -- the player save format:
+  `slot, classId, xp(3 bytes), level(2), strength(2), intelligence(2),
+  agility(2), speed(2), endurance(2), willpower(2), weapon(2), sightRange(2),
+  attackRange(2), team(1), gold(2), <len><cml path>, <n items>, n x
+  {(equipped?0x80:0)|category, id}`. (The length-prefixed string is the
+  **sprite path**, not the display name; the player's name is the literal
+  "Champion".)
+- **Geometry**: `pos`/`footB`/`footC` are three sub-tile world points (128 per
+  cell) forming an isometric footprint (`setPosition` derives footB/footC from
+  the sprite width); `cell`/`footBCell`/`footCCell` are the same points >> 7
+  and are what `isBlocked`/`footBlocked` test against `Game.collision`
+  (0 open, 1 solid, 2-5 half-tile diagonals via the position within the
+  cell). `screenPos` = isometric projection `((x-y)>>3, (x+y)>>4)`;
+  `sortCell` picks the draw-order cell. `undoMove` restores `prevPos`.
+- **Attributes** (verified against the lang strings and Game's character
+  sheet): `strength` 415, `intelligence` 416, `willpower` 417, `agility` 418,
+  `endurance` 419, `personality` 420, plus `speed` (walk speed), `dodgeChance`
+  (471 "Dodge"), `blockChance` (470 "Block"), `defenseRating` 431,
+  `attackRating` 432. `maxHp = level*4 + (strength+buff)*2 + endurance*2 +
+  bonusMaxHp`, `maxMp = level*4 + intelligence*2 + bonusMaxMp`; regen interval
+  = 40000/max ms per point. Class ids 1-8 = Monk, Nightblade, Barbarian,
+  Archer, Knight, Spellsword, Sorcerer, Battlemage; `recalcDerivedStats`
+  applies the per-class, per-level dodge/block/attack/defense breakpoints and
+  `applyLevelUpBonus` the extra bonus at levels 5/10/15/20. XP: `xpForLevel[]`
+  thresholds (level cap 25), `xpReward[]` indexed by the victim's level.
+- **Combat**: `attack` picks weapon or special damage (`(strength + buff +
+  weaponPower >> 1) + buffs`, scaled by `attackRating`%, 1-in-16 crit),
+  `applyDamage` rolls dodge, then block, then subtracts
+  `(agility + armor + buffArmor >> 3) + buffDefense`; handles death (xp to the
+  killer or its `owner`, death script, loot drop via `ScriptInterpreter.rollLoot`).
+  Damage-over-time (`applyPoison`), buffs (`useConsumable`, `buffTimer`) and
+  potions (`quaffPotion`) are timers on the actor updated in `update`.
+- **AI**: `update` also drives monsters: `findNearestEnemy`, `aiThink`
+  (chase inside `sightRange`, attack inside `attackRange`, else retreat via
+  `stepAwayFrom`), `useSpecialAttack` (special-row types: 0/1 buffs+projectile,
+  2 summon a scamp, 3 heal/AOE/projectile by id 61618/61619, 4 AOE, 5 dodge
+  buff, 6 self-heal), `teleportStep` for `aiType` 2 blinkers.
+- **Inventory**: `inventory[255]` packs `(category<<8)|id` (0 weapon, 1 armor,
+  2 consumable); armor goes to one of 8 `wornArmor` slots (row column 3);
+  `addItem`/`removeItem`/`canUseItem` (class restrictions via
+  `ScriptInterpreter.classAllows`), `reselectBestWeapon`, `equipFromString`
+  (script strings prefixed "Spell: " / "Weapon: " / "Bow: ").
+- **Player input**: `moveDir(actor, dir, dt)` and `handleAction(actor, action,
+  dt)` (2 toggle special, 3-6 move, 7 interact).
 
-**Open questions for `h`:** several `c(Actor,...)` overloads only
-partially disambiguated by argument count; the exact meaning of stats
-`s/t/u/v/w/x/y` (six attribute-like shorts -- strength/agility/etc. by
-strong inference from the level-up message string ids 415-420, but not
-matched 1:1 to English attribute names yet); field `f` (monster/class id,
-1-8) not yet matched by name to the six `oh_*.cml` bestiary files plus
-player -- likely `1`=player, `2..7`=deadroth/dremora/ghost/liches/ogre/
-scamp in some order, `8` possibly a boss or unused.
+**Open**: exact semantics of `aiType` 3, `animState` 2/3/5, the special-attack
+row columns, and the `classBase`/`classLists`/`specials` tables in
+`ScriptInterpreter` (only their use here is known).
 
 ## `j` -> renamed `Actor.java` (player + monster shared data record)
 
-The universal actor struct -- used for the player character (field `c`,
-type tag, ="Champion" literal name set in the loader) and every monster
-alike; this is why `h`'s combat/AI code is entirely type-agnostic. **Not
-mechanically split into per-field-renamed source yet** -- ~90 fields
-across 4 overloaded groups (byte/short/int[]/int/self-ref/String), see
-`h`'s writeup above for the fields confirmed by usage. Notably the class
-also declares a **duplicate, apparently-dead set** of 4 `byte[2]` position
-fields (`a,b,c,d`) alongside the *actually used* `int[2]` position fields
-of the same names (`b,c,d,e` -- offset by one letter) -- see "Reading
-notes" above; every call site read for this survey used the `int[]`
-versions, so the `byte[]` ones are presumisingly unused/dead and should be
-dropped rather than renamed when `Actor.java` gets its full rename pass.
+The universal actor struct; every field is now named and commented in
+`src/Actor.java`. The four `byte[2]` fields `a..d` that the first survey called
+"dead" are the **grid cells** (`sortCell`, `cell`, `footBCell`, `footCCell`)
+and are heavily used; nothing in the class is dead. Same descriptor-collision
+situation as the rest of the codebase, resolved with the descriptor-aware
+renamer below.
 
 ## `i` -> renamed `ProjectileManager.java` (magic/ranged-attack projectile system)
 
@@ -377,26 +363,26 @@ need to auto-scroll before being readable. This is the direct structural
 analogue of stormhold's NPC-choices-menu milestones (M64-66), just for a
 completely different engine/format.
 
+## Renaming tooling
+
+`docs/rename.map` + `tools/MapRenamer.java` + `tools/decompile_renamed.py`:
+a Vineflower identifier-renamer keyed on (class, name, JVM descriptor), which
+is the only way to give names to the obfuscator's same-letter fields and
+return-type-only method overloads. `python oblivion/tools/decompile_renamed.py
+<outdir> [--uniquify]` re-decompiles `extracted/` with the map applied
+(`--uniquify` suffixes every still-unmapped field with its type, e.g. `a_aBy`,
+so a class can be read unambiguously before it is named). Add entries to the
+map, regenerate, and copy the result. `Game`/`ScriptInterpreter`/
+`DialogueScreen` members that `Actor`/`ActorSystem` touch are already mapped.
+
 ## Renamed source
 
 `Strings.java`, `DialogueNode.java`, `SpriteFrame.java`,
-`SpriteRenderer.java`, `ProjectileManager.java` live in `../src/` --
-these four (five with `blt/Main.java`, already real-named) had few or no
-same-name field collisions, so renaming them mechanically was safe in
-this pass. They still reference `b` (Game) and `j` (Actor) by their
-original decompiled names/fields where those two haven't been renamed
-yet, on purpose -- see the comment at the top of `ProjectileManager.java`
-for why guessing at `j`'s field meanings there would be worse than
-leaving them obfuscated.
+`SpriteRenderer.java`, `ProjectileManager.java`, **`Actor.java`** and
+**`ActorSystem.java`** live in `../src/`. They still refer to `b` (Game) and
+`e` (ScriptInterpreter) by their decompiled names, plus the few mapped members
+(`b.actors`, `b.collision`, `b.random`, `e.runScript`, ...).
 
-`Actor.java` (`j`), `Game.java` (`b`), `ScriptInterpreter.java` (`e`),
-`ActorSystem.java` (`h`), and `DialogueScreen.java` (`f`) are documented
-above but left as `decompiled/{j,b,e,h,f}.java` for now -- all five have
-enough same-named-field collisions (from 2 on `j` up to 12+ on `b`) that
-a rushed rename is riskier than useful. `Actor`+`ActorSystem` (`j`+`h`)
-should be renamed together in one pass next, since almost every `h`
-method signature is `j`-shaped; `DialogueScreen` (`f`) next after that
-(it only depends on the already-renamed `DialogueNode`/`SpriteRenderer`
-plus `Game`); `Game`/`ScriptInterpreter` (`b`/`e`) are their own, larger
-follow-up milestones after that -- same incremental cadence as
-dawnstar/stormhold.
+`Game.java` (`b`), `ScriptInterpreter.java` (`e`) and `DialogueScreen.java`
+(`f`) are still `decompiled/{b,e,f}.java`. Next: `DialogueScreen` (`f`), then
+`Game`/`ScriptInterpreter` with the renamer (`--uniquify` output first).

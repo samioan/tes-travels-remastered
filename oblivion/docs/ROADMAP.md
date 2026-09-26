@@ -33,17 +33,16 @@ of every class (`blt/Main.java`, `a`-`j`) is done -- architecture, every
 class's role, and most fields/methods are understood and written up in
 [`CLASS_MAP.md`](CLASS_MAP.md). Five classes are mechanically renamed
 into `../src/` (`Strings`, `DialogueNode`, `SpriteFrame`,
-`SpriteRenderer`, `ProjectileManager`); the rest (`Actor`/`j`,
-`ActorSystem`/`h`, `DialogueScreen`/`f`, `Game`/`b`,
-`ScriptInterpreter`/`e`) are documented but deliberately left unrenamed
+`SpriteRenderer`, `ProjectileManager`) plus `Actor`/`j` and
+`ActorSystem`/`h`, done with a descriptor-aware Vineflower renamer
+(`docs/rename.map`, `tools/decompile_renamed.py`); the rest
+(`DialogueScreen`/`f`, `Game`/`b`, `ScriptInterpreter`/`e`) are documented but left unrenamed
 -- this codebase reuses single-letter field names across *different JVM
 descriptors on the same class* far more aggressively than
 dawnstar/stormhold's engine (`Game`/`b` alone has 12+ fields all spelled
-`a`), so those five need their own careful, one-at-a-time passes rather
-than a single rushed sweep. Suggested order in `CLASS_MAP.md`'s "Renamed
-source" section: `Actor`+`ActorSystem` together next, then
-`DialogueScreen`, then `Game`/`ScriptInterpreter` last (largest, most
-collision-heavy).
+`a`), so those need their own passes. Next: `DialogueScreen`, then
+`Game`/`ScriptInterpreter` last (largest, most collision-heavy) -- now
+mostly a matter of adding entries to `rename.map`.
 
 **Phase 2 (in progress, the hard part): reverse the `.scr`/`.cml`/`.jtm`
 binary formats.** See [`ASSET_FORMATS.md`](ASSET_FORMATS.md). Unlike
