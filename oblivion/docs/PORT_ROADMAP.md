@@ -49,7 +49,7 @@ Canvas for its size, so this is a port decision).
   `sortCell`, as `Game.paint` does. `main` spawns a test player (`oh_pc.cml`,
   speed 42) you walk with the arrow keys; camera follows. `actor_smoke` walks
   a player into walls on all 12 levels and checks it is never blocked. Health
-  bar, floating text and status icons wait for M7.
+  bar, floating text and status icons came with M7.
 
 - **M5 -- script interpreter** (`script/interpreter`, `world/game_world`,
   `assets/lang`): `ScriptInterpreter` mirrors `ScriptInterpreter.step` on the
@@ -112,12 +112,32 @@ Canvas for its size, so this is a port decision).
   Quick-use keys (potions, toggle special) work. The `*_cr` between-level
   scripts now run through the shop menu.
 
+- **M7 -- combat, AI, projectiles, pickups, dungeon** (`world/combat`,
+  `world/projectiles`, `world/dungeon`, `World`): `Combat::Update` is the whole
+  per-frame `ActorSystem.update` (regen, poison, AI think/attack, teleporting
+  monsters, floating text, buff expiry, corpse removal) over a `CombatHost`
+  interface that `World` implements. `Attack`/`ApplyDamage` (dodge, block,
+  armour soak, crits, XP, death script, loot roll), `GrantXp`/level-up messages
+  and the class bonuses at levels 5/10/15/20, `UseSpecialAttack` (armour/attack/
+  dodge buffs, summon, poison cloud, area magic, heal, bolt, cure), the fire-key
+  melee fall-through of `checkZoneTiles`, and `LEVEL_UP_TO`. `Projectiles`
+  keeps the original's 11 x 9 `short` pool (bolts, arrows, glow, hit and puff
+  effects, `SPAWN_*PROJECTILE`, `CLEAR_PROJECTILE_AT`). Pickups: `PLACE_ITEM`,
+  loot drops, the fire key picks up within 350 units, the "pick up" prompt.
+  Actors draw the enemy health bar, floating damage text (green dodge, blue
+  block) and status icons. `Dungeon` ports `generateDungeon` / `carvePath` /
+  `pickWallTiles` (patch levels `l01_1r`, `l04_4r`, `l06_a/b` run it on the
+  previous level's tile set, which `Unload` therefore keeps).
+  Facts learned: `stepAwayFrom` walks *towards* the enemy; the projectile
+  impact animation re-hits every 100 ms; `carvePath` can spin forever in the
+  original when a branch target equals its start (guarded here).
+  `combat_smoke` drops the player next to each level's nearest enemy (kills,
+  XP, level-ups, damage taken); `dungeon_smoke` generates all spawn groups with
+  8 seeds each and checks stairs are connected, then runs one in the world.
+  Debug flags: `--then LEVEL [--script N]`, `--keys foe,hold`.
+
 ## Next
 
-- **M7 -- combat, AI, projectiles, dungeon:** `ActorSystem.update` (regen,
-  poison, AI think/attack/teleport, floating text, death), `attack`/`applyDamage`,
-  XP and level-up, specials, `ProjectileManager`, pickups (`PLACE_ITEM`), loot
-  drops, and the procedural dungeon generator (`Game.generateDungeon`).
 - **M8 -- save/load, fonts, audio, packaging** (the original stores one
   RecordStore, "ESO"; see `Game.saveGame`). Audio: none found in the jar so far.
 

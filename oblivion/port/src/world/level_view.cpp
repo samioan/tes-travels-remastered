@@ -60,8 +60,8 @@ void LevelView::ClearVisualLayers() {
 }
 
 void LevelView::Unload() {
+    // The tile sprites stay loaded (a patch level's GENERATE_DUNGEON draws with them).
     map_ = JtmMap{};
-    tiles_ = SpriteSet{};
 }
 
 Grid LevelView::grid() const {

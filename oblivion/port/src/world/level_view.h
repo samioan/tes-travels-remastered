@@ -51,6 +51,8 @@ public:
     void ClearVisualLayers();
     // Drops the loaded map (Game.loadLevel sets collision = null).
     void Unload();
+    // Replaces the map with a generated one, keeping the tile sprites (GENERATE_DUNGEON).
+    void SetMap(JtmMap map) { map_ = std::move(map); }
     bool loaded() const { return !map_.layers.empty(); }
     void SetCamera(int x, int y) { camX_ = x; camY_ = y; }
 

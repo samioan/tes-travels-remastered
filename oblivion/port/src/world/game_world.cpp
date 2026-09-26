@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "graphics/text.h"
+#include "world/dungeon.h"
 #include "world/items.h"
 
 namespace oblivion {
@@ -350,7 +351,37 @@ void World::UpdatePickupPrompt() {
     if ((message.text.empty() || message.text == prompt) && !shown) HideMessage();
 }
 
-void World::GenerateDungeon(const int*, const int*, int, int) { unimplemented_["GENERATE_DUNGEON"]++; }
+// Game.generateDungeon: replaces the map with a random dungeon (tile set stays),
+// then scatters monsters (and the level's item ids) on its branch points.
+void World::GenerateDungeon(const int* group, const int* spawnIds, int zone, int exitScript) {
+    if (!group || static_cast<int8_t>(group[1]) < 6 || static_cast<int8_t>(group[2]) < 6) return;
+    Dungeon d = oblivion::GenerateDungeon(group, zone, exitScript, [this]() { return Random(); });
+    view_.SetMap(std::move(d.map));
+    enterLayer_ = std::move(d.enter);
+    leaveLayer_ = std::move(d.leave);
+    zoneLayer_ = std::move(d.zone);
+    pickups_.clear();
+    for (int i = 1; i < kMaxActors; i++) actors_[i].reset();
+    maxActorSlot_ = 0;
+    if (player_) player_->summon.reset();
+    redraw_ = true;
+    if (actors_[0]) {
+        ReviveActor(*actors_[0]);
+        ActorSystem::UpdateCells(*actors_[0]);
+    }
+
+    const int* monster = script_.GetRow(0, group[17]);
+    int item = 0;
+    for (int k = 0; k + 1 < static_cast<int>(d.branchPoints.size()) && k < group[18]; k += 2) {
+        const int bx = d.branchPoints[static_cast<size_t>(k)], by = d.branchPoints[static_cast<size_t>(k) + 1];
+        if (item < 10 && spawnIds[item] != 0) SpawnItem(spawnIds[item++], false, bx, by);
+        if (!monster) continue;
+        int slot = 2;
+        while (slot < kMaxActors && actors_[slot]) slot++;
+        if (slot >= kMaxActors) break;
+        SpawnActor(std::string(), slot, script_.ItemName(monster[1]), monster, bx << 7, by << 7);
+    }
+}
 
 void World::Tick(int dtMs) {
     if (state_ == 12) return;

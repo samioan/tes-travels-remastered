@@ -87,8 +87,8 @@ oblivion::Key HeldKey() {
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     std::string assetDir = "../../extracted";  // from oblivion/port/build/
     std::string fontDir = "../assets/fonts";    // Nokia ROM fonts, user-provided (see .gitignore)
-    std::string level, dump, keys;
-    int runMs = 6000;
+    std::string level, then, dump, keys;
+    int runMs = 6000, runScript = -1;
     for (int i = 1; i < __argc; i++) {
         auto narrow = [](const wchar_t* w) {
             std::string out;
@@ -100,6 +100,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         if (a == "--assets") assetDir = next();
         else if (a == "--fonts") fontDir = next();
         else if (a == "--level") level = next();
+        else if (a == "--then") then = next();  // after --level has played, load this level too
+        else if (a == "--script") runScript = std::atoi(next().c_str());  // with --then: run this script id too
         else if (a == "--dump") dump = next();
         else if (a == "--keys") keys = next();
         else if (a == "--run-ms") runMs = std::atoi(next().c_str());
@@ -116,6 +118,27 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         else if (!keys.empty()) app.StartMenu();
         else app.Start();
 
+        if (!dump.empty() && !then.empty()) {
+            auto play = [&](int ms) {
+                for (int t = 0; t < ms; t += 16) {
+                    if (t % 1100 < 16) app.OnKeyDown(oblivion::Key::Fire);
+                    const int st = app.world().state();
+                    app.SetHeldKey(st == 10 || st == 9 || st == 4 ? oblivion::Key::Down : oblivion::Key::None);
+                    app.Tick(16);
+                    app.Draw(bb);
+                }
+            };
+            play(runMs);
+            app.world().LoadLevel(then);
+            play(runMs);
+            if (runScript >= 0) {
+                app.world().script().RunScript(runScript);
+                play(2000);
+            }
+            for (const auto& u : app.world().unimplemented())
+                std::fprintf(stderr, "not ported yet: %s (x%d)\n", u.first.c_str(), u.second);
+            return WritePpm(dump.c_str(), bb) ? 0 : 1;
+        }
         if (!dump.empty() && !keys.empty()) {
             // With --level the script plays first (fire pressed for dialogue, text scrolled along).
             for (int ms = 0; !level.empty() && ms < runMs; ms += 16) {
