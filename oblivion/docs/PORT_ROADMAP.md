@@ -38,12 +38,21 @@ Canvas for its size, so this is a port decision).
   walls, floors and torches line up, so the projection, the `.jtm` layout and
   the `.cml` frame windows are right.
 
+- **M4 -- actors and collision** (`world/actor`, `LevelView::Draw`): the
+  movement/animation/draw subset of `Actor`/`ActorSystem` -- `setPosition`
+  (three-point footprint via `isoToWorld`), `updateCells`/`updateSortCell`,
+  `isBlocked`/`footBlocked` (collision values 1 = solid, 2..5 = diagonal
+  half-cells), `moveDir` (50 ms step gate, undo when blocked), `setMoveTarget`
+  auto-walk, `setAnimState`, `update` (animation + walking), `draw` (shadow
+  group -56, body group `facing + animStateOffset[state]`, corpse -55).
+  `LevelView::Draw` now draws the overlay layer with actors interleaved by
+  `sortCell`, as `Game.paint` does. `main` spawns a test player (`oh_pc.cml`,
+  speed 42) you walk with the arrow keys; camera follows. `actor_smoke` walks
+  a player into walls on all 12 levels and checks it is never blocked. Health
+  bar, floating text and status icons wait for M7.
+
 ## Next
 
-- **M4 -- actors and the collision layer:** `Actor`/`ActorSystem` movement
-  (three-point footprint vs `collision`), the player, monster sprites
-  (`oh_*.cml` animation groups: `animStateOffset[state] + facing`), depth
-  sorting with the object overlay layer (`sortCell`).
 - **M5 -- script interpreter:** port `ScriptInterpreter.step` (call stack of PCs,
   waits, key hooks, walk cutscenes) on top of the decoder in `assets/scr`, plus
   the trigger layers (`SET_TRIGGER`) and level loading (`LOAD_LEVEL`,

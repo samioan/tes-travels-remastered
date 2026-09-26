@@ -32,6 +32,7 @@ target_link_libraries(oblivion_assets PUBLIC stb_image)
 # Rendering + the static level view.
 add_library(oblivion_world STATIC
   src/render/sprite_renderer.cpp
+  src/world/actor.cpp
   src/world/level_view.cpp
 )
 target_link_libraries(oblivion_world PUBLIC oblivion_assets)
@@ -48,3 +49,7 @@ enable_testing()
 add_executable(asset_smoke src/tests/asset_smoke.cpp)
 target_link_libraries(asset_smoke PRIVATE oblivion_assets)
 add_test(NAME asset_smoke COMMAND asset_smoke ${CMAKE_SOURCE_DIR}/../extracted)
+
+add_executable(actor_smoke src/tests/actor_smoke.cpp)
+target_link_libraries(actor_smoke PRIVATE oblivion_world)
+add_test(NAME actor_smoke COMMAND actor_smoke ${CMAKE_SOURCE_DIR}/../extracted)

@@ -44,10 +44,24 @@ void LevelView::CenterOnCell(int cx, int cy) {
     camY_ = Backbuffer::kHeight / 2 - sy;
 }
 
-void LevelView::Draw(Backbuffer& bb) {
-    // Layers 1..n are the visual layers; the last one is the object overlay
-    // (drawn together with the actors in the original, at the same depth here).
-    for (size_t li = 1; li < map_.layers.size(); li++) {
+Grid LevelView::grid() const {
+    Grid g;
+    g.width = map_.width;
+    g.height = map_.height;
+    if (!map_.layers.empty()) g.collision = &map_.layers[0];
+    return g;
+}
+
+void LevelView::CenterOnScreen(int sx, int sy) {
+    camX_ = Backbuffer::kWidth / 2 - sx;
+    camY_ = Backbuffer::kHeight / 2 - sy;
+}
+
+void LevelView::Draw(Backbuffer& bb, const std::vector<Actor*>& actors) {
+    // Layer 0 is collision, the last layer the object overlay; in between are
+    // the visual layers (Game.drawTileLayers).
+    const size_t n = map_.layers.size();
+    for (size_t li = 1; li + 1 < n; li++) {
         const std::vector<uint8_t>& layer = map_.layers[li];
         for (int x = 0; x < map_.width; x++) {
             for (int y = 0; y < map_.height; y++) {
@@ -63,6 +77,27 @@ void LevelView::Draw(Backbuffer& bb) {
                     sy < Backbuffer::kHeight + h) {
                     DrawSprite(bb, images_, tiles_, tile, sx, sy);
                 }
+            }
+        }
+    }
+    if (n < 2) return;
+    // Overlay: each cell draws its tile, then the actors sorted into that cell.
+    const std::vector<uint8_t>& overlay = map_.layers[n - 1];
+    int lastH = 0;
+    for (int x = 0; x < map_.width; x++) {
+        for (int y = 0; y < map_.height; y++) {
+            int tile = overlay[x * map_.height + y];
+            int sx, sy;
+            CellScreenPos(x, y, &sx, &sy);
+            sx += camX_;
+            sy += camY_;
+            if (tile != 0) lastH = tiles_.Height(tile);
+            if (sx > -kTileWidth && sx < Backbuffer::kWidth && sy > -kTileHeight &&
+                sy < Backbuffer::kHeight + lastH) {
+                if (tile != 0) DrawSprite(bb, images_, tiles_, tile, sx, sy);
+                for (Actor* a : actors)
+                    if (a && a->sortCell[0] == x && a->sortCell[1] == y)
+                        ActorSystem::Draw(*a, bb, images_, camX_, camY_);
             }
         }
     }

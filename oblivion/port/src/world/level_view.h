@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 #include "assets/asset_root.h"
 #include "assets/cml.h"
@@ -7,6 +8,7 @@
 #include "assets/jtm.h"
 #include "assets/scr.h"
 #include "graphics/backbuffer.h"
+#include "world/actor.h"
 
 namespace oblivion {
 
@@ -37,10 +39,20 @@ public:
 
     // The camera offset is added to every cell position (Game.cameraOffset).
     void CenterOnCell(int cx, int cy);
+    int camX() const { return camX_; }
+    int camY() const { return camY_; }
     void Pan(int dx, int dy) { camX_ += dx; camY_ += dy; }
 
-    // Draws every visual layer (map layers 1..n) into the backbuffer.
-    void Draw(Backbuffer& bb);
+    // Collision data for ActorSystem::IsBlocked (jtm layer 0).
+    Grid grid() const;
+
+    // Centres the camera on an isometric screen position (Game.updateCamera,
+    // without its dead zone).
+    void CenterOnScreen(int sx, int sy);
+
+    // Draws the visual layers, then the object overlay layer with the actors
+    // interleaved by sortCell (Game.paint state 0).
+    void Draw(Backbuffer& bb, const std::vector<Actor*>& actors = {});
 
 private:
     const AssetRoot& assets_;
