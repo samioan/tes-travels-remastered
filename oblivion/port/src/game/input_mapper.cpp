@@ -150,16 +150,19 @@ MappedInput InputMapper::Update(const RawInput& in, const MapperContext& ctx, in
         out.events.push_back({InputEvent::Type::KeyDown, Key::Fire, 0});
         if (IsPromptState(ctx.state)) out.events.push_back({InputEvent::Type::KeyDown, Key::SoftRight, 0});
     }
-    // Back: Esc / B / Start / Backspace; the inventory button closes the inventory.
-    const bool backNow = menuNow || cancelNow || (ctx.state == 2 && invNow);
-    if (Rising(S_MENU, backNow)) out.events.push_back({InputEvent::Type::KeyDown, Key::SoftLeft, 0});
+    // Back: Esc / Start, B / Backspace; the inventory button closes the inventory.
+    // Each button keeps its own edge tracker across the playing <-> menu switch, so
+    // a button that opened the screen (and is still held) cannot also close it.
+    const bool menuEdge = Rising(S_MENU, menuNow);
+    const bool cancelEdge = Rising(S_CANCEL, cancelNow);
+    const bool invEdge = Rising(S_INV, invNow);
+    if (menuEdge || cancelEdge || (ctx.state == 2 && invEdge))
+        out.events.push_back({InputEvent::Type::KeyDown, Key::SoftLeft, 0});
     prev_[S_ATTACK] = attackNow;
     prev_[S_INTERACT] = interactNow;
     prev_[S_HP] = hpNow;
     prev_[S_MP] = mpNow;
     prev_[S_TOGGLE] = toggleNow;
-    prev_[S_INV] = invNow;
-    prev_[S_CANCEL] = cancelNow;
     return out;
 }
 

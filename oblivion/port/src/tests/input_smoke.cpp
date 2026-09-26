@@ -138,6 +138,51 @@ int main(int argc, char** argv) {
         Check(CountKey(o, Key::SoftLeft) == 1, "prompt: B answers no / back");
     }
 
+    // Regression: a button that opens a screen and is still held must not also
+    // close it (Select opened the inventory and it closed again at once).
+    {
+        struct Case { const char* name; RawInput in; Key opens; int state; };
+        Case cases[3];
+        cases[0] = {"Select (Back) -> inventory", RawInput{}, Key::SoftRight, 2};
+        cases[0].in.padConnected = true;
+        cases[0].in.padButtons = kPadBack;
+        cases[1] = {"I -> inventory", RawInput{}, Key::SoftRight, 2};
+        cases[1].in.inventory = true;
+        cases[2] = {"Start -> menu", RawInput{}, Key::SoftLeft, 3};
+        cases[2].in.padConnected = true;
+        cases[2].in.padButtons = kPadStart;
+        for (const Case& c : cases) {
+            InputMapper m;
+            MapperContext play;
+            play.analogMode = true;
+            MappedInput o = m.Update(c.in, play, 16);
+            Check(CountKey(o, c.opens) == 1, (std::string(c.name) + " opens it").c_str());
+            MapperContext screen;
+            screen.state = c.state;
+            int closes = 0;
+            for (int t = 0; t < 600; t += 16) closes += CountKey(m.Update(c.in, screen, 16), Key::SoftLeft);
+            Check(closes == 0, (std::string(c.name) + ": still held, it stays open").c_str());
+            RawInput released;
+            released.padConnected = c.in.padConnected;
+            m.Update(released, screen, 16);
+            o = m.Update(c.in, screen, 16);
+            if (c.state == 2) Check(CountKey(o, Key::SoftLeft) == 1, (std::string(c.name) + ": a fresh press closes it").c_str());
+        }
+        // B / Backspace opens the menu in play; it must stay open while held, too.
+        InputMapper m;
+        MapperContext play;
+        play.analogMode = true;
+        RawInput b;
+        b.cancel = true;
+        MappedInput o = m.Update(b, play, 16);
+        Check(CountKey(o, Key::SoftLeft) == 1, "Backspace opens the menu");
+        MapperContext menu;
+        menu.state = 3;
+        int closes = 0;
+        for (int t = 0; t < 600; t += 16) closes += CountKey(m.Update(b, menu, 16), Key::SoftLeft);
+        Check(closes == 0, "Backspace held: the menu stays open");
+    }
+
     // ---- free movement in a level ----
     const std::string dir = argc > 1 ? argv[1] : "../../extracted";
     AssetRoot assets(dir);
