@@ -58,13 +58,17 @@ GameApp::GameApp(const AssetRoot& assets, ImageCache& images)
 
 void GameApp::Start() { world_.Boot(); }
 
-void GameApp::StartLevel(const std::string& scrPath) {
+void GameApp::StartMenu() {
     world_.Boot();
     // Fast-forward the splash screens the way a player mashing keys would.
     for (int ms = 0; world_.state() != 3 && ms < 60000; ms += 16) {
         if (ms % 1100 < 16) world_.KeyPressed(7);
         Tick(16);
     }
+}
+
+void GameApp::StartLevel(const std::string& scrPath) {
+    StartMenu();
     world_.LoadLevel(scrPath);
 }
 
@@ -160,6 +164,7 @@ void GameApp::BuildMenus() {
     // No save file support yet (M8): hasSavedGame() is always false.
     menus_[0] = {S(2), S(456), S(6), S(22)};
     menus_[5] = {S(21), S(2), S(456), S(6), S(22)};
+    optionLabels_ = {S(292), S(293), S(463), S(294)};
     const ScrTables& t = world_.script().tables();
     for (int i = 0; i < 9; i++)
         if (t.classBase[i][0] > 0) menus_[1].push_back(world_.script().ItemName(t.classBase[i][1]));
@@ -210,9 +215,16 @@ void GameApp::ActivateMenuItem() {
     } else if (item == S(457)) {
         helpTitleId_ = 457;
         world_.SetState(17);
-    } else if (item == S(458) || item == S(573) || item == S(522) || item == S(459) || item == S(460) ||
-               item == S(461) || item == S(462)) {
-        world_.Unimplemented("help pages / controls screen (M6b)");
+    } else if (item == S(458)) {  // Controls
+        for (int i = 0; i < 3; i++) keyBindingsEdit_[i] = keyBindings_[i];
+        optionsCursor_ = 0;
+        world_.SetState(5);
+    } else if (item == S(573)) {  // Overview
+        helpTitleId_ = 573;
+        helpScroll_ = helpPage_ = 0;
+        world_.SetState(23);
+    } else if (item == S(522) || item == S(459) || item == S(460) || item == S(461) || item == S(462)) {
+        OpenHelp(item == S(522) ? 522 : item == S(459) ? 459 : item == S(460) ? 460 : item == S(461) ? 461 : 462);
     } else if (item == S(18)) {  // Go Shopping
         world_.Unimplemented("shop screen (M6c)");
     } else if (item == S(20)) {  // Continue playing (shop menu)
@@ -227,23 +239,36 @@ void GameApp::ActivateMenuItem() {
 
 // ---- input ---------------------------------------------------------------
 
-void GameApp::OnKeyDown(Key key) {
-    if (key == Key::None) return;
-    HandleKey(key);
-    // script.keyPressed / handleDialogueKey run for any key in any state.
-    int action = 0;
+int GameApp::MapKey(Key key, int code) const {
     switch (key) {
-        case Key::Up: action = 3; break;
-        case Key::Down: action = 4; break;
-        case Key::Left: action = 5; break;
-        case Key::Right: action = 6; break;
-        case Key::Fire: action = 7; break;
-        default: action = -1; break;
+        case Key::Up: return 3;
+        case Key::Down: return 4;
+        case Key::Left: return 5;
+        case Key::Right: return 6;
+        case Key::Fire: return 7;
+        case Key::Char:
+            // The digit keys mirror the d-pad, as on the phone: 2/8/4/6/5.
+            if (code == '2') return 3;
+            if (code == '8') return 4;
+            if (code == '4') return 5;
+            if (code == '6') return 6;
+            if (code == '5') return 7;
+            for (int i = 0; i < 3; i++)
+                if (code == keyBindings_[i]) return i;
+            return -1;
+        default: return -1;
     }
-    world_.KeyPressed(action);
 }
 
-void GameApp::HandleKey(Key key) {
+void GameApp::OnKeyDown(Key key, int code) {
+    if (key == Key::None) return;
+    HandleKey(key, code);
+    // script.keyPressed / handleDialogueKey run for any key in any state.
+    const int action = MapKey(key, code);
+    world_.KeyPressed(action >= 3 ? action : -1);
+}
+
+void GameApp::HandleKey(Key key, int code) {
     const int state = world_.state();
     switch (state) {
         case 0:
@@ -257,7 +282,18 @@ void GameApp::HandleKey(Key key) {
             }
             break;
         case 3:
-            HandleMenuKey(key);
+            HandleMenuKey(MapKey(key, code) == 5 ? Key::Left : MapKey(key, code) == 6 ? Key::Right
+                          : MapKey(key, code) == 7 ? Key::Fire : key);
+            break;
+        case 5:
+            HandleControlsKey(key, code);
+            break;
+        case 18:
+            HandleHelpKey(key == Key::Char ? (MapKey(key, code) == 3 ? Key::Up : MapKey(key, code) == 4 ? Key::Down
+                          : MapKey(key, code) == 5 ? Key::Left : MapKey(key, code) == 6 ? Key::Right : key) : key);
+            break;
+        case 20:
+            if (key == Key::SoftLeft) world_.SetState(5);
             break;
         case 4:
         case 17:
@@ -312,6 +348,88 @@ void GameApp::HandleMenuKey(Key key) {
     }
 }
 
+// ---- help pages / controls ---------------------------------------------------
+
+void GameApp::OpenHelp(int titleId) {
+    helpTitleId_ = titleId;
+    helpScroll_ = helpPage_ = 0;
+    ScriptInterpreter& sc = world_.script();
+    const Strings& st = world_.strings();
+    switch (titleId) {
+        case 522: helpPages_ = BuildHelpClasses(sc, st); break;
+        case 459: helpPages_ = BuildHelpWeapons(sc, st); break;
+        case 460: helpPages_ = BuildHelpArmor(sc, st); break;
+        case 461: helpPages_ = BuildHelpSpells(sc, st); break;
+        default: helpPages_ = BuildHelpItems(sc, st); break;
+    }
+    world_.SetState(18);
+}
+
+void GameApp::HandleHelpKey(Key key) {
+    const int pages = static_cast<int>(helpPages_.size());
+    if (key == Key::SoftLeft) {
+        world_.SetState(3);
+    } else if (key == Key::Left) {
+        helpScroll_ = 0;
+        if (--helpPage_ < 0) helpPage_ = pages - 1;
+    } else if (key == Key::Right) {
+        helpScroll_ = 0;
+        if (++helpPage_ > pages - 1) helpPage_ = 0;
+    } else if (key == Key::Up) {
+        if (--helpScroll_ < 0) helpScroll_ = 0;
+    } else if (key == Key::Down && helpHasMore_) {
+        helpScroll_++;
+    }
+}
+
+std::string GameApp::KeyLabel(int code) const {
+    switch (code) {
+        case 1: return S(281);
+        case 6: return S(282);
+        case 2: return S(283);
+        case 5: return S(284);
+        case 8: return S(285);
+        case '#': return S(286);
+        case '*': return S(287);
+        default:
+            if (code >= '0' && code <= '9') return std::string("# ") + static_cast<char>(code);
+            return "";
+    }
+}
+
+// Game.handleInput case 5 (+ isBindableKey).
+void GameApp::HandleControlsKey(Key key, int code) {
+    const int nOpt = static_cast<int>(optionLabels_.size());
+    if (editingKey_) {
+        if (key == Key::SoftLeft || key == Key::SoftRight) return;
+        // Only the free keypad characters can be bound: not the d-pad digits, not a
+        // key already used by another binding.
+        bool bindable = key == Key::Char && MapKey(key, code) < 0 || (key == Key::Char && MapKey(key, code) == optionsCursor_);
+        for (int i = 0; i < 3; i++)
+            if (i != optionsCursor_ && key == Key::Char && code == keyBindingsEdit_[i]) bindable = false;
+        if (bindable) keyBindingsEdit_[optionsCursor_] = code;
+        else world_.SetState(20);
+        editingKey_ = false;
+        return;
+    }
+    if (key == Key::SoftLeft) {
+        world_.SetState(3);
+    } else if (key == Key::Up) {
+        optionsCursor_ = std::max(0, optionsCursor_ - 1);
+    } else if (key == Key::Down) {
+        optionsCursor_ = std::min(nOpt - 1, optionsCursor_ + 1);
+    } else if (key == Key::Fire) {
+        if (optionLabels_[optionsCursor_] == S(294)) {  // Save
+            for (int i = 0; i < 3; i++) keyBindings_[i] = keyBindingsEdit_[i];
+            editingKey_ = false;
+            world_.SetState(3);
+            world_.Unimplemented("save settings (M8)");
+        } else {
+            editingKey_ = true;
+        }
+    }
+}
+
 // ---- per frame -------------------------------------------------------------
 
 void GameApp::Tick(int dt) {
@@ -319,15 +437,8 @@ void GameApp::Tick(int dt) {
     if (state == 12) return;
 
     // Held keys act every frame in the original (keyState persists).
-    int action = 0;
-    switch (held_) {
-        case Key::Up: action = 3; break;
-        case Key::Down: action = 4; break;
-        case Key::Left: action = 5; break;
-        case Key::Right: action = 6; break;
-        case Key::Fire: action = 7; break;
-        default: break;
-    }
+    int action = held_ == Key::None ? -1 : MapKey(held_, heldCode_);
+    if (action < 3) action = 0;  // quick-use keys are edge events (M7)
     if (state == 0) world_.HeldAction(action, dt);
     if (action) world_.KeyPressed(action);
 
@@ -409,6 +520,12 @@ void GameApp::Draw(Backbuffer& bb) {
         case 21:
         case 23:
             DrawTextScreen(bb);
+            break;
+        case 5:
+            DrawControls(bb);
+            break;
+        case 18:
+            DrawHelpPage(bb);
             break;
         case 6:
         case 7: {
@@ -676,6 +793,70 @@ void GameApp::DrawTextScreen(Backbuffer& bb) {
         else if ((state == 9 || state == 10 || state == 4) && textEndWaitMs_ < 0) textEndWaitMs_ = 0;
     } else if (state == 23 || state == 17) {
         textAtEnd_ = false;
+    }
+}
+
+void GameApp::DrawControls(Backbuffer& bb) {
+    const Face f = Face::SmallBold;
+    const int fh = FontH(f);
+    bb.Fill(0);
+    bb.FillRect(5, 5, kW - 10, 20, kWhite);
+    DrawCentered(bb, editingKey_ ? S(424) : S(425), 7, kTitleBlue, f);
+    int y = 30;
+    for (size_t i = 0; i < optionLabels_.size(); i++) {
+        const bool cur = static_cast<int>(i) == optionsCursor_;
+        int x = cur ? 5 : 5 + FontW("> ", f);
+        if (optionLabels_[i] == S(294)) y += fh;
+        Text::DrawString(bb, x, y, (cur ? "> " : "") + optionLabels_[i], kWhite, f);
+        y += fh;
+    }
+    if (optionsCursor_ < 3) {
+        const std::string label = KeyLabel(keyBindingsEdit_[optionsCursor_]);
+        Text::DrawString(bb, kCenterX - (FontW(label, f) >> 1), kH - fh - 2, label, editingKey_ ? 0xFF0000 : kWhite, f);
+    }
+    Text::DrawString(bb, 2, kH - fh - 2, Upper(S(449)), kWhite, f);
+}
+
+void GameApp::DrawHelpPage(Backbuffer& bb) {
+    const Face f = Face::SmallBold;
+    const int fh = FontH(f);
+    const SpriteSet& hud = world_.hudSprites();
+    bb.Fill(0);
+    bb.FillRect(5, 5, kW - 10, fh + 10, kWhite);
+    DrawCentered(bb, S(helpTitleId_), 10, kTitleBlue, f);
+    if (helpPages_.empty()) return;
+    const std::vector<std::string>& page = helpPages_[static_cast<size_t>(helpPage_)];
+    int y = 35;
+    size_t i = static_cast<size_t>(helpScroll_);
+    for (; i < page.size(); i++) {
+        // Lines wider than the screen wrap at the last space that fits, the rest indented.
+        const std::string full = page[i];
+        std::string first = full;
+        size_t cut = first.size();
+        while (FontW(first, f) > kW - 20 && cut != std::string::npos && cut > 0) {
+            cut = first.rfind(' ', cut - 1);
+            first = cut == std::string::npos ? std::string() : first.substr(0, cut);
+        }
+        Text::DrawString(bb, 10, y, first, kWhite, f);
+        y += fh;
+        if (cut != std::string::npos && cut < full.size()) {
+            if (y + (fh << 1) >= kH) break;
+            Text::DrawString(bb, 15, y, full.substr(cut), kWhite, f);
+            y += fh;
+        }
+        if (y + (fh << 1) >= kH) break;
+    }
+    Text::DrawString(bb, 2, kH - fh - 2, Upper(S(449)), kWhite, f);
+    if (helpScroll_ != 0) DrawSprite(bb, images_, hud, 54, kW - hud.Width(54) - 2, 35);
+    if (i < page.size()) {
+        DrawSprite(bb, images_, hud, 53, kW - hud.Width(53) - 2, kH - fh - hud.Height(53) - hud.Height(55) - 4);
+        helpHasMore_ = true;
+    } else {
+        helpHasMore_ = false;
+    }
+    if (helpTitleId_ != 573) {
+        DrawSprite(bb, images_, hud, 56, 2, kH - fh - hud.Height(53) - 4);
+        DrawSprite(bb, images_, hud, 55, kW - hud.Width(55) - 2, kH - fh - hud.Height(53) - 4);
     }
 }
 

@@ -47,8 +47,18 @@ bool WritePpm(const char* path, const oblivion::Backbuffer& bb) {
 }
 
 // Desktop keys -> the phone keypad as Game.mapKey sees it.
+// Keypad character for a digit / '*' / '#' key (the phone keys the game can bind), or 0.
+int KeypadCode(unsigned vk) {
+    if (vk >= '0' && vk <= '9') return static_cast<int>(vk);
+    if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) return static_cast<int>('0' + (vk - VK_NUMPAD0));
+    if (vk == VK_MULTIPLY) return '*';
+    if (vk == VK_DIVIDE) return '#';
+    return 0;
+}
+
 oblivion::Key KeyForVk(unsigned vk) {
     using oblivion::Key;
+    if (KeypadCode(vk)) return Key::Char;
     switch (vk) {
         case VK_UP: return Key::Up;
         case VK_DOWN: return Key::Down;
@@ -60,9 +70,6 @@ oblivion::Key KeyForVk(unsigned vk) {
         case VK_F1: return Key::SoftLeft;
         case 'X':
         case VK_F2: return Key::SoftRight;
-        case '7': return Key::Quick0;
-        case '9': return Key::Quick1;
-        case '3': return Key::Quick2;
         default: return Key::Other;
     }
 }
@@ -79,7 +86,7 @@ oblivion::Key HeldKey() {
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     std::string assetDir = "../../extracted";  // from oblivion/port/build/
     std::string fontDir = "../assets/fonts";    // Nokia ROM fonts, user-provided (see .gitignore)
-    std::string level, dump;
+    std::string level, dump, keys;
     int runMs = 6000;
     for (int i = 1; i < __argc; i++) {
         auto narrow = [](const wchar_t* w) {
@@ -93,6 +100,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         else if (a == "--fonts") fontDir = next();
         else if (a == "--level") level = next();
         else if (a == "--dump") dump = next();
+        else if (a == "--keys") keys = next();
         else if (a == "--run-ms") runMs = std::atoi(next().c_str());
     }
 
@@ -104,8 +112,33 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         oblivion::Backbuffer bb;
 
         if (!level.empty()) app.StartLevel(level);
+        else if (!keys.empty()) app.StartMenu();
         else app.Start();
 
+        if (!dump.empty() && !keys.empty()) {
+            // --keys up,down,left,right,fire,softl,softr,<digit>: typed 300 ms apart.
+            size_t pos = 0;
+            while (pos <= keys.size()) {
+                size_t comma = keys.find(',', pos);
+                const std::string tok = keys.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+                pos = comma == std::string::npos ? keys.size() + 1 : comma + 1;
+                using oblivion::Key;
+                if (tok == "up") app.OnKeyDown(Key::Up);
+                else if (tok == "down") app.OnKeyDown(Key::Down);
+                else if (tok == "left") app.OnKeyDown(Key::Left);
+                else if (tok == "right") app.OnKeyDown(Key::Right);
+                else if (tok == "fire") app.OnKeyDown(Key::Fire);
+                else if (tok == "softl") app.OnKeyDown(Key::SoftLeft);
+                else if (tok == "softr") app.OnKeyDown(Key::SoftRight);
+                else if (tok.size() == 1) app.OnKeyDown(Key::Char, tok[0]);
+                for (int ms = 0; ms < 300; ms += 16) {
+                    app.Tick(16);
+                    app.Draw(bb);
+                }
+            }
+            app.Draw(bb);
+            return WritePpm(dump.c_str(), bb) ? 0 : 1;
+        }
         if (!dump.empty()) {
             for (int ms = 0; ms < runMs; ms += 16) {
                 if (ms % 1100 < 16) app.OnKeyDown(oblivion::Key::Fire);
@@ -139,7 +172,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     break;
                 }
                 case VK_ESCAPE: window.RequestClose(); return;
-                default: app.OnKeyDown(KeyForVk(vk)); return;
+                default: app.OnKeyDown(KeyForVk(vk), KeypadCode(vk)); return;
             }
         });
 

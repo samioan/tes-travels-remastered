@@ -34,6 +34,7 @@ target_link_libraries(oblivion_assets PUBLIC stb_image)
 # Rendering + the static level view.
 add_library(oblivion_world STATIC
   src/game/game_app.cpp
+  src/game/help_pages.cpp
   src/graphics/text.cpp
   src/render/sprite_renderer.cpp
   src/script/interpreter.cpp

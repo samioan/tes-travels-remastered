@@ -94,11 +94,22 @@ Canvas for its size, so this is a port decision).
   when absent. `script_smoke` now drives `GameApp` and holds Down through text
   screens (their end detection lives in `Draw`, as in `Game.paint`).
 
+- **M6b -- help pages and controls** (`game/help_pages`, `GameApp`): the
+  five `getHelp*` page builders (classes, weapons, armour, spells, items) with
+  their paged/scrolling screen (state 18), the overview and basic-controls
+  text screens (23, 17), and the controls screen (state 5, key rebinding with
+  the phone's keypad characters; digits 2/4/5/6/8 mirror the d-pad like
+  `mapKey`). `--keys up,down,fire,softl,...,<digit>` drives a headless run
+  for screenshots.
+
 ## Next
 
-- **M6b/c -- help pages, controls screen, inventory and shop** (states 1, 2,
-  5, 18, plus 23/17 paging): the help page builders (`getHelp*`), key
-  rebinding, and `DialogueScreen` (inventory tabs, shop).
+- **M6c -- inventory and shop** (states 1, 2): `DialogueScreen` (tabbed
+  menus, description panel, scrolling) plus `Game.openInventory/openShop`.
+  These sit on the item logic of `ActorSystem` (`addItem`, equip,
+  `useConsumable`, `canUseItem`, `recalcDerivedStats`), so they are built
+  together with the first half of M7. The five `*_cr` between-level scripts
+  wait for the shop.
 - **M7 -- combat/AI/leveling:** the rest of `ActorSystem`, `ProjectileManager`
   and the procedural dungeon generator (`Game.generateDungeon`).
 - **M8 -- save/load, fonts, audio, packaging** (the original stores one

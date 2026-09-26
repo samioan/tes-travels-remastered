@@ -5,6 +5,7 @@
 #include "assets/asset_root.h"
 #include "assets/image.h"
 #include "graphics/backbuffer.h"
+#include "game/help_pages.h"
 #include "world/game_world.h"
 
 namespace oblivion {
@@ -19,9 +20,7 @@ enum class Key {
     Fire,       // action 7
     SoftLeft,   // keyLeftSoft
     SoftRight,  // keyRightSoft
-    Quick0,     // quick-use health potion (binding 0)
-    Quick1,     // quick-use mana potion (binding 1)
-    Quick2,     // toggle weapon (binding 2)
+    Char,       // a keypad character key ('0'-'9', '*', '#'); the code says which
     Other,      // any other key: still releases WAIT_KEY
 };
 
@@ -40,10 +39,15 @@ public:
     // straight into that level like New Game does).
     void Start();
     void StartLevel(const std::string& scrPath);
+    // Boots and fast-forwards the splash screens to the main menu (for tests / --keys).
+    void StartMenu();
 
-    void OnKeyDown(Key key);
+    void OnKeyDown(Key key, int code = 0);
     // The key currently held (movement, text scrolling); Key::None if none.
-    void SetHeldKey(Key key) { held_ = key; }
+    void SetHeldKey(Key key, int code = 0) {
+        held_ = key;
+        heldCode_ = code;
+    }
     void Tick(int dtMs);
     void Draw(Backbuffer& bb);
 
@@ -55,9 +59,12 @@ private:
 
     // -- state machine (Game.setState tail, handleInput, run) --
     void OnStateChange(int oldState, int newState);
-    void HandleKey(Key key);
+    void HandleKey(Key key, int code);
+    int MapKey(Key key, int code) const;  // Game.mapKey: 0..2 quick keys, 3..7 directions/fire, -1 none
     void HandleMenuKey(Key key);
-    void HandleTextKey(Key key);
+    void HandleControlsKey(Key key, int code);
+    void HandleHelpKey(Key key);
+    void OpenHelp(int titleId);
     void ActivateMenuItem();
     void BuildMenus();
     void StartNewGame();
@@ -72,12 +79,15 @@ private:
     void DrawMessage(Backbuffer& bb);
     void DrawMenu(Backbuffer& bb);
     void DrawTextScreen(Backbuffer& bb);
+    void DrawControls(Backbuffer& bb);
+    void DrawHelpPage(Backbuffer& bb);
     void DrawPrompt(Backbuffer& bb, const std::string& text, bool twoSoftKeys, bool large = true);
 
     const AssetRoot& assets_;
     ImageCache& images_;
     World world_;
     Key held_ = Key::None;
+    int heldCode_ = 0;
 
     // menus
     std::vector<std::vector<std::string>> menus_;
@@ -94,6 +104,17 @@ private:
     bool textAtEnd_ = false;
     int textEndWaitMs_ = -1;  // >= 0 once the text has scrolled off (Thread.sleep(3000) in the original)
     int helpTitleId_ = 0;
+    HelpPages helpPages_;
+    int helpPage_ = 0, helpScroll_ = 0;
+    bool helpHasMore_ = false;
+
+    // controls screen (state 5)
+    int keyBindings_[3] = {55, 57, 51};  // quick health, quick mana, toggle weapon: '7', '9', '3'
+    int keyBindingsEdit_[3] = {};
+    std::vector<std::string> optionLabels_;
+    int optionsCursor_ = 0;
+    bool editingKey_ = false;
+    std::string KeyLabel(int code) const;
 
     // misc timers
     int loadProgress_ = -1;
