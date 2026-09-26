@@ -39,7 +39,7 @@ renamed -- doing it wrong would be worse than leaving it obfuscated.
 
 ## `b` -- the whole engine (canvas + controller + resource loader + renderer)
 
-**Not yet renamed** (see "Reading notes"); proposed name **`Game`**.
+Now **`Game.java`** (member names in `docs/rename.map`; method/field names below are the old survey names, line numbers refer to `decompiled/b.java`).
 `final class b extends Canvas implements Runnable`. Unlike
 dawnstar/stormhold where the MIDlet-lifecycle class (`ESGame`) and the
 render surface (`GameCanvas`) are separate, this engine centralizes
@@ -349,21 +349,19 @@ completely different engine/format.
 
 `docs/rename.map` + `tools/MapRenamer.java` + `tools/decompile_renamed.py`:
 a Vineflower identifier-renamer keyed on (class, name, JVM descriptor), which
-is the only way to give names to the obfuscator's same-letter fields and
-return-type-only method overloads. `python oblivion/tools/decompile_renamed.py
-<outdir> [--uniquify]` re-decompiles `extracted/` with the map applied
-(`--uniquify` suffixes every still-unmapped field with its type, e.g. `a_aBy`,
-so a class can be read unambiguously before it is named). Add entries to the
-map, regenerate, and copy the result. `Game`/`ScriptInterpreter`/
-`DialogueScreen` members that `Actor`/`ActorSystem` touch are already mapped.
+is the only way to name the obfuscator's same-letter fields and return-type-only
+method overloads. `python oblivion/tools/decompile_renamed.py <outdir>
+[--uniquify]` re-decompiles `extracted/` with the map applied (`--uniquify`
+suffixes any still-unmapped field with its type, e.g. `a_aBy`). The map now
+covers **every class** (`a`..`j`), so the plain output uses the final names.
 
-## Renamed source
+## Renamed source (Phase 1 complete)
 
-`Strings.java`, `DialogueNode.java`, `SpriteFrame.java`,
-`SpriteRenderer.java`, `ProjectileManager.java`, **`Actor.java`** and
-**`ActorSystem.java`** and **`DialogueScreen.java`** and **`ScriptInterpreter.java`** live in `../src/`. They still refer to `b` (Game) and
-`e` (ScriptInterpreter) by their decompiled names, plus the few mapped members
-(`b.actors`, `b.collision`, `b.random`, `e.runScript`, ...).
-
-`Game.java` (`b`) is the last unrenamed class (`decompiled/b.java`); many of its members
-are already in `rename.map`. Next: finish it with `--uniquify` output.
+Every class is in `../src/` under its real name: `Game` (was `b`),
+`ScriptInterpreter` (`e`), `Actor` (`j`), `ActorSystem` (`h`), `DialogueScreen`
+(`f`), `DialogueNode` (`c`), `SpriteFrame` (`d`), `SpriteRenderer` (`g`),
+`ProjectileManager` (`i`), `Strings` (`a`), plus `blt/Main`. All ten classes
+compile together against the MIDP stubs in `tools/midp-stubs/` (checked with
+JDK 21; `blt/Main` can't be compiled from source because Java cannot import a
+default-package class). Local variables inside long methods are still
+`varN`; `Game`'s per-state key/menu handling is documented in its header.

@@ -77,7 +77,7 @@ the code each opcode runs; operands marked `?` are read but not yet understood.
 | 68 | `SPAWN_PROJECTILE` | b kind(0,1,2), s x, s y |
 | 69 | `SPAWN_TIMED_PROJECTILE` | b kind, s x, s y, b seconds |
 | 70 | `CLEAR_PROJECTILE_AT` | s x, s y |
-| 71 | `SET_POINT` | s, s |
+| 71 | `SET_RESPAWN_POINT` | s, s |
 | 72 | `EVICT_SPRITES` | s len,str path prefix |
 | 73 | `BEGIN_FADE` | - |
 | 74 | `END_FADE` | - |

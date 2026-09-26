@@ -9,14 +9,12 @@ import javax.microedition.lcdui.Graphics;
  * as the group id, so it's really per-type animation state, not
  * per-projectile-instance.
  *
- * Actor/ActorSystem use their renamed members; Game (`b`) members that were
- * named for ActorSystem (actors, ...) use the names in docs/rename.map, the
- * rest of `b` is still obfuscated.
+ * Refers to the renamed Actor, ActorSystem and Game (decompiled/b.java).
  */
 public final class ProjectileManager {
    private static SpriteFrame magicEffectFrames = null;
    // 11 slots * 9 shorts: [0]=packed type+facing (or, high nibble 0xF00,
-   // an encoded 1-based index into b.actors[] identifying the actor this
+   // an encoded 1-based index into Game.actors[] identifying the actor this
    // projectile came from), [1]/[2]=x/y, [3]=ms since last move step,
    // [4]=anim state (high byte 0xFF00 = "finished" sentinel), [5]/[6]=
    // origin x/y (or a homed-on actor's last-known x/y), [7]=lifetime ms
@@ -142,7 +140,7 @@ public final class ProjectileManager {
    /**
     * A projectile's move step overshot its target cell, or its timer
     * expired: identify the actor it came from (encoded in slot[0]'s high
-    * nibble as a 1-based b.actors[] index) and look for the nearest actor of
+    * nibble as a 1-based Game.actors[] index) and look for the nearest actor of
     * a different faction within 200 (ActorSystem's distance metric),
     * then hand off resolution to ActorSystem's hit resolver. Returns
     * true if it hit something (caller then clears the slot).
@@ -154,21 +152,21 @@ public final class ProjectileManager {
       int bestDist = 16777215;
       int sourceIndex = (pool[slot + 0] & 4095) >> 8;
       Actor source = null;
-      if (sourceIndex > 0 && sourceIndex < b.actors.length) {
-         if ((source = b.actors[sourceIndex - 1]) == null) {
+      if (sourceIndex > 0 && sourceIndex < Game.actors.length) {
+         if ((source = Game.actors[sourceIndex - 1]) == null) {
             clear(slot);
             return false;
          }
 
          for (int i = 0; i < 25; i++) {
-            if (b.actors[i] != null && b.actors[i].dead != 1 && source != b.actors[i] && source.team != b.actors[i].team && (dist = ActorSystem.distance(pos, b.actors[i].pos)) < 200 && dist < bestDist) {
+            if (Game.actors[i] != null && Game.actors[i].dead != 1 && source != Game.actors[i] && source.team != Game.actors[i].team && (dist = ActorSystem.distance(pos, Game.actors[i].pos)) < 200 && dist < bestDist) {
                bestSlot = i;
                bestDist = dist;
             }
          }
 
          if (bestSlot != -1) {
-            ActorSystem.attack(source, b.actors[bestSlot], false);
+            ActorSystem.attack(source, Game.actors[bestSlot], false);
             return true;
          } else {
             return false;
@@ -241,13 +239,13 @@ public final class ProjectileManager {
                   }
                } else {
                   if ((pool[i + 0] & -4096) == -4096) {
-                     if ((sourceIndex = ((pool[i + 0] & 4095) >> 8) - 1) < 0 || sourceIndex > b.actors.length || b.actors[sourceIndex] == null) {
+                     if ((sourceIndex = ((pool[i + 0] & 4095) >> 8) - 1) < 0 || sourceIndex > Game.actors.length || Game.actors[sourceIndex] == null) {
                         clear(i);
                         continue;
                      }
 
-                     pool[i + 1] = (short)b.actors[sourceIndex].pos[0];
-                     pool[i + 2] = (short)b.actors[sourceIndex].pos[1];
+                     pool[i + 1] = (short)Game.actors[sourceIndex].pos[0];
+                     pool[i + 2] = (short)Game.actors[sourceIndex].pos[1];
                   }
 
                   if (SpriteRenderer.setFrame(magicEffectFrames, dir, pool[i + 4])) {
@@ -271,8 +269,8 @@ public final class ProjectileManager {
          if (pool[i + 0] != -1 && (pool[i + 4] & '＀') != 65280) {
             worldPos[0] = pool[i + 1];
             worldPos[1] = pool[i + 2];
-            b.a(worldPos, screenPos);
-            if (screenPos[0] + cameraOffset[0] >= 0 && screenPos[0] + cameraOffset[0] <= b.a && screenPos[1] + cameraOffset[1] >= 0 && screenPos[1] + cameraOffset[1] <= b.b) {
+            Game.worldToIso(worldPos, screenPos);
+            if (screenPos[0] + cameraOffset[0] >= 0 && screenPos[0] + cameraOffset[0] <= Game.screenWidth && screenPos[1] + cameraOffset[1] >= 0 && screenPos[1] + cameraOffset[1] <= Game.screenHeight) {
                SpriteRenderer.setFrame(magicEffectFrames, pool[i + 0] & 255, pool[i + 4]);
                SpriteRenderer.draw(g, magicEffectFrames, pool[i + 0] & 255, screenPos[0] + cameraOffset[0], screenPos[1] + cameraOffset[1]);
             }

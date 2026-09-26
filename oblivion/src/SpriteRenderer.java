@@ -104,7 +104,7 @@ public final class SpriteRenderer {
       int[] frameRec = new int[10];
       int[] subframeRec = new int[10];
       int[] colorKey = null;
-      int length = b.a(path);
+      int length = Game.loadResource(path);
       int pos = 0;
       byte var15 = 0;
       char prefixLen;
@@ -116,7 +116,7 @@ public final class SpriteRenderer {
       byte[] data = new byte[length];
       loadedCount = 0;
       totalCount = 0;
-      System.arraycopy(b.b, 0, data, 0, length);
+      System.arraycopy(Game.resourceBuffer, 0, data, 0, length);
       if ((prefixLen = (char)(data[0] & 0xFF)) > 0) {
          pathPrefix = new String(data, 1, prefixLen);
       }
@@ -195,8 +195,8 @@ public final class SpriteRenderer {
          }
       }
 
-      b.b = null;
-      b.c(100);
+      Game.resourceBuffer = null;
+      Game.setLoadingProgress(100);
       return head;
    }
 
@@ -213,7 +213,7 @@ public final class SpriteRenderer {
       }
 
       totalCount++;
-      b.c(++loadedCount * 100 / totalCount);
+      Game.setLoadingProgress(++loadedCount * 100 / totalCount);
       return image;
    }
 
@@ -244,9 +244,9 @@ public final class SpriteRenderer {
          } else {
             clipX = x + frame.frameDx;
             clipY = y + frame.frameDy;
-            if (clipX < b.a && clipY < b.b) {
-               clipW = b.a < frame.width ? b.a : frame.width;
-               clipH = b.b < frame.height ? b.b : frame.height;
+            if (clipX < Game.screenWidth && clipY < Game.screenHeight) {
+               clipW = Game.screenWidth < frame.width ? Game.screenWidth : frame.width;
+               clipH = Game.screenHeight < frame.height ? Game.screenHeight : frame.height;
                g.setClip(clipX, clipY, clipW, clipH);
                g.clipRect(clipX, clipY, clipW, clipH);
                if (frame.isSprite == 1) {
@@ -266,7 +266,7 @@ public final class SpriteRenderer {
                   g.drawImage(image, x - frame.offsetX + frame.frameDx, y - frame.frameDx + frame.width, 0);
                }
 
-               g.setClip(0, 0, b.a, b.b);
+               g.setClip(0, 0, Game.screenWidth, Game.screenHeight);
             }
          }
 
@@ -350,7 +350,7 @@ public final class SpriteRenderer {
          }
       }
 
-      b.b();
+      Game.collectGarbage();
    }
 
    // Standard reversed-polynomial (0xEDB88320) CRC32 table builder. Its

@@ -59,7 +59,7 @@ OPS = {
     64: ("SET_BACKGROUND_COLOR", "i"), 65: ("LEVEL_UP_TO", "bb"),
     66: ("SHOW_TEXT_SCREEN", "X"), 67: ("RESTORE_MONSTER_TYPE", "b"),
     68: ("SPAWN_PROJECTILE", "bss"), 69: ("SPAWN_TIMED_PROJECTILE", "bssb"),
-    70: ("CLEAR_PROJECTILE_AT", "ss"), 71: ("SET_POINT", "ss"),
+    70: ("CLEAR_PROJECTILE_AT", "ss"), 71: ("SET_RESPAWN_POINT", "ss"),
     72: ("EVICT_SPRITES", "S"), 73: ("BEGIN_FADE", ""), 74: ("END_FADE", ""),
     75: ("TOGGLE_INVULNERABLE", "b"), 76: ("SET_HUD_VISIBLE", "b"),
     77: ("SET_STATE_4", ""), 78: ("SET_AI_ACTIVE", "bb"),

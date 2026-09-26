@@ -2,8 +2,7 @@
  * Renamed from decompiled/e.java (see docs/CLASS_MAP.md, docs/rename.map).
  * Loads a level's .scr resource into its record tables and interprets the
  * bytecode that follows them (a call stack of program counters, so scripts
- * may CALL each other). Game (`b`) is not renamed yet; members used here are
- * mapped in docs/rename.map.
+ * may CALL each other).
  */
 public final class ScriptInterpreter {
    // .scr bytecode opcodes (see docs/SCR_OPCODES.md for operand layouts)
@@ -76,7 +75,7 @@ public final class ScriptInterpreter {
    public static final int OP_SPAWN_PROJECTILE = 68;
    public static final int OP_SPAWN_TIMED_PROJECTILE = 69;
    public static final int OP_CLEAR_PROJECTILE_AT = 70;
-   public static final int OP_SET_POINT = 71;
+   public static final int OP_SET_RESPAWN_POINT = 71;
    public static final int OP_EVICT_SPRITES = 72;
    public static final int OP_BEGIN_FADE = 73;
    public static final int OP_END_FADE = 74;
@@ -111,7 +110,7 @@ public final class ScriptInterpreter {
    private int waitDuration = -1;
    private int stringCount = 0;
    private int spawnIdCount = 0;
-   private b game = null;
+   private Game game = null;
    private String[] strings = new String[255];
    private byte[] code = null;
    private static ScriptInterpreter instance = null;
@@ -122,7 +121,7 @@ public final class ScriptInterpreter {
    public boolean waitingForKey = false;
    private boolean firstLoad = true;
 
-   public ScriptInterpreter(b var1) {
+   public ScriptInterpreter(Game var1) {
       this.game = var1;
       instance = this;
       this.reset();
@@ -173,32 +172,32 @@ public final class ScriptInterpreter {
       boolean var3 = false;
       if (var1 != null) {
          this.reset();
-         int var4 = b.loadResource(var1);
+         int var4 = Game.loadResource(var1);
 
-         for (var2 = 1; var2 < b.resourceBuffer[0] * 3; var2 += 3) {
-            this.scriptOffsets[b.resourceBuffer[var2]] = ((char)b.resourceBuffer[var2 + 1] & 255) << 8 | ((char)b.resourceBuffer[var2 + 2] & 255) << 0;
+         for (var2 = 1; var2 < Game.resourceBuffer[0] * 3; var2 += 3) {
+            this.scriptOffsets[Game.resourceBuffer[var2]] = ((char)Game.resourceBuffer[var2 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var2 + 2] & 255) << 0;
          }
 
-         while (b.resourceBuffer[var2++] == 30) {
-            if (b.resourceBuffer[var2] == 0) {
+         while (Game.resourceBuffer[var2++] == 30) {
+            if (Game.resourceBuffer[var2] == 0) {
                var2 = this.parseMonsterRecord(++var2);
-            } else if (b.resourceBuffer[var2] == 1) {
+            } else if (Game.resourceBuffer[var2] == 1) {
                var2 = this.parseArmorRecord(++var2);
-            } else if (b.resourceBuffer[var2] == 2) {
+            } else if (Game.resourceBuffer[var2] == 2) {
                var2 = this.parseConsumableRecord(++var2);
-            } else if (b.resourceBuffer[var2] == 4) {
+            } else if (Game.resourceBuffer[var2] == 4) {
                var2 = this.parseWeaponRecord(++var2);
-            } else if (b.resourceBuffer[var2] == 5) {
+            } else if (Game.resourceBuffer[var2] == 5) {
                var2 = this.parseClassRecord(++var2);
-            } else if (b.resourceBuffer[var2] == 6) {
+            } else if (Game.resourceBuffer[var2] == 6) {
                var2 = this.parseTable6Record(++var2);
-            } else if (b.resourceBuffer[var2] == 7) {
+            } else if (Game.resourceBuffer[var2] == 7) {
                var2 = this.parsePairList(++var2);
-            } else if (b.resourceBuffer[var2] == 8) {
+            } else if (Game.resourceBuffer[var2] == 8) {
                var2 = this.parseSpecialRecord(++var2);
-            } else if (b.resourceBuffer[var2] == 9) {
+            } else if (Game.resourceBuffer[var2] == 9) {
                var2 = this.parseSpawnGroupRecord(++var2);
-            } else if (b.resourceBuffer[var2] == 10) {
+            } else if (Game.resourceBuffer[var2] == 10) {
                var2 = this.parseLootRecord(++var2);
             }
          }
@@ -220,7 +219,7 @@ public final class ScriptInterpreter {
          }
 
          this.code = new byte[var4 - var2];
-         System.arraycopy(b.resourceBuffer, var2, this.code, 0, this.code.length);
+         System.arraycopy(Game.resourceBuffer, var2, this.code, 0, this.code.length);
          runScript(1);
       }
    }
@@ -229,19 +228,19 @@ public final class ScriptInterpreter {
       byte var2 = 0;
       int[] var3 = new int[21];
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 1) {
-            this.strings[this.stringCount] = new String(b.resourceBuffer, var1 + 2, b.resourceBuffer[var1 + 1]);
-            var3[b.resourceBuffer[var1]] = this.stringCount++;
-            var1 += b.resourceBuffer[var1 + 1] + 1;
-         } else if (b.resourceBuffer[var1] != 7 && b.resourceBuffer[var1] != 14 && b.resourceBuffer[var1] != 15) {
-            if (b.resourceBuffer[var1] == 0) {
-               var2 = b.resourceBuffer[var1 + 1];
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 1) {
+            this.strings[this.stringCount] = new String(Game.resourceBuffer, var1 + 2, Game.resourceBuffer[var1 + 1]);
+            var3[Game.resourceBuffer[var1]] = this.stringCount++;
+            var1 += Game.resourceBuffer[var1 + 1] + 1;
+         } else if (Game.resourceBuffer[var1] != 7 && Game.resourceBuffer[var1] != 14 && Game.resourceBuffer[var1] != 15) {
+            if (Game.resourceBuffer[var1] == 0) {
+               var2 = Game.resourceBuffer[var1 + 1];
             }
 
-            var3[b.resourceBuffer[var1++]] = (char)(b.resourceBuffer[var1] & 0xFF);
+            var3[Game.resourceBuffer[var1++]] = (char)(Game.resourceBuffer[var1] & 0xFF);
          } else {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
             var1 += 2;
          }
 
@@ -256,33 +255,33 @@ public final class ScriptInterpreter {
       byte var2 = 0;
       int[] var3 = new int[10];
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 1) {
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 1) {
             byte var4;
-            if (((var4 = b.resourceBuffer[var1 + 1]) & 240) == 240) {
-               var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+            if (((var4 = Game.resourceBuffer[var1 + 1]) & 240) == 240) {
+               var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
                var1 += 2;
             } else {
-               this.strings[this.stringCount] = new String(b.resourceBuffer, var1 + 2, b.resourceBuffer[var1 + 1]);
-               var3[b.resourceBuffer[var1]] = this.stringCount++;
-               var1 += b.resourceBuffer[var1 + 1] + 1;
+               this.strings[this.stringCount] = new String(Game.resourceBuffer, var1 + 2, Game.resourceBuffer[var1 + 1]);
+               var3[Game.resourceBuffer[var1]] = this.stringCount++;
+               var1 += Game.resourceBuffer[var1 + 1] + 1;
             }
-         } else if (b.resourceBuffer[var1] == 5) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 16
-               | ((char)b.resourceBuffer[var1 + 2] & 255) << 8
-               | ((char)b.resourceBuffer[var1 + 3] & 255) << 0;
+         } else if (Game.resourceBuffer[var1] == 5) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 16
+               | ((char)Game.resourceBuffer[var1 + 2] & 255) << 8
+               | ((char)Game.resourceBuffer[var1 + 3] & 255) << 0;
             var1 += 3;
-         } else if (b.resourceBuffer[var1] == 9) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+         } else if (Game.resourceBuffer[var1] == 9) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
             var1 += 2;
-         } else if (b.resourceBuffer[var1] == 6) {
-            var3[b.resourceBuffer[var1]] = 1;
+         } else if (Game.resourceBuffer[var1] == 6) {
+            var3[Game.resourceBuffer[var1]] = 1;
          } else {
-            if (b.resourceBuffer[var1] == 0) {
-               var2 = b.resourceBuffer[var1 + 1];
+            if (Game.resourceBuffer[var1] == 0) {
+               var2 = Game.resourceBuffer[var1 + 1];
             }
 
-            var3[b.resourceBuffer[var1++]] = b.resourceBuffer[var1];
+            var3[Game.resourceBuffer[var1++]] = Game.resourceBuffer[var1];
          }
 
          var1++;
@@ -296,33 +295,33 @@ public final class ScriptInterpreter {
       byte var2 = 0;
       int[] var3 = new int[14];
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 1) {
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 1) {
             byte var4;
-            if (((var4 = b.resourceBuffer[var1 + 1]) & 240) == 240) {
-               var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+            if (((var4 = Game.resourceBuffer[var1 + 1]) & 240) == 240) {
+               var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
                var1 += 2;
             } else {
-               this.strings[this.stringCount] = new String(b.resourceBuffer, var1 + 2, b.resourceBuffer[var1 + 1]);
-               var3[b.resourceBuffer[var1]] = this.stringCount++;
-               var1 += b.resourceBuffer[var1 + 1] + 1;
+               this.strings[this.stringCount] = new String(Game.resourceBuffer, var1 + 2, Game.resourceBuffer[var1 + 1]);
+               var3[Game.resourceBuffer[var1]] = this.stringCount++;
+               var1 += Game.resourceBuffer[var1 + 1] + 1;
             }
-         } else if (b.resourceBuffer[var1] == 5) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 16
-               | ((char)b.resourceBuffer[var1 + 2] & 255) << 8
-               | ((char)b.resourceBuffer[var1 + 3] & 255) << 0;
+         } else if (Game.resourceBuffer[var1] == 5) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 16
+               | ((char)Game.resourceBuffer[var1 + 2] & 255) << 8
+               | ((char)Game.resourceBuffer[var1 + 3] & 255) << 0;
             var1 += 3;
-         } else if (b.resourceBuffer[var1] == 13) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+         } else if (Game.resourceBuffer[var1] == 13) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
             var1 += 2;
-         } else if (b.resourceBuffer[var1] == 4) {
-            var3[b.resourceBuffer[var1]] = 1;
+         } else if (Game.resourceBuffer[var1] == 4) {
+            var3[Game.resourceBuffer[var1]] = 1;
          } else {
-            if (b.resourceBuffer[var1] == 0) {
-               var2 = b.resourceBuffer[var1 + 1];
+            if (Game.resourceBuffer[var1] == 0) {
+               var2 = Game.resourceBuffer[var1 + 1];
             }
 
-            var3[b.resourceBuffer[var1++]] = (char)b.resourceBuffer[var1] & 255;
+            var3[Game.resourceBuffer[var1++]] = (char)Game.resourceBuffer[var1] & 255;
          }
 
          var1++;
@@ -336,26 +335,26 @@ public final class ScriptInterpreter {
       byte var2 = 0;
       int[] var3 = new int[8];
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 1) {
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 1) {
             byte var4;
-            if (((var4 = b.resourceBuffer[var1 + 1]) & 240) == 240) {
-               var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+            if (((var4 = Game.resourceBuffer[var1 + 1]) & 240) == 240) {
+               var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
                var1 += 2;
             } else {
-               this.strings[this.stringCount] = new String(b.resourceBuffer, var1 + 2, b.resourceBuffer[var1 + 1]);
-               var3[b.resourceBuffer[var1]] = this.stringCount++;
-               var1 += b.resourceBuffer[var1 + 1] + 1;
+               this.strings[this.stringCount] = new String(Game.resourceBuffer, var1 + 2, Game.resourceBuffer[var1 + 1]);
+               var3[Game.resourceBuffer[var1]] = this.stringCount++;
+               var1 += Game.resourceBuffer[var1 + 1] + 1;
             }
-         } else if (b.resourceBuffer[var1] == 7) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+         } else if (Game.resourceBuffer[var1] == 7) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
             var1 += 2;
          } else {
-            if (b.resourceBuffer[var1] == 0) {
-               var2 = b.resourceBuffer[var1 + 1];
+            if (Game.resourceBuffer[var1] == 0) {
+               var2 = Game.resourceBuffer[var1 + 1];
             }
 
-            var3[b.resourceBuffer[var1++]] = b.resourceBuffer[var1];
+            var3[Game.resourceBuffer[var1++]] = Game.resourceBuffer[var1];
          }
 
          var1++;
@@ -373,30 +372,30 @@ public final class ScriptInterpreter {
       int var6 = 0;
       int var7 = 0;
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 1) {
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 1) {
             byte var8;
-            if (((var8 = b.resourceBuffer[var1 + 1]) & 240) == 240) {
-               var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+            if (((var8 = Game.resourceBuffer[var1 + 1]) & 240) == 240) {
+               var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
                var1 += 2;
             } else {
-               this.strings[this.stringCount] = new String(b.resourceBuffer, var1 + 2, b.resourceBuffer[var1 + 1]);
-               var3[b.resourceBuffer[var1]] = this.stringCount++;
-               var1 += b.resourceBuffer[var1 + 1] + 1;
+               this.strings[this.stringCount] = new String(Game.resourceBuffer, var1 + 2, Game.resourceBuffer[var1 + 1]);
+               var3[Game.resourceBuffer[var1]] = this.stringCount++;
+               var1 += Game.resourceBuffer[var1 + 1] + 1;
             }
-         } else if (b.resourceBuffer[var1] == 6 || b.resourceBuffer[var1] == 13 || b.resourceBuffer[var1] == 14) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+         } else if (Game.resourceBuffer[var1] == 6 || Game.resourceBuffer[var1] == 13 || Game.resourceBuffer[var1] == 14) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
             var1 += 2;
-         } else if (b.resourceBuffer[var1] == 2) {
-            var4[var6++] = b.resourceBuffer[++var1];
-         } else if (b.resourceBuffer[var1] == 3) {
-            var5[var7++] = b.resourceBuffer[++var1];
+         } else if (Game.resourceBuffer[var1] == 2) {
+            var4[var6++] = Game.resourceBuffer[++var1];
+         } else if (Game.resourceBuffer[var1] == 3) {
+            var5[var7++] = Game.resourceBuffer[++var1];
          } else {
-            if (b.resourceBuffer[var1] == 0) {
-               var2 = b.resourceBuffer[var1 + 1];
+            if (Game.resourceBuffer[var1] == 0) {
+               var2 = Game.resourceBuffer[var1 + 1];
             }
 
-            var3[b.resourceBuffer[var1++]] = b.resourceBuffer[var1];
+            var3[Game.resourceBuffer[var1++]] = Game.resourceBuffer[var1];
          }
 
          var1++;
@@ -414,16 +413,16 @@ public final class ScriptInterpreter {
       byte var2 = 0;
       int[] var3 = new int[7];
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 2) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 2) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
             var1 += 2;
          } else {
-            if (b.resourceBuffer[var1] == 0) {
-               var2 = b.resourceBuffer[var1 + 1];
+            if (Game.resourceBuffer[var1] == 0) {
+               var2 = Game.resourceBuffer[var1 + 1];
             }
 
-            var3[b.resourceBuffer[var1++]] = (char)b.resourceBuffer[var1] & 255;
+            var3[Game.resourceBuffer[var1++]] = (char)Game.resourceBuffer[var1] & 255;
          }
 
          var1++;
@@ -436,9 +435,9 @@ public final class ScriptInterpreter {
    private final int parsePairList(int var1) {
       int var2 = 0;
 
-      while (b.resourceBuffer[var1] != 31) {
-         this.pairTable[var2++] = b.resourceBuffer[var1++];
-         this.pairTable[var2++] = b.resourceBuffer[var1++];
+      while (Game.resourceBuffer[var1] != 31) {
+         this.pairTable[var2++] = Game.resourceBuffer[var1++];
+         this.pairTable[var2++] = Game.resourceBuffer[var1++];
       }
 
       this.pairTable[var2] = -1;
@@ -449,31 +448,31 @@ public final class ScriptInterpreter {
       byte var2 = 0;
       int[] var3 = new int[15];
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 1) {
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 1) {
             byte var4;
-            if (((var4 = b.resourceBuffer[var1 + 1]) & 240) == 240) {
-               var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+            if (((var4 = Game.resourceBuffer[var1 + 1]) & 240) == 240) {
+               var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
                var1 += 2;
             } else {
-               this.strings[this.stringCount] = new String(b.resourceBuffer, var1 + 2, b.resourceBuffer[var1 + 1]);
-               var3[b.resourceBuffer[var1]] = this.stringCount++;
-               var1 += b.resourceBuffer[var1 + 1] + 1;
+               this.strings[this.stringCount] = new String(Game.resourceBuffer, var1 + 2, Game.resourceBuffer[var1 + 1]);
+               var3[Game.resourceBuffer[var1]] = this.stringCount++;
+               var1 += Game.resourceBuffer[var1 + 1] + 1;
             }
-         } else if (b.resourceBuffer[var1] == 14) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+         } else if (Game.resourceBuffer[var1] == 14) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
             var1 += 2;
-         } else if (b.resourceBuffer[var1] == 6) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 16
-               | ((char)b.resourceBuffer[var1 + 2] & 255) << 8
-               | ((char)b.resourceBuffer[var1 + 3] & 255) << 0;
+         } else if (Game.resourceBuffer[var1] == 6) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 16
+               | ((char)Game.resourceBuffer[var1 + 2] & 255) << 8
+               | ((char)Game.resourceBuffer[var1 + 3] & 255) << 0;
             var1 += 3;
          } else {
-            if (b.resourceBuffer[var1] == 0) {
-               var2 = b.resourceBuffer[var1 + 1];
+            if (Game.resourceBuffer[var1] == 0) {
+               var2 = Game.resourceBuffer[var1 + 1];
             }
 
-            var3[b.resourceBuffer[var1++]] = b.resourceBuffer[var1];
+            var3[Game.resourceBuffer[var1++]] = Game.resourceBuffer[var1];
          }
 
          var1++;
@@ -487,18 +486,18 @@ public final class ScriptInterpreter {
       byte var2 = 0;
       int[] var3 = new int[21];
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 1 || b.resourceBuffer[var1] == 2) {
-            var3[b.resourceBuffer[var1]] = ((char)b.resourceBuffer[var1 + 1] & 255) << 8 | ((char)b.resourceBuffer[var1 + 2] & 255) << 0;
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 1 || Game.resourceBuffer[var1] == 2) {
+            var3[Game.resourceBuffer[var1]] = ((char)Game.resourceBuffer[var1 + 1] & 255) << 8 | ((char)Game.resourceBuffer[var1 + 2] & 255) << 0;
             var1 += 2;
-         } else if (b.resourceBuffer[var1] == 20) {
-            this.spawnIds[this.spawnIdCount++] = (char)b.resourceBuffer[++var1] & 255;
+         } else if (Game.resourceBuffer[var1] == 20) {
+            this.spawnIds[this.spawnIdCount++] = (char)Game.resourceBuffer[++var1] & 255;
          } else {
-            if (b.resourceBuffer[var1] == 0) {
-               var2 = b.resourceBuffer[var1 + 1];
+            if (Game.resourceBuffer[var1] == 0) {
+               var2 = Game.resourceBuffer[var1 + 1];
             }
 
-            var3[b.resourceBuffer[var1++]] = (char)b.resourceBuffer[var1] & 255;
+            var3[Game.resourceBuffer[var1++]] = (char)Game.resourceBuffer[var1] & 255;
          }
 
          var1++;
@@ -512,12 +511,12 @@ public final class ScriptInterpreter {
       byte var2 = 0;
       int[] var3 = new int[4];
 
-      while (b.resourceBuffer[var1] != 31) {
-         if (b.resourceBuffer[var1] == 0) {
-            var2 = b.resourceBuffer[var1 + 1];
+      while (Game.resourceBuffer[var1] != 31) {
+         if (Game.resourceBuffer[var1] == 0) {
+            var2 = Game.resourceBuffer[var1 + 1];
          }
 
-         var3[b.resourceBuffer[var1++]] = (char)b.resourceBuffer[var1] & 255;
+         var3[Game.resourceBuffer[var1++]] = (char)Game.resourceBuffer[var1] & 255;
          var1++;
       }
 
@@ -584,11 +583,11 @@ public final class ScriptInterpreter {
       if (!this.waitingForKey) {
          if (!this.game.dialogueOpen) {
             if (this.talkActor >= 0) {
-               ActorSystem.setStatusIcon(b.actors[this.talkActor], (byte)0);
+               ActorSystem.setStatusIcon(Game.actors[this.talkActor], (byte)0);
                this.talkActor = -1;
             }
 
-            if (!this.game.isBusyState()) {
+            if (!this.game.isShopState()) {
                if (this.waitDuration >= 0) {
                   this.waitElapsed = (int)(this.waitElapsed + var1);
                   if (this.waitElapsed < this.waitDuration) {
@@ -600,7 +599,7 @@ public final class ScriptInterpreter {
 
                if (this.waitActors != null) {
                   for (int var51 = 0; var51 < this.waitActors.length; var51++) {
-                     if (b.actors[this.waitActors[var51]] != null && b.actors[this.waitActors[var51]].moveTarget[0] != -1) {
+                     if (Game.actors[this.waitActors[var51]] != null && Game.actors[this.waitActors[var51]].moveTarget[0] != -1) {
                         return;
                      }
                   }
@@ -614,26 +613,26 @@ public final class ScriptInterpreter {
                         this.game.setInputEnabled(false);
                         this.game.cameraFollow(this.walkActor);
                         if (this.walkAxis != 0 && this.walkAxis != 1) {
-                           ActorSystem.setMoveTarget(b.actors[this.walkActor], this.walkTarget[0], b.actors[this.walkActor].pos[1]);
+                           ActorSystem.setMoveTarget(Game.actors[this.walkActor], this.walkTarget[0], Game.actors[this.walkActor].pos[1]);
                         } else {
-                           ActorSystem.setMoveTarget(b.actors[this.walkActor], b.actors[this.walkActor].pos[0], this.walkTarget[1]);
+                           ActorSystem.setMoveTarget(Game.actors[this.walkActor], Game.actors[this.walkActor].pos[0], this.walkTarget[1]);
                         }
 
-                        ActorSystem.setAnimState(b.actors[this.walkActor], (byte)2);
-                        ActorSystem.setStat(b.actors[this.walkActor], 7, 900, this);
+                        ActorSystem.setAnimState(Game.actors[this.walkActor], (byte)2);
+                        ActorSystem.setStat(Game.actors[this.walkActor], 7, 900, this);
                         this.walkPhase = 1;
                         return;
                      case 1:
-                        if (b.actors[this.walkActor].moveTarget[0] == -1) {
-                           ActorSystem.setAnimState(b.actors[this.walkActor], (byte)3);
-                           ActorSystem.setStat(b.actors[this.walkActor], 7, 400, this);
-                           ActorSystem.setMoveTarget(b.actors[this.walkActor], this.walkTarget[0], this.walkTarget[1]);
+                        if (Game.actors[this.walkActor].moveTarget[0] == -1) {
+                           ActorSystem.setAnimState(Game.actors[this.walkActor], (byte)3);
+                           ActorSystem.setStat(Game.actors[this.walkActor], 7, 400, this);
+                           ActorSystem.setMoveTarget(Game.actors[this.walkActor], this.walkTarget[0], this.walkTarget[1]);
                            this.walkPhase = 2;
                            return;
                         }
                         break;
                      case 2:
-                        if (b.actors[this.walkActor].moveTarget[0] == -1) {
+                        if (Game.actors[this.walkActor].moveTarget[0] == -1) {
                            this.game.setInputEnabled(true);
                            this.walkTarget = null;
                         }
@@ -652,9 +651,9 @@ public final class ScriptInterpreter {
                         return;
                      case OP_SAY:
                         var20 = this.readShort();
-                        b.setSpeakerName(null);
+                        Game.setSpeakerName(null);
                         if ((var20 & 61440) == 61440) {
-                           var3 = b.getString(var20 & 4095);
+                           var3 = Game.getString(var20 & 4095);
                         } else {
                            var3 = this.readString(var20);
                         }
@@ -672,7 +671,7 @@ public final class ScriptInterpreter {
                         this.readByte();
                         return;
                      case OP_SET_PLAYER_COLLIDES:
-                        b.playerCollides = this.readByte() == 1;
+                        Game.playerCollides = this.readByte() == 1;
                         return;
                      case OP_LOAD_MAP:
                         try {
@@ -694,7 +693,7 @@ public final class ScriptInterpreter {
                         this.waitElapsed = 0;
                         return;
                      case OP_SET_STATE_PLAYING:
-                        b.setState((byte)0);
+                        Game.setState((byte)0);
                         return;
                      case OP_NOP_B4:
                         this.readByte();
@@ -721,7 +720,7 @@ public final class ScriptInterpreter {
                      case OP_SPAWN_ACTOR:
                         if ((var20 = this.readShort()) != 0) {
                            if ((var20 & 61440) == 61440) {
-                              var3 = b.getString(var20 & 4095);
+                              var3 = Game.getString(var20 & 4095);
                            } else {
                               var3 = this.readString(var20);
                            }
@@ -740,8 +739,8 @@ public final class ScriptInterpreter {
                         var17 = this.readByte();
                         var15 = this.readShort();
                         var16 = this.readShort();
-                        if (b.actors[var17] != null) {
-                           ActorSystem.setMoveTarget(b.actors[var17], var15, var16);
+                        if (Game.actors[var17] != null) {
+                           ActorSystem.setMoveTarget(Game.actors[var17], var15, var16);
                            return;
                         }
                         break;
@@ -756,7 +755,7 @@ public final class ScriptInterpreter {
                         this.game.setInputEnabled(this.readByte() == 1);
                         return;
                      case OP_REMOVE_ACTOR:
-                        b.removeActor(this.readByte());
+                        Game.removeActor(this.readByte());
                         return;
                      case OP_WAIT_ACTORS_STOP:
                         this.waitActors = new int[this.readByte()];
@@ -772,7 +771,7 @@ public final class ScriptInterpreter {
                         runScript(this.readByte());
                         return;
                      case OP_SET_ANIM_STATE:
-                        ActorSystem.setAnimState(b.actors[this.readByte()], (byte)this.readByte());
+                        ActorSystem.setAnimState(Game.actors[this.readByte()], (byte)this.readByte());
                         return;
                      case OP_CAMERA_TO:
                         this.game.cameraTo(this.readShort(), this.readShort());
@@ -810,10 +809,10 @@ public final class ScriptInterpreter {
                      default:
                         break;
                      case OP_SET_DEATH_SCRIPT:
-                        ActorSystem.setDeathScript(b.actors[this.readByte()], this.readByte(), this.readByte());
+                        ActorSystem.setDeathScript(Game.actors[this.readByte()], this.readByte(), this.readByte());
                         return;
                      case OP_CLEAR_DEATH_SCRIPT:
-                        ActorSystem.clearDeathScript(b.actors[this.readByte()], this.readByte());
+                        ActorSystem.clearDeathScript(Game.actors[this.readByte()], this.readByte());
                         return;
                      case OP_SET_STAT:
                         var17 = this.readByte();
@@ -844,8 +843,8 @@ public final class ScriptInterpreter {
                            case 17:
                         }
 
-                        if (b.actors[var17] != null) {
-                           ActorSystem.setStat(b.actors[var17], var21, var22, this);
+                        if (Game.actors[var17] != null) {
+                           ActorSystem.setStat(Game.actors[var17], var21, var22, this);
                            return;
                         }
                         break;
@@ -856,8 +855,8 @@ public final class ScriptInterpreter {
                         var17 = this.readByte();
                         var15 = this.readShort();
                         var16 = this.readShort();
-                        if (b.actors[var17] != null) {
-                           ActorSystem.setPosition(b.actors[var17], var15, var16);
+                        if (Game.actors[var17] != null) {
+                           ActorSystem.setPosition(Game.actors[var17], var15, var16);
                            return;
                         }
                         break;
@@ -865,16 +864,16 @@ public final class ScriptInterpreter {
                         var17 = this.readByte();
                         var18 = this.readByte();
                         var19 = this.readByte();
-                        if (b.actors[var17] != null) {
+                        if (Game.actors[var17] != null) {
                            switch (var18) {
                               case 0:
-                                 ActorSystem.addItem(b.actors[var17], var18, this.weapons[var19]);
+                                 ActorSystem.addItem(Game.actors[var17], var18, this.weapons[var19]);
                                  break;
                               case 1:
-                                 ActorSystem.addItem(b.actors[var17], var18, this.armors[var19]);
+                                 ActorSystem.addItem(Game.actors[var17], var18, this.armors[var19]);
                                  break;
                               case 2:
-                                 ActorSystem.addItem(b.actors[var17], var18, this.consumables[var19]);
+                                 ActorSystem.addItem(Game.actors[var17], var18, this.consumables[var19]);
                            }
 
                            return;
@@ -884,16 +883,16 @@ public final class ScriptInterpreter {
                         var17 = this.readByte();
                         var18 = this.readByte();
                         var19 = this.readByte();
-                        if (b.actors[var17] != null) {
+                        if (Game.actors[var17] != null) {
                            switch (var18) {
                               case 0:
-                                 ActorSystem.removeItem(b.actors[var17], var18, this.weapons[var19]);
+                                 ActorSystem.removeItem(Game.actors[var17], var18, this.weapons[var19]);
                                  break;
                               case 1:
-                                 ActorSystem.removeItem(b.actors[var17], var18, this.armors[var19]);
+                                 ActorSystem.removeItem(Game.actors[var17], var18, this.armors[var19]);
                                  break;
                               case 2:
-                                 ActorSystem.removeItem(b.actors[var17], var18, this.consumables[var19]);
+                                 ActorSystem.removeItem(Game.actors[var17], var18, this.consumables[var19]);
                            }
 
                            return;
@@ -901,7 +900,7 @@ public final class ScriptInterpreter {
                         break;
                      case OP_SHOW_MESSAGE:
                         if (((var20 = this.readShort()) & 61440) == 61440) {
-                           var3 = b.getString(var20 & 4095);
+                           var3 = Game.getString(var20 & 4095);
                         } else {
                            var3 = this.readString(var20);
                         }
@@ -909,24 +908,24 @@ public final class ScriptInterpreter {
                         var4 = this.readByte();
                         var5 = this.readByte();
                         var6 = this.readByte();
-                        b.showMessage(var3, var4, var5, var6);
+                        Game.showMessage(var3, var4, var5, var6);
                         return;
                      case OP_HIDE_MESSAGE:
-                        b.showMessage(null, 0, 0, 0);
+                        Game.showMessage(null, 0, 0, 0);
                         return;
                      case OP_MOVE_ACTOR_X:
                         var17 = this.readByte();
                         var15 = this.readShort();
-                        if (b.actors[var17] != null) {
-                           ActorSystem.setMoveTarget(b.actors[var17], var15, b.actors[var17].pos[1]);
+                        if (Game.actors[var17] != null) {
+                           ActorSystem.setMoveTarget(Game.actors[var17], var15, Game.actors[var17].pos[1]);
                            return;
                         }
                         break;
                      case OP_MOVE_ACTOR_Y:
                         var17 = this.readByte();
                         var16 = this.readShort();
-                        if (b.actors[var17] != null) {
-                           ActorSystem.setMoveTarget(b.actors[var17], b.actors[var17].pos[0], var16);
+                        if (Game.actors[var17] != null) {
+                           ActorSystem.setMoveTarget(Game.actors[var17], Game.actors[var17].pos[0], var16);
                            return;
                         }
                         break;
@@ -942,8 +941,8 @@ public final class ScriptInterpreter {
                      case OP_SET_STATUS_ICON:
                         var17 = this.readByte();
                         var23 = this.readByte();
-                        if (b.actors[var17] != null) {
-                           ActorSystem.setStatusIcon(b.actors[var17], (byte)var23);
+                        if (Game.actors[var17] != null) {
+                           ActorSystem.setStatusIcon(Game.actors[var17], (byte)var23);
                            return;
                         }
                         break;
@@ -994,9 +993,9 @@ public final class ScriptInterpreter {
                         var23 = this.readByte();
                         var20 = this.readShort();
                         this.game.cameraFollow(this.talkActor);
-                        ActorSystem.setStatusIcon(b.actors[this.talkActor], (byte)var23);
+                        ActorSystem.setStatusIcon(Game.actors[this.talkActor], (byte)var23);
                         if ((var20 & 61440) == 61440) {
-                           this.game.showDialogue(b.getString(var20 & 4095));
+                           this.game.showDialogue(Game.getString(var20 & 4095));
                         } else {
                            this.game.showDialogue(this.readString(var20));
                         }
@@ -1015,7 +1014,7 @@ public final class ScriptInterpreter {
                            var33 = 65535;
                         }
 
-                        b.loadLangPack(var32, var33);
+                        Game.loadLangPack(var32, var33);
                         return;
                      case OP_NOP57:
                         return;
@@ -1032,8 +1031,8 @@ public final class ScriptInterpreter {
                      case OP_SET_DROPS_LOOT:
                         var17 = this.readByte();
                         int var35 = this.readByte();
-                        if (b.actors[var17] != null) {
-                           ActorSystem.setDropsLoot(b.actors[var17], var35 == 1);
+                        if (Game.actors[var17] != null) {
+                           ActorSystem.setDropsLoot(Game.actors[var17], var35 == 1);
                            return;
                         }
                         break;
@@ -1041,30 +1040,30 @@ public final class ScriptInterpreter {
                         this.waitingForKey = true;
                         return;
                      case OP_SET_STATE_9:
-                        b.setState((byte)9);
+                        Game.setState((byte)9);
                         return;
                      case OP_NOP62:
                         return;
                      case OP_NOP63:
                         return;
                      case OP_SET_BACKGROUND_COLOR:
-                        b.backgroundColor = this.readInt24();
+                        Game.backgroundColor = this.readInt24();
                         return;
                      case OP_LEVEL_UP_TO:
                         var17 = this.readByte();
                         int var34 = this.readByte();
-                        if (b.actors[var17] != null) {
-                           ActorSystem.levelUpTo(b.actors[var17], var34);
+                        if (Game.actors[var17] != null) {
+                           ActorSystem.levelUpTo(Game.actors[var17], var34);
                            return;
                         }
                         break;
                      case OP_SHOW_TEXT_SCREEN:
                         if (((var20 = this.readShort()) & 61440) == 61440) {
-                           b.showTextScreen(b.getString(var20 & 4095));
+                           Game.showTextScreen(Game.getString(var20 & 4095));
                            return;
                         }
 
-                        b.showTextScreen(this.readString(var20));
+                        Game.showTextScreen(this.readString(var20));
                         return;
                      case OP_RESTORE_MONSTER_TYPE:
                         var14 = this.readByte();
@@ -1104,39 +1103,39 @@ public final class ScriptInterpreter {
                         var16 = this.readShort();
                         ProjectileManager.clearAt(var15, var16);
                         return;
-                     case OP_SET_POINT:
+                     case OP_SET_RESPAWN_POINT:
                         var15 = this.readShort();
                         var16 = this.readShort();
-                        b.setPoint(var15, var16);
+                        Game.setRespawnPoint(var15, var16);
                         return;
                      case OP_EVICT_SPRITES:
                         SpriteRenderer.evict(this.readString(this.readShort()));
                         return;
                      case OP_BEGIN_FADE:
-                        b.setState((byte)15);
-                        b.stateChangesEnabled = false;
+                        Game.setState((byte)15);
+                        Game.stateChangesEnabled = false;
                         return;
                      case OP_END_FADE:
-                        b.stateChangesEnabled = true;
+                        Game.stateChangesEnabled = true;
                         return;
                      case OP_TOGGLE_INVULNERABLE:
                         var17 = this.readByte();
-                        if (b.actors[var17] != null) {
-                           b.actors[var17].invulnerable = (byte)(b.actors[var17].invulnerable == 1 ? 0 : 1);
+                        if (Game.actors[var17] != null) {
+                           Game.actors[var17].invulnerable = (byte)(Game.actors[var17].invulnerable == 1 ? 0 : 1);
                            return;
                         }
                         break;
                      case OP_SET_HUD_VISIBLE:
-                        b.hudVisible = this.readByte() == 1;
+                        Game.hudVisible = this.readByte() == 1;
                         return;
                      case OP_SET_STATE_4:
-                        b.setState((byte)4);
-                        b.stateFlagF = false;
+                        Game.setState((byte)4);
+                        Game.stateFlagF = false;
                         return;
                      case OP_SET_AI_ACTIVE:
                         var17 = this.readByte();
-                        if (b.actors[var17] != null) {
-                           b.actors[var17].aiActive = (byte)this.readByte();
+                        if (Game.actors[var17] != null) {
+                           Game.actors[var17].aiActive = (byte)this.readByte();
                         }
                   }
                }
@@ -1228,7 +1227,7 @@ public final class ScriptInterpreter {
    public final void keyPressed(int var1) {
       if (this.waitingForKey) {
          this.waitingForKey = false;
-         b.keyState = -286331154;
+         Game.keyState = -286331154;
       } else if (var1 == 3 && this.keyHooks[3] >= 0) {
          runScript(this.keyHooks[3]);
          this.keyHooks[3] = -1;
@@ -1250,7 +1249,7 @@ public final class ScriptInterpreter {
    }
 
    public final String getItemName(int var1) {
-      return (var1 & 61440) == 61440 ? b.getString(var1 & 4095) : this.strings[var1];
+      return (var1 & 61440) == 61440 ? Game.getString(var1 & 4095) : this.strings[var1];
    }
 
    public final int findString(String var1) {
@@ -1263,7 +1262,7 @@ public final class ScriptInterpreter {
          }
       }
 
-      return (var2 = b.stringToId(var1)) == -1 ? var2 : 61440 | var2;
+      return (var2 = Game.stringToId(var1)) == -1 ? var2 : 61440 | var2;
    }
 
    public final int[] findByName(String var1) {
@@ -1331,7 +1330,7 @@ public final class ScriptInterpreter {
    }
 
    public final int rollLoot() {
-      int var1 = b.random.nextInt();
+      int var1 = Game.random.nextInt();
 
       for (int var2 = 1; this.lootTable[var2][1] != 0; var2++) {
          if (var1 % this.lootTable[var2][2] == 0 && this.lootTable[var2][3] > 0) {
@@ -1358,35 +1357,35 @@ public final class ScriptInterpreter {
    public static final String getSkillName(int var0) {
       switch (var0) {
          case 0:
-            return b.getString(523);
+            return Game.getString(523);
          case 1:
-            return b.getString(524);
+            return Game.getString(524);
          case 2:
-            return b.getString(525);
+            return Game.getString(525);
          case 3:
-            return b.getString(526);
+            return Game.getString(526);
          case 4:
-            return b.getString(527);
+            return Game.getString(527);
          case 5:
-            return b.getString(528);
+            return Game.getString(528);
          case 6:
-            return b.getString(529);
+            return Game.getString(529);
          case 7:
-            return b.getString(530);
+            return Game.getString(530);
          case 8:
-            return b.getString(531);
+            return Game.getString(531);
          case 9:
-            return b.getString(532);
+            return Game.getString(532);
          case 10:
-            return b.getString(533);
+            return Game.getString(533);
          case 11:
-            return b.getString(534);
+            return Game.getString(534);
          case 12:
-            return b.getString(535);
+            return Game.getString(535);
          case 13:
-            return b.getString(536);
+            return Game.getString(536);
          case 14:
-            return b.getString(537);
+            return Game.getString(537);
          default:
             return null;
       }

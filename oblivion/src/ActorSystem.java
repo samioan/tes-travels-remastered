@@ -1,11 +1,6 @@
 /**
  * Renamed from decompiled/h.java (see docs/CLASS_MAP.md, docs/rename.map).
  * All-static movement / combat / AI / equipment logic over Actor records.
- *
- * Game (`b`) and ScriptInterpreter (`e`) are not renamed yet; the members
- * this file uses are named in docs/rename.map (Game.actors, Game.collision,
- * ...) and everything else in those two classes stays obfuscated until their
- * own rename passes.
  */
 import java.io.ByteArrayOutputStream;
 import javax.microedition.lcdui.Graphics;
@@ -65,7 +60,7 @@ public final class ActorSystem {
       var2.sightRange = (short)(((char)var0[var1++] & 255) << 8 | ((char)var0[var1++] & 255) << 0);
       var2.attackRange = (short)(((char)var0[var1++] & 255) << 8 | ((char)var0[var1++] & 255) << 0);
       var2.team = var0[var1++];
-      b.gold = ((char)var0[var1++] & 255) << 8 | ((char)var0[var1++] & 255) << 0;
+      Game.gold = ((char)var0[var1++] & 255) << 8 | ((char)var0[var1++] & 255) << 0;
       var3 = var0[var1++];
       var2.cmlPath = new String(var0, var1, var3);
       var2.name = "Champion";
@@ -86,7 +81,7 @@ public final class ActorSystem {
             var6 = (var45 = var6 & -129) & 0xFF;
          }
 
-         addItemForced(var2, var6, b.script.getRowChecked(var6, var7), var8);
+         addItemForced(var2, var6, Game.script.getRowChecked(var6, var7), var8);
       }
 
       recalcDerivedStats(var2);
@@ -103,8 +98,8 @@ public final class ActorSystem {
       boolean var1 = false;
 
       for (int var2 = 0; var2 < 25; var2++) {
-         if (b.actors[var2] != null) {
-            b.actors[var2].target = null;
+         if (Game.actors[var2] != null) {
+            Game.actors[var2].target = null;
          }
       }
 
@@ -156,9 +151,9 @@ public final class ActorSystem {
          return false;
       } else if (actor.cell[0] < 0) {
          return true;
-      } else if (actor.cell[1] >= b.gridHeight) {
+      } else if (actor.cell[1] >= Game.gridHeight) {
          return true;
-      } else if (actor.footCCell[0] >= b.gridWidth) {
+      } else if (actor.footCCell[0] >= Game.gridWidth) {
          return true;
       } else if (actor.footCCell[1] < 0) {
          return true;
@@ -173,7 +168,7 @@ public final class ActorSystem {
       byte var2 = 0;
       int var3 = 0;
       int var4 = 0;
-      if (b.collision == null) {
+      if (Game.collision == null) {
          return false;
       }
 
@@ -181,31 +176,31 @@ public final class ActorSystem {
          return false;
       }
 
-      if (actor.cell[0] * b.gridHeight + actor.cell[1] > b.collision.length) {
+      if (actor.cell[0] * Game.gridHeight + actor.cell[1] > Game.collision.length) {
          return true;
       }
 
-      if (actor.footBCell[0] * b.gridHeight + actor.footBCell[1] > b.collision.length) {
+      if (actor.footBCell[0] * Game.gridHeight + actor.footBCell[1] > Game.collision.length) {
          return true;
       }
 
-      if (actor.footCCell[0] * b.gridHeight + actor.footCCell[1] > b.collision.length) {
+      if (actor.footCCell[0] * Game.gridHeight + actor.footCCell[1] > Game.collision.length) {
          return true;
       }
 
       switch (var1) {
          case 1:
-            var2 = b.collision[actor.cell[0] * b.gridHeight + actor.cell[1]];
+            var2 = Game.collision[actor.cell[0] * Game.gridHeight + actor.cell[1]];
             var3 = actor.pos[0] % 128;
             var4 = actor.pos[1] % 128;
             break;
          case 2:
-            var2 = b.collision[actor.footBCell[0] * b.gridHeight + actor.footBCell[1]];
+            var2 = Game.collision[actor.footBCell[0] * Game.gridHeight + actor.footBCell[1]];
             var3 = actor.footB[0] % 128;
             var4 = actor.footB[1] % 128;
             break;
          case 3:
-            var2 = b.collision[actor.footCCell[0] * b.gridHeight + actor.footCCell[1]];
+            var2 = Game.collision[actor.footCCell[0] * Game.gridHeight + actor.footCCell[1]];
             var3 = actor.footC[0] % 128;
             var4 = actor.footC[1] % 128;
       }
@@ -312,8 +307,8 @@ public final class ActorSystem {
       tmpHalfOffset[1] = 0;
       tmpFullOffset[0] = 0;
       tmpFullOffset[1] = 0;
-      b.isoToWorld(tmpHalfOffset, tmpHalfW);
-      b.isoToWorld(tmpFullOffset, tmpFullW);
+      Game.isoToWorld(tmpHalfOffset, tmpHalfW);
+      Game.isoToWorld(tmpFullOffset, tmpFullW);
       actor.pos[0] = var1;
       actor.pos[1] = var2;
       actor.footB[0] = var1 + tmpHalfOffset[0];
@@ -346,9 +341,9 @@ public final class ActorSystem {
       actor.enterScript = -1;
       actor.leaveScript = -1;
       if (var1 != null && var2 != null) {
-         tmpCellIdx[0] = actor.cell[0] * b.gridHeight + actor.cell[1];
-         tmpCellIdx[1] = actor.footBCell[0] * b.gridHeight + actor.footBCell[1];
-         tmpCellIdx[2] = actor.footCCell[0] * b.gridHeight + actor.footCCell[1];
+         tmpCellIdx[0] = actor.cell[0] * Game.gridHeight + actor.cell[1];
+         tmpCellIdx[1] = actor.footBCell[0] * Game.gridHeight + actor.footBCell[1];
+         tmpCellIdx[2] = actor.footCCell[0] * Game.gridHeight + actor.footCCell[1];
 
          for (int var4 = 0; var4 < tmpCellIdx.length; var4++) {
             if (tmpCellIdx[var4] < 0 || tmpCellIdx[var4] >= var1.length) {
@@ -546,7 +541,7 @@ public final class ActorSystem {
             }
          } else {
             if (actor.deathTimer >= 250) {
-               b.removeActor(actor.slot - 1);
+               Game.removeActor(actor.slot - 1);
             }
 
             actor.deathTimer = (short)(actor.deathTimer + var1);
@@ -587,10 +582,10 @@ public final class ActorSystem {
                actor.floatTextStartY = actor.floatTextY = (short)(
                   actor.screenPos[1] - SpriteRenderer.getHeight(actor.sprite, actor.facing) - (actor.slot == 1 ? 6 : 10)
                );
-               if (actor.floatText.equals(b.getString(471))) {
+               if (actor.floatText.equals(Game.getString(471))) {
                   actor.floatTextColor = 65280;
                   actor.floatTextShadow = 8704;
-               } else if (actor.floatText.equals(b.getString(470))) {
+               } else if (actor.floatText.equals(Game.getString(470))) {
                   actor.floatTextColor = 255;
                   actor.floatTextShadow = 34;
                } else {
@@ -647,13 +642,13 @@ public final class ActorSystem {
 
    private static final void recalcDerivedStats(Actor actor) {
       boolean var1 = false;
-      int[] var2 = b.script.getRow(4, actor.weapon);
+      int[] var2 = Game.script.getRow(4, actor.weapon);
       actor.weaponPower = (byte)var2[3];
       actor.armor = 0;
 
       for (int var3 = 0; var3 < actor.wornArmor.length; var3++) {
          if (actor.wornArmor[var3] != -1) {
-            actor.armor = (short)(actor.armor + b.script.getRow(1, actor.wornArmor[var3])[4]);
+            actor.armor = (short)(actor.armor + Game.script.getRow(1, actor.wornArmor[var3])[4]);
          }
       }
 
@@ -1154,14 +1149,14 @@ public final class ActorSystem {
       int var3 = 0;
       boolean var4 = false;
 
-      for (int var6 = 0; var6 < b.actors.length; var6++) {
-         if (b.actors[var6] != null
-            && b.actors[var6].dead != 1
-            && b.actors[var6].team != actor.team
-            && b.actors[var6].slot != actor.slot
-            && (var3 = distance(actor.pos, b.actors[var6].pos)) < var2) {
+      for (int var6 = 0; var6 < Game.actors.length; var6++) {
+         if (Game.actors[var6] != null
+            && Game.actors[var6].dead != 1
+            && Game.actors[var6].team != actor.team
+            && Game.actors[var6].slot != actor.slot
+            && (var3 = distance(actor.pos, Game.actors[var6].pos)) < var2) {
             var2 = var3;
-            var1 = b.actors[var6];
+            var1 = Game.actors[var6];
          }
       }
 
@@ -1245,7 +1240,7 @@ public final class ActorSystem {
             actor.weapon = (byte)var1[10];
             actor.aiType = (byte)var1[18];
             var2 = var1[11];
-            actor.special = b.script.specials[var1[19]];
+            actor.special = Game.script.specials[var1[19]];
             actor.ranged = (byte)(actor.aiType == 4 ? 1 : 0);
             if (var1[20] > 0) {
                actor.attackInterval = (short)(var1[20] * 1000);
@@ -1256,11 +1251,11 @@ public final class ActorSystem {
             }
 
             if (actor.weapon > 0) {
-               addItem(actor, 0, b.script.getRow(4, actor.weapon));
+               addItem(actor, 0, Game.script.getRow(4, actor.weapon));
             }
 
             if (var2 > 0) {
-               addItem(actor, 1, b.script.getRow(1, var2));
+               addItem(actor, 1, Game.script.getRow(1, var2));
             }
          }
 
@@ -1293,8 +1288,8 @@ public final class ActorSystem {
          }
 
          int var8 = var0 - var7;
-         int var9 = b.random.nextInt() % 100;
-         int var10 = b.random.nextInt() % 100;
+         int var9 = Game.random.nextInt() % 100;
+         int var10 = Game.random.nextInt() % 100;
          int var12;
          var5 = (var12 = var5 * var1.dodgeScale) / 100;
          var9 = var9 < 0 ? -var9 : var9;
@@ -1304,10 +1299,10 @@ public final class ActorSystem {
          }
 
          if (var9 <= var5) {
-            var1.floatText = b.getString(471);
+            var1.floatText = Game.getString(471);
             var1.floatTextY = 0;
          } else if (var10 <= var6) {
-            var1.floatText = b.getString(470);
+            var1.floatText = Game.getString(470);
             var1.floatTextY = 0;
          } else if (var8 > 0) {
             if (var1.slot != 1 && var1.target != null && !var4) {
@@ -1315,11 +1310,11 @@ public final class ActorSystem {
             }
 
             if (var2 != null && var2.ranged == 0) {
-               b.random.nextInt();
+               Game.random.nextInt();
             }
 
             var1.hp = (short)(var1.hp - var8);
-            var1.floatText = (var3 ? b.getString(472) : "") + Integer.toString(var8);
+            var1.floatText = (var3 ? Game.getString(472) : "") + Integer.toString(var8);
             var1.floatTextY = 0;
             var1.dead = (byte)(var1.hp <= 0 ? 1 : 0);
             if (var1.dead == 1) {
@@ -1328,16 +1323,16 @@ public final class ActorSystem {
                   grantXp(var2, var1.level);
                }
 
-               b.random.nextInt();
+               Game.random.nextInt();
                var1.animState = 6;
                updateSortCell(var1);
                if (var1.deathScript >= 0) {
-                  e.runScript((char)var1.deathScript);
+                  ScriptInterpreter.runScript((char)var1.deathScript);
                }
 
                int var11;
-               if (var1.dropsLoot == 1 && (var11 = b.script.rollLoot()) != 0) {
-                  b.instance.spawnItem(var11, false, var1.footBCell[0], var1.footBCell[1]);
+               if (var1.dropsLoot == 1 && (var11 = Game.script.rollLoot()) != 0) {
+                  Game.instance.spawnItem(var11, false, var1.footBCell[0], var1.footBCell[1]);
                }
             }
          }
@@ -1359,18 +1354,18 @@ public final class ActorSystem {
       Object var8 = null;
       byte[][] var9 = new byte[][]{{-1, 0}, {0, -1}, {0, 0}, {0, 1}, {1, 0}};
       if (actor.vanished == 1) {
-         if (actor.teleportTimer <= -1000 && b.actors[0].dead == 0) {
-            for (byte[] var14 = (byte[])b.layers.elementAt(0); var14 != null && !var4 && var5 < 100; var5++) {
+         if (actor.teleportTimer <= -1000 && Game.actors[0].dead == 0) {
+            for (byte[] var14 = (byte[])Game.layers.elementAt(0); var14 != null && !var4 && var5 < 100; var5++) {
                var4 = true;
-               var1 = Math.abs(b.actors[0].pos[0] + b.random.nextInt() % 500);
-               var2 = Math.abs(b.actors[0].pos[1] + b.random.nextInt() % 500);
+               var1 = Math.abs(Game.actors[0].pos[0] + Game.random.nextInt() % 500);
+               var2 = Math.abs(Game.actors[0].pos[1] + Game.random.nextInt() % 500);
                var6 = var1 >> 7;
                var7 = var2 >> 7;
 
                for (int var11 = 0; var11 < var9.length; var11++) {
                   int var10;
-                  if ((var10 = (var6 + var9[var11][0]) * b.gridHeight + var7 + var9[var11][1]) >= 0 && var10 < var14.length) {
-                     if (b.collision[var10] != 0 || var14[var10] == 0) {
+                  if ((var10 = (var6 + var9[var11][0]) * Game.gridHeight + var7 + var9[var11][1]) >= 0 && var10 < var14.length) {
+                     if (Game.collision[var10] != 0 || var14[var10] == 0) {
                         var4 = false;
                         break;
                      }
@@ -1387,7 +1382,7 @@ public final class ActorSystem {
                return true;
             }
          }
-      } else if (b.actors[0].dead == 0) {
+      } else if (Game.actors[0].dead == 0) {
          ProjectileManager.spawn(8, actor.pos[0], actor.pos[1]);
          actor.moveTarget[0] = -1;
          actor.moveTarget[1] = -1;
@@ -1406,13 +1401,13 @@ public final class ActorSystem {
                actor.special = null;
                actor.attackRange = (short)(actor.attackRange >> 1);
             } else if (actor.aiType == 2 && actor.teleportTimer <= 0 && teleportStep(actor)) {
-               actor.teleportTimer = (short)(Math.abs(b.random.nextInt()) % 2000 + 2000);
+               actor.teleportTimer = (short)(Math.abs(Game.random.nextInt()) % 2000 + 2000);
             }
 
             return false;
          } else {
             int var3 = (actor.strength + actor.buffStrength + actor.weaponPower >> 1) + actor.buffAttack + actor.buffAttack2;
-            int var4 = b.random.nextInt() % 16;
+            int var4 = Game.random.nextInt() % 16;
             boolean var5 = false;
             int var6;
             var3 = (var6 = var3 * actor.attackRating) / 100;
@@ -1456,7 +1451,7 @@ public final class ActorSystem {
             short var5 = actor.agility;
             short var6 = actor.endurance;
             short var7 = actor.personality;
-            StringBuffer var8 = new StringBuffer(b.getString(41));
+            StringBuffer var8 = new StringBuffer(Game.getString(41));
             actor.level++;
             actor.strength++;
             actor.intelligence++;
@@ -1471,37 +1466,37 @@ public final class ActorSystem {
             var8.append(": +");
             var8.append(actor.strength - var2);
             var8.append(" ");
-            var8.append(b.getString(415));
+            var8.append(Game.getString(415));
             var8.append(", +");
             var8.append(actor.intelligence - var3);
             var8.append(" ");
-            var8.append(b.getString(416));
+            var8.append(Game.getString(416));
             var8.append(", +");
             var8.append(actor.willpower - var4);
             var8.append(" ");
-            var8.append(b.getString(417));
+            var8.append(Game.getString(417));
             var8.append(", +");
             var8.append(actor.agility - var5);
             var8.append(" ");
-            var8.append(b.getString(418));
+            var8.append(Game.getString(418));
             var8.append(", +");
             var8.append(actor.endurance - var6);
             var8.append(" ");
-            var8.append(b.getString(419));
+            var8.append(Game.getString(419));
             var8.append(", +");
             var8.append(actor.personality - var7);
             var8.append(" ");
-            var8.append(b.getString(420));
+            var8.append(Game.getString(420));
             actor.maxHp = (short)(actor.level * 4 + (actor.strength + actor.buffStrength) * 2 + actor.endurance * 2 + actor.bonusMaxHp);
             actor.hpRegenInterval = (short)(40000 / actor.maxHp);
             actor.maxMp = (short)(actor.level * 4 + actor.intelligence * 2 + actor.bonusMaxMp);
             actor.mpRegenInterval = (short)(40000 / actor.maxMp);
             recalcDerivedStats(actor);
-            b.showMessage(var8.toString(), 30, 4, 3);
+            Game.showMessage(var8.toString(), 30, 4, 3);
             return;
          }
 
-         b.showMessage(xpReward[var1] + " " + b.getString(42) + "!!!", 3, 4, 1);
+         Game.showMessage(xpReward[var1] + " " + Game.getString(42) + "!!!", 3, 4, 1);
       }
    }
 
@@ -1684,7 +1679,7 @@ public final class ActorSystem {
       }
 
       int[] var3 = new int[]{
-         actor.cell[0] * b.gridHeight + actor.cell[1], actor.footBCell[0] * b.gridHeight + actor.footBCell[1], actor.footCCell[0] * b.gridHeight + actor.footCCell[1]
+         actor.cell[0] * Game.gridHeight + actor.cell[1], actor.footBCell[0] * Game.gridHeight + actor.footBCell[1], actor.footCCell[0] * Game.gridHeight + actor.footCCell[1]
       };
 
       for (int var4 = 0; var4 < var3.length; var4++) {
@@ -1774,30 +1769,30 @@ public final class ActorSystem {
                break;
             case 2:
                if (actor.summon != null) {
-                  b.removeActor(actor.summon.slot - 1);
+                  Game.removeActor(actor.summon.slot - 1);
                }
 
-               actor.summon = b.instance.spawnActor("/oh_scamp.cml", actor.pos[0], actor.pos[1], actor.spawnRow);
+               actor.summon = Game.instance.spawnActor("/oh_scamp.cml", actor.pos[0], actor.pos[1], actor.spawnRow);
                actor.summon.owner = actor;
                setDropsLoot(actor.summon, false);
             case 4:
-               for (int var6 = 0; var6 < b.actors.length; var6++) {
-                  if (b.actors[var6] != null
-                     && b.actors[var6] != actor
-                     && b.actors[var6].team != actor.team
-                     && distance(actor.pos, b.actors[var6].pos) <= actor.special[14]) {
-                     applyPoison(actor, b.actors[var6], var2, actor.special[6]);
+               for (int var6 = 0; var6 < Game.actors.length; var6++) {
+                  if (Game.actors[var6] != null
+                     && Game.actors[var6] != actor
+                     && Game.actors[var6].team != actor.team
+                     && distance(actor.pos, Game.actors[var6].pos) <= actor.special[14]) {
+                     applyPoison(actor, Game.actors[var6], var2, actor.special[6]);
                   }
                }
                break;
             case 3:
                if (actor.special[1] == 61618) {
-                  for (int var5 = 0; var5 < b.actors.length; var5++) {
-                     if (b.actors[var5] != null
-                        && b.actors[var5] != actor
-                        && b.actors[var5].team != actor.team
-                        && distance(actor.pos, b.actors[var5].pos) <= actor.special[14]) {
-                        applyMagicHit(actor, b.actors[var5], var2);
+                  for (int var5 = 0; var5 < Game.actors.length; var5++) {
+                     if (Game.actors[var5] != null
+                        && Game.actors[var5] != actor
+                        && Game.actors[var5].team != actor.team
+                        && distance(actor.pos, Game.actors[var5].pos) <= actor.special[14]) {
+                        applyMagicHit(actor, Game.actors[var5], var2);
                      }
                   }
                } else if (actor.special[1] == 61619) {
@@ -1833,7 +1828,7 @@ public final class ActorSystem {
       actor.deathScript = -1;
    }
 
-   public static final void setStat(Actor actor, int var1, int var2, e var3) {
+   public static final void setStat(Actor actor, int var1, int var2, ScriptInterpreter var3) {
       switch (var1) {
          case 2:
             actor.level = (byte)var2;
@@ -1884,7 +1879,7 @@ public final class ActorSystem {
             }
             break;
          case 19:
-            actor.special = b.script.specials[var2];
+            actor.special = Game.script.specials[var2];
             break;
          case 20:
             actor.attackInterval = (short)(var2 * 1000);
@@ -1961,7 +1956,7 @@ public final class ActorSystem {
 
       for (int var4 = 0; var4 < actor.inventory.length && actor.inventory[var4] != 0; var4++) {
          if (actor.inventory[var4] <= 255) {
-            var3 = b.script.getRow(4, actor.inventory[var4] & 0xFF);
+            var3 = Game.script.getRow(4, actor.inventory[var4] & 0xFF);
             if (canUseItem(actor, 0, var3) && (var2 == null || var3[3] > var2[3])) {
                var2 = var3;
             }
@@ -2027,20 +2022,20 @@ public final class ActorSystem {
          actor.ranged = 1;
       }
 
-      actor.classRow = b.script.getRow(5, var1);
-      actor.classList = b.script.classLists[var1];
+      actor.classRow = Game.script.getRow(5, var1);
+      actor.classList = Game.script.classLists[var1];
       if (!var2) {
-         addItem(actor, 0, b.script.getRow(4, actor.classRow[4]));
-         addItem(actor, 1, b.script.getRow(1, actor.classRow[5]));
-         actor.strength = (short)b.script.classBase[var1][7];
-         actor.intelligence = (short)b.script.classBase[var1][8];
-         actor.willpower = (short)b.script.classBase[var1][9];
-         actor.agility = (short)b.script.classBase[var1][10];
-         actor.speed = (short)b.script.classBase[var1][6];
-         actor.endurance = (short)b.script.classBase[var1][11];
-         actor.personality = (short)b.script.classBase[var1][12];
-         actor.attackRange = (short)b.script.classBase[var1][13];
-         actor.sightRange = (short)b.script.classBase[var1][14];
+         addItem(actor, 0, Game.script.getRow(4, actor.classRow[4]));
+         addItem(actor, 1, Game.script.getRow(1, actor.classRow[5]));
+         actor.strength = (short)Game.script.classBase[var1][7];
+         actor.intelligence = (short)Game.script.classBase[var1][8];
+         actor.willpower = (short)Game.script.classBase[var1][9];
+         actor.agility = (short)Game.script.classBase[var1][10];
+         actor.speed = (short)Game.script.classBase[var1][6];
+         actor.endurance = (short)Game.script.classBase[var1][11];
+         actor.personality = (short)Game.script.classBase[var1][12];
+         actor.attackRange = (short)Game.script.classBase[var1][13];
+         actor.sightRange = (short)Game.script.classBase[var1][14];
       }
 
       recalcDerivedStats(actor);
@@ -2096,8 +2091,8 @@ public final class ActorSystem {
       var1.write((byte)(actor.attackRange >> 8));
       var1.write((byte)(actor.attackRange >> 0));
       var1.write(actor.team);
-      var1.write((byte)(b.gold >> 8));
-      var1.write((byte)(b.gold >> 0));
+      var1.write((byte)(Game.gold >> 8));
+      var1.write((byte)(Game.gold >> 0));
       var1.write(actor.cmlPath.length());
       var1.write(actor.cmlPath.getBytes());
 
@@ -2123,7 +2118,7 @@ public final class ActorSystem {
 
    public static final void useConsumable(Actor actor, int[] var1) {
       if (var1[5] == 0) {
-         if (b.script.getItemName(var1[1]).equals(b.getString(158))) {
+         if (Game.script.getItemName(var1[1]).equals(Game.getString(158))) {
             actor.hp = (short)Math.min(actor.maxHp, actor.hp + var1[2]);
             actor.mp = (short)Math.min(actor.maxMp, actor.mp + var1[3]);
             removeItem(actor, 2, var1);
@@ -2203,7 +2198,7 @@ public final class ActorSystem {
                int var3 = actor.inventory[var6] >> 8 & 0xFF;
                int var4 = actor.inventory[var6] >> 0 & 0xFF;
                int[] var5;
-               if (var3 == 2 && (var5 = b.script.getRow(2, var4))[2] > 0) {
+               if (var3 == 2 && (var5 = Game.script.getRow(2, var4))[2] > 0) {
                   actor.hpPotion = var5;
                }
             }
@@ -2218,7 +2213,7 @@ public final class ActorSystem {
             int var8 = actor.inventory[var7] >> 8 & 0xFF;
             int var9 = actor.inventory[var7] >> 0 & 0xFF;
             int[] var10;
-            if (var8 == 2 && (var10 = b.script.getRow(2, var9))[3] > 0) {
+            if (var8 == 2 && (var10 = Game.script.getRow(2, var9))[3] > 0) {
                actor.mpPotion = var10;
             }
          }
@@ -2226,9 +2221,9 @@ public final class ActorSystem {
    }
 
    public static final boolean equipFromString(Actor actor, String var1) {
-      if (var1.startsWith(b.getString(304))) {
-         var1 = var1.substring(b.getString(304).length());
-         actor.altSpecial = b.script.findByName(var1);
+      if (var1.startsWith(Game.getString(304))) {
+         var1 = var1.substring(Game.getString(304).length());
+         actor.altSpecial = Game.script.findByName(var1);
          actor.ranged = 0;
          if (actor.special != null) {
             actor.special = actor.altSpecial;
@@ -2237,15 +2232,15 @@ public final class ActorSystem {
 
          return true;
       } else {
-         if (var1.startsWith(b.getString(400))) {
-            var1 = var1.substring(b.getString(400).length());
+         if (var1.startsWith(Game.getString(400))) {
+            var1 = var1.substring(Game.getString(400).length());
             actor.ranged = 1;
          } else {
-            var1 = var1.substring(b.getString(305).length());
+            var1 = var1.substring(Game.getString(305).length());
             actor.ranged = 0;
          }
 
-         int[] var2 = b.script.findByName(var1);
+         int[] var2 = Game.script.findByName(var1);
          actor.weapon = (byte)var2[0];
          return false;
       }
@@ -2285,7 +2280,7 @@ public final class ActorSystem {
    }
 
    public static final boolean isWeaponEquipped(Actor actor, int var1, boolean var2) {
-      return isWeaponRowEquipped(actor, b.script.getRow(4, var1), var2);
+      return isWeaponRowEquipped(actor, Game.script.getRow(4, var1), var2);
    }
 
    public static final boolean isWeaponRowEquipped(Actor actor, int[] var1, boolean var2) {
@@ -2347,7 +2342,7 @@ public final class ActorSystem {
             moveDir(actor, 3, var2);
             break;
          case 7:
-            checkZoneTiles(actor, b.zoneLayer);
+            checkZoneTiles(actor, Game.zoneLayer);
       }
 
       return false;
@@ -2392,35 +2387,35 @@ public final class ActorSystem {
       if (actor != null && var2 != null && actor.classId != -1) {
          if (var1 == 0) {
             if (var2[2] == 1) {
-               return b.script.classAllows(actor.classId, 5);
+               return Game.script.classAllows(actor.classId, 5);
             }
 
             if (var2[2] == 2) {
-               return b.script.classAllows(actor.classId, 6);
+               return Game.script.classAllows(actor.classId, 6);
             }
 
             if (var2[2] == 3) {
-               return b.script.classAllows(actor.classId, 7);
+               return Game.script.classAllows(actor.classId, 7);
             }
 
             if (var2[2] == 4) {
-               return b.script.classAllows(actor.classId, 8);
+               return Game.script.classAllows(actor.classId, 8);
             }
 
             if (var2[2] == 0) {
-               return b.script.classAllows(actor.classId, 14);
+               return Game.script.classAllows(actor.classId, 14);
             }
          } else if (var1 == 1) {
             if (var2[2] == 2) {
-               return b.script.classAllows(actor.classId, 4);
+               return Game.script.classAllows(actor.classId, 4);
             }
 
             if (var2[2] == 1) {
-               return b.script.classAllows(actor.classId, 3);
+               return Game.script.classAllows(actor.classId, 3);
             }
 
             if (var2[2] == 0) {
-               return b.script.classAllows(actor.classId, 1);
+               return Game.script.classAllows(actor.classId, 1);
             }
          }
 

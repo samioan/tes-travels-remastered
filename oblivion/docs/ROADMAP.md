@@ -28,21 +28,15 @@ the `.scr`/`.cml` paths) first.
 to readable-but-unrenamed Java (`decompiled/`, 11 files) via
 [`../../tools/decompile.py`](../../tools/decompile.py). Clean recovery.
 
-**Phase 1 (in progress): read through and rename.** A full survey pass
-of every class (`blt/Main.java`, `a`-`j`) is done -- architecture, every
-class's role, and most fields/methods are understood and written up in
-[`CLASS_MAP.md`](CLASS_MAP.md). Five classes are mechanically renamed
-into `../src/` (`Strings`, `DialogueNode`, `SpriteFrame`,
-`SpriteRenderer`, `ProjectileManager`) plus `Actor`/`j`,
-`ActorSystem`/`h`, `DialogueScreen`/`f` and `ScriptInterpreter`/`e`, done with a descriptor-aware Vineflower renamer
-(`docs/rename.map`, `tools/decompile_renamed.py`); the rest
-(`Game`/`b`) is documented but left unrenamed
--- this codebase reuses single-letter field names across *different JVM
-descriptors on the same class* far more aggressively than
-dawnstar/stormhold's engine (`Game`/`b` alone has 12+ fields all spelled
-`a`), so those need their own passes. Next:
-`Game` (largest, most collision-heavy) -- now
-mostly a matter of adding entries to `rename.map`.
+**Phase 1 (done): read through and rename.** A full survey pass of every
+class is written up in [`CLASS_MAP.md`](CLASS_MAP.md), and all ten classes are
+renamed into `../src/` (`Game`, `ScriptInterpreter`, `Actor`, `ActorSystem`,
+`DialogueScreen`, `DialogueNode`, `SpriteFrame`, `SpriteRenderer`,
+`ProjectileManager`, `Strings`, plus `blt/Main`). The obfuscator reused single
+letters across fields of different JVM descriptors, which plain decompiler
+output cannot express as Java, so the renaming is done by a descriptor-aware
+Vineflower renamer driven by `docs/rename.map` (`tools/decompile_renamed.py`).
+The renamed tree compiles as a whole against the MIDP stubs.
 
 **Phase 2 (in progress, the hard part): reverse the `.scr`/`.cml`/`.jtm`
 binary formats.** See [`ASSET_FORMATS.md`](ASSET_FORMATS.md). Unlike

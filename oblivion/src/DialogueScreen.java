@@ -7,20 +7,17 @@
  * (a submenu node is entered, a leaf is marked and reported to
  * Game.menuSelected). Over-long lines scroll horizontally (textScroll,
  * scrollState, scrollDir) after a 1 s pause.
- *
- * Game (`b`) is not renamed yet; the members used here are mapped in
- * docs/rename.map.
  */
 import java.util.Vector;
 import javax.microedition.lcdui.Graphics;
 import javax.microedition.lcdui.Image;
 
 public final class DialogueScreen {
-   private static byte lineHeight = (byte)b.fontSmall.getHeight();
+   private static byte lineHeight = (byte)Game.fontSmall.getHeight();
    private SpriteFrame ui = null;
    public String caption = null;
    private DialogueNode[] roots = null;
-   private b game = null;
+   private Game game = null;
    private Image backdrop = null;
    private byte[] tabSprites = null;
    private byte cursor = 0;
@@ -36,7 +33,7 @@ public final class DialogueScreen {
    private short scrollTimer = 0;
    public static boolean showPauseOverlay = false;
 
-   public DialogueScreen(String var1, b var2) {
+   public DialogueScreen(String var1, Game var2) {
       this.game = var2;
       this.ui = SpriteRenderer.load(var1);
    }
@@ -56,26 +53,26 @@ public final class DialogueScreen {
             var1,
             this.ui,
             this.tabSprites[0],
-            (b.screenWidth >> 1) - (SpriteRenderer.getWidth(this.ui, this.tabSprites[0]) >> 1),
-            b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, this.tabSprites[0])
+            (Game.screenWidth >> 1) - (SpriteRenderer.getWidth(this.ui, this.tabSprites[0]) >> 1),
+            Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, this.tabSprites[0])
          );
          SpriteRenderer.draw(
             var1,
             this.ui,
             this.tabSprites[this.tab + 1],
-            (b.screenWidth >> 1) - (SpriteRenderer.getWidth(this.ui, this.tabSprites[this.tab + 1]) >> 1),
-            b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, this.tabSprites[this.tab + 1])
+            (Game.screenWidth >> 1) - (SpriteRenderer.getWidth(this.ui, this.tabSprites[this.tab + 1]) >> 1),
+            Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, this.tabSprites[this.tab + 1])
          );
       }
 
-      var1.setFont(b.fontSmall);
+      var1.setFont(Game.fontSmall);
       var1.setColor(0);
-      var1.drawString(this.roots[this.tab].text, (b.screenWidth >> 1) - (b.fontSmall.stringWidth(this.roots[this.tab].text) >> 1), 12, 0);
+      var1.drawString(this.roots[this.tab].text, (Game.screenWidth >> 1) - (Game.fontSmall.stringWidth(this.roots[this.tab].text) >> 1), 12, 0);
       if (this.caption != null) {
          var1.drawString(
             this.caption,
-            (b.screenWidth >> 1) - (b.fontSmall.stringWidth(this.caption) >> 1),
-            b.screenHeight - SpriteRenderer.getHeight(this.ui, 5) - (lineHeight << 1),
+            (Game.screenWidth >> 1) - (Game.fontSmall.stringWidth(this.caption) >> 1),
+            Game.screenHeight - SpriteRenderer.getHeight(this.ui, 5) - (lineHeight << 1),
             0
          );
       }
@@ -92,18 +89,18 @@ public final class DialogueScreen {
 
             if (var7 == this.cursor) {
                var1.setColor(16448974);
-               var1.fillRect(15, var8, b.screenWidth - 30, lineHeight);
+               var1.fillRect(15, var8, Game.screenWidth - 30, lineHeight);
                if (var5.tooltip != null) {
-                  var1.setFont(b.fontSmall);
+                  var1.setFont(Game.fontSmall);
                   var1.setColor(0);
                   var1.drawRect(
                      20,
-                     b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5) - (lineHeight << 1) - 6,
-                     b.screenWidth - 40,
+                     Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5) - (lineHeight << 1) - 6,
+                     Game.screenWidth - 40,
                      lineHeight + 4
                   );
                   var1.drawString(
-                     var5.tooltip, 23, b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5) - (lineHeight << 1) - 3, 0
+                     var5.tooltip, 23, Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5) - (lineHeight << 1) - 3, 0
                   );
                }
 
@@ -114,10 +111,10 @@ public final class DialogueScreen {
 
             if (var5.marked) {
                SpriteRenderer.draw(var1, this.ui, 14, 15, var8);
-               var1.setFont(b.fontSmallBold);
+               var1.setFont(Game.fontSmallBold);
                var6 = 15;
             } else {
-               var1.setFont(b.fontSmall);
+               var1.setFont(Game.fontSmall);
                var6 = 0;
             }
 
@@ -129,7 +126,7 @@ public final class DialogueScreen {
                   var11 = var10 = var10.substring(this.textScroll);
                }
 
-               while (SpriteRenderer.getWidth(this.ui, 12) + var6 + 15 > b.screenWidth - var1.getFont().stringWidth(var11)) {
+               while (SpriteRenderer.getWidth(this.ui, 12) + var6 + 15 > Game.screenWidth - var1.getFont().stringWidth(var11)) {
                   var12 = true;
                   var10 = var10.substring(0, var10.length() - 1);
                   var11 = var10 + "...";
@@ -159,7 +156,7 @@ public final class DialogueScreen {
          }
 
          if ((var8 += lineHeight) + (lineHeight << 1)
-            >= b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5) - (lineHeight << 1)) {
+            >= Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5) - (lineHeight << 1)) {
             var2 = true;
             var3 = true;
             break;
@@ -173,21 +170,21 @@ public final class DialogueScreen {
          for (byte var18 = 0; var18 < var19.length; var18 += 2) {
             if (var8 >= 12 + (lineHeight << 1)) {
                if (var19[var18] != null) {
-                  var1.setFont(b.fontSmallBold);
+                  var1.setFont(Game.fontSmallBold);
                   var1.setColor(0);
                   var1.drawString(var19[var18], 10, var8, 0);
                }
 
                if (var19[var18 + 1] != null) {
-                  var1.setFont(b.fontSmall);
+                  var1.setFont(Game.fontSmall);
                   var1.setColor(16711680);
-                  var1.drawString(var19[var18 + 1], 15 + b.fontSmallBold.stringWidth(var19[var18]), var8, 0);
+                  var1.drawString(var19[var18 + 1], 15 + Game.fontSmallBold.stringWidth(var19[var18]), var8, 0);
                }
             } else {
                var2 = true;
             }
 
-            if ((var8 += lineHeight) + lineHeight >= b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5)) {
+            if ((var8 += lineHeight) + lineHeight >= Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5)) {
                if (var18 < var19.length - 2) {
                   var3 = true;
                }
@@ -197,11 +194,11 @@ public final class DialogueScreen {
       }
 
       this.lastVisible = (byte)var7;
-      var1.setFont(b.fontSmall);
+      var1.setFont(Game.fontSmall);
       var1.setColor(16711680);
-      var1.drawString(b.getString(449).toUpperCase(), 2, b.screenHeight - b.fontSmall.getHeight() - 2, 0);
+      var1.drawString(Game.getString(449).toUpperCase(), 2, Game.screenHeight - Game.fontSmall.getHeight() - 2, 0);
       if (var2) {
-         SpriteRenderer.draw(var1, this.ui, 54, b.screenWidth - SpriteRenderer.getWidth(this.ui, 54) - 10, 35);
+         SpriteRenderer.draw(var1, this.ui, 54, Game.screenWidth - SpriteRenderer.getWidth(this.ui, 54) - 10, 35);
       }
 
       if (var3) {
@@ -209,27 +206,27 @@ public final class DialogueScreen {
             var1,
             this.ui,
             53,
-            b.screenWidth - SpriteRenderer.getWidth(this.ui, 53) - 10,
-            b.screenHeight - b.fontSmall.getHeight() - SpriteRenderer.getHeight(this.ui, 53) - SpriteRenderer.getHeight(this.ui, 5) - 6
+            Game.screenWidth - SpriteRenderer.getWidth(this.ui, 53) - 10,
+            Game.screenHeight - Game.fontSmall.getHeight() - SpriteRenderer.getHeight(this.ui, 53) - SpriteRenderer.getHeight(this.ui, 5) - 6
          );
       }
 
       if (showPauseOverlay) {
          var1.setColor(0);
-         var1.fillRect(0, 0, b.screenWidth, b.screenHeight);
+         var1.fillRect(0, 0, Game.screenWidth, Game.screenHeight);
          var1.setColor(16777215);
-         var1.setFont(b.fontLargeBold);
+         var1.setFont(Game.fontLargeBold);
          var1.drawString(
-            b.getString(571),
-            (b.screenWidth >> 1) - (b.fontLargeBold.stringWidth(b.getString(571)) >> 1),
-            (b.screenHeight >> 1) - (b.fontLargeBold.getHeight() >> 1),
+            Game.getString(571),
+            (Game.screenWidth >> 1) - (Game.fontLargeBold.stringWidth(Game.getString(571)) >> 1),
+            (Game.screenHeight >> 1) - (Game.fontLargeBold.getHeight() >> 1),
             0
          );
-         var1.drawString(b.getString(22).toUpperCase(), 2, b.screenHeight - b.fontLargeBold.getHeight() - 2, 0);
+         var1.drawString(Game.getString(22).toUpperCase(), 2, Game.screenHeight - Game.fontLargeBold.getHeight() - 2, 0);
          var1.drawString(
-            b.getString(426).toUpperCase(),
-            b.screenWidth - b.fontLargeBold.stringWidth(b.getString(426)) - 2,
-            b.screenHeight - b.fontLargeBold.getHeight() - 2,
+            Game.getString(426).toUpperCase(),
+            Game.screenWidth - Game.fontLargeBold.stringWidth(Game.getString(426)) - 2,
+            Game.screenHeight - Game.fontLargeBold.getHeight() - 2,
             0
          );
       }
@@ -246,7 +243,7 @@ public final class DialogueScreen {
          if (this.roots != null && this.tab < this.roots.length && this.roots[this.tab] != null && this.roots[this.tab].answerLines != null) {
             this.scrollY = (short)(this.scrollY - lineHeight);
             if ((this.roots[this.tab].answerLines.length >> 1) * lineHeight + this.scrollY + (lineHeight << 2)
-               < b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5)) {
+               < Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 5)) {
                this.scrollY = (short)(this.scrollY + lineHeight);
             }
          }
@@ -283,7 +280,7 @@ public final class DialogueScreen {
          this.scrollY = 0;
       } else if (var1 == 7 && this.cursor < this.roots[this.tab].children.size() && this.cursor >= 0) {
          DialogueNode var4 = (DialogueNode)this.roots[this.tab].children.elementAt(this.cursor);
-         if (!this.roots[this.tab].text.equals(b.getString(36)) && !this.roots[this.tab].text.equals(b.getString(37)) && !var4.available) {
+         if (!this.roots[this.tab].text.equals(Game.getString(36)) && !this.roots[this.tab].text.equals(Game.getString(37)) && !var4.available) {
             return;
          }
 
@@ -294,7 +291,7 @@ public final class DialogueScreen {
          } else {
             for (int var6 = 0; var6 < this.roots[this.tab].children.size(); var6++) {
                var5 = (DialogueNode)this.roots[this.tab].children.elementAt(var6);
-               if (var4.parent.text.equals(b.getString(27))) {
+               if (var4.parent.text.equals(Game.getString(27))) {
                   if (this.sameBuySellGroup(var5, var4)) {
                      var5.marked = false;
                   }
@@ -321,10 +318,10 @@ public final class DialogueScreen {
    }
 
    private boolean sameBuySellGroup(DialogueNode var1, DialogueNode var2) {
-      return !var1.text.equals(b.getString(149)) && !var1.text.equals(b.getString(151))
-            || !var2.text.equals(b.getString(149)) && !var2.text.equals(b.getString(151))
-         ? (var1.text.equals(b.getString(150)) || var1.text.equals(b.getString(152)))
-            && (var2.text.equals(b.getString(150)) || var2.text.equals(b.getString(152)))
+      return !var1.text.equals(Game.getString(149)) && !var1.text.equals(Game.getString(151))
+            || !var2.text.equals(Game.getString(149)) && !var2.text.equals(Game.getString(151))
+         ? (var1.text.equals(Game.getString(150)) || var1.text.equals(Game.getString(152)))
+            && (var2.text.equals(Game.getString(150)) || var2.text.equals(Game.getString(152)))
          : true;
    }
 
@@ -356,7 +353,7 @@ public final class DialogueScreen {
       boolean var10 = false;
       boolean var11 = false;
       var1.setColor(0);
-      var1.fillRect(0, 0, b.screenWidth, b.screenHeight);
+      var1.fillRect(0, 0, Game.screenWidth, Game.screenHeight);
       var2 = SpriteRenderer.getWidth(this.ui, 13);
       var3 = SpriteRenderer.getHeight(this.ui, 13);
       var4 = SpriteRenderer.getHeight(this.ui, 11);
@@ -366,37 +363,37 @@ public final class DialogueScreen {
       var8 = SpriteRenderer.getHeight(this.ui, 5);
       var9 = SpriteRenderer.getWidth(this.ui, 5);
 
-      for (int var20 = 0; var20 < b.screenWidth; var20 += var2) {
-         for (int var23 = 0; var23 < b.screenHeight - b.fontSmall.getHeight() - 4 - var3; var23 += var3) {
+      for (int var20 = 0; var20 < Game.screenWidth; var20 += var2) {
+         for (int var23 = 0; var23 < Game.screenHeight - Game.fontSmall.getHeight() - 4 - var3; var23 += var3) {
             SpriteRenderer.draw(var1, this.ui, 13, var20, var23);
          }
       }
 
-      for (int var24 = 0; var24 < b.screenHeight - b.fontSmall.getHeight() - 4 - var4; var24 += var4) {
+      for (int var24 = 0; var24 < Game.screenHeight - Game.fontSmall.getHeight() - 4 - var4; var24 += var4) {
          SpriteRenderer.draw(var1, this.ui, 11, 0, var24);
       }
 
-      for (int var25 = 0; var25 < b.screenHeight - b.fontSmall.getHeight() - 4 - var5; var25 += var5) {
-         SpriteRenderer.draw(var1, this.ui, 12, b.screenWidth - var6, var25);
+      for (int var25 = 0; var25 < Game.screenHeight - Game.fontSmall.getHeight() - 4 - var5; var25 += var5) {
+         SpriteRenderer.draw(var1, this.ui, 12, Game.screenWidth - var6, var25);
       }
 
-      for (int var21 = 0; var21 < b.screenWidth; var21 += var7) {
+      for (int var21 = 0; var21 < Game.screenWidth; var21 += var7) {
          SpriteRenderer.draw(var1, this.ui, 8, var21, 0);
       }
 
-      for (int var22 = 0; var22 < b.screenWidth; var22 += var9) {
-         SpriteRenderer.draw(var1, this.ui, 5, var22, b.screenHeight - b.fontSmall.getHeight() - 4 - var8);
+      for (int var22 = 0; var22 < Game.screenWidth; var22 += var9) {
+         SpriteRenderer.draw(var1, this.ui, 5, var22, Game.screenHeight - Game.fontSmall.getHeight() - 4 - var8);
       }
 
       SpriteRenderer.draw(var1, this.ui, 9, 0, 0);
-      SpriteRenderer.draw(var1, this.ui, 10, b.screenWidth - SpriteRenderer.getWidth(this.ui, 10), 0);
-      SpriteRenderer.draw(var1, this.ui, 6, 0, b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 6));
+      SpriteRenderer.draw(var1, this.ui, 10, Game.screenWidth - SpriteRenderer.getWidth(this.ui, 10), 0);
+      SpriteRenderer.draw(var1, this.ui, 6, 0, Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 6));
       SpriteRenderer.draw(
          var1,
          this.ui,
          7,
-         b.screenWidth - SpriteRenderer.getWidth(this.ui, 7),
-         b.screenHeight - b.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 7)
+         Game.screenWidth - SpriteRenderer.getWidth(this.ui, 7),
+         Game.screenHeight - Game.fontSmall.getHeight() - 4 - SpriteRenderer.getHeight(this.ui, 7)
       );
    }
 
