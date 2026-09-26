@@ -86,7 +86,11 @@ public:
     // written here in the original, read back by keyPressed()'s numeric-
     // hotkey dispatch) is NOT modeled -- input handling remains out of
     // scope, same gap M29's own header comment already flagged.
-    static void RenderHud(Backbuffer& bb, const HotbarAssets& assets, int iconSet);
+    // `drawPanel` false leaves the panel background to the caller (widescreen draws it across
+    // the whole width first, see RenderHudPanel).
+    static void RenderHud(Backbuffer& bb, const HotbarAssets& assets, int iconSet, bool drawPanel = true);
+    // Just the hotbar panel's background, as wide as the current view.
+    static void RenderHudPanel(Backbuffer& bb);
 
     // GameCanvas.paintMinimapZoomedOut(): the compass glyph (M32's
     // `compassGlyphs[facing]`, white, at (16,10)), a black 23x23

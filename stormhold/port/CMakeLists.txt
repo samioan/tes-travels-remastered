@@ -174,6 +174,7 @@ add_library(stormhold_render STATIC
   src/render/message_popup.cpp
   src/render/status_bar_plan.cpp
   src/render/visible_object_renderer.cpp
+  src/render/wide_corridor.cpp
   src/ui/boot_splash.cpp
   src/ui/inventory_ui.cpp
   src/ui/level_up_menu.cpp
@@ -375,6 +376,10 @@ target_link_libraries(backbuffer_blit_smoke PRIVATE stormhold_assets)
 add_executable(decoded_image_smoke src/tests/m24_decoded_image_smoke.cpp)
 target_include_directories(decoded_image_smoke PRIVATE src)
 target_link_libraries(decoded_image_smoke PRIVATE stormhold_assets)
+
+# Widescreen 3D corridor (see src/tests/wide_corridor_smoke.cpp).
+add_executable(wide_corridor_smoke src/tests/wide_corridor_smoke.cpp)
+target_link_libraries(wide_corridor_smoke PRIVATE stormhold_render stormhold_player)
 
 # M25 milestone smoke test -- see src/tests/m25_game_renderer_smoke.cpp.
 add_executable(game_renderer_smoke src/tests/m25_game_renderer_smoke.cpp)

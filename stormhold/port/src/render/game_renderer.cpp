@@ -72,9 +72,13 @@ void GameRenderer::RenderStatusBars(Backbuffer& bb, const StatusBarPlan& plan) {
     bb.FillRect(6, 147, plan.fatigueWidth, 5, PackRGB565(0, 0, 255));
 }
 
-void GameRenderer::RenderHud(Backbuffer& bb, const HotbarAssets& assets, int iconSet) {
-    bb.FillRect(0, 156, Backbuffer::kWidth, 52, PackRGB565(0, 0, 0));
-    bb.FillRoundRect(2, 158, Backbuffer::kWidth - 4, 48, 5, 5, PackRGB565(0xC7, 0x99, 0x67));
+void GameRenderer::RenderHudPanel(Backbuffer& bb) {
+    bb.FillRect(0, 156, bb.Width(), 52, PackRGB565(0, 0, 0));
+    bb.FillRoundRect(2, 158, bb.Width() - 4, 48, 5, 5, PackRGB565(0xC7, 0x99, 0x67));
+}
+
+void GameRenderer::RenderHud(Backbuffer& bb, const HotbarAssets& assets, int iconSet, bool drawPanel) {
+    if (drawPanel) RenderHudPanel(bb);
 
     if (iconSet < 0 || iconSet > 2) return;
     const HotbarRow& row = kHotbarRows[iconSet];

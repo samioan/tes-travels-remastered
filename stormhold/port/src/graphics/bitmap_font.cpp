@@ -235,7 +235,7 @@ void BitmapFont::DrawString(Backbuffer& bb, int x, int y, const std::string& tex
             if (dy < 0 || dy >= Backbuffer::kHeight) continue;
             for (int col = 0; col < glyph->width; col++) {
                 const int dx = left + col;
-                if (dx < 0 || dx >= Backbuffer::kWidth) continue;
+                if (dx < 0 || dx >= bb.Width()) continue;
                 if (glyph->bits[static_cast<size_t>(row) * glyph->width + col]) bb.SetPixel(dx, dy, rgb565);
             }
         }
@@ -261,7 +261,7 @@ void GdiDrawString(Backbuffer& bb, int x, int y, const std::string& text, uint16
         if (dy < 0 || dy >= Backbuffer::kHeight) continue;
         for (int sx = 0; sx < extent.cx; sx++) {
             int dx = x + sx;
-            if (dx < 0 || dx >= Backbuffer::kWidth) continue;
+            if (dx < 0 || dx >= bb.Width()) continue;
 
             // White-on-black source: every channel already equals this
             // pixel's own text coverage (0-255) -- see RenderToScratch's
@@ -275,7 +275,7 @@ void GdiDrawString(Backbuffer& bb, int x, int y, const std::string& text, uint16
                 continue;
             }
 
-            const uint16_t existing = bb.Data()[static_cast<size_t>(dy) * Backbuffer::kWidth + dx];
+            const uint16_t existing = bb.GetPixel(dx, dy);
             const uint8_t er = static_cast<uint8_t>(((existing >> 11) & 0x1F) * 255 / 31);
             const uint8_t eg = static_cast<uint8_t>(((existing >> 5) & 0x3F) * 255 / 63);
             const uint8_t eb = static_cast<uint8_t>((existing & 0x1F) * 255 / 31);

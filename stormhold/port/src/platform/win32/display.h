@@ -6,7 +6,12 @@
 
 namespace stormhold {
 
+// The widescreen canvas: Off keeps the native 176 columns; Auto follows the
+// window's shape; the others fix the ratio.
+enum class Aspect { Off, Auto, R4_3, R16_10, R16_9, R21_9, Count };
+
 struct DisplaySettings {
+    Aspect aspect = Aspect::Off;
     bool fullscreen = false;
     Scaling scaling = Scaling::Fit;
     int scale = 3;  // windowed size: a whole multiple of the native 176x208
@@ -24,6 +29,11 @@ public:
     explicit Display(std::string cfgPath) : cfgPath_(std::move(cfgPath)) { Load(); }
 
     DisplaySettings& settings() { return s_; }
+
+    // The canvas width to draw at, for a client area of clientW x clientH
+    // (0x0 = unknown). 176 when widescreen is off.
+    static int WidthFor(Aspect aspect, int clientW, int clientH);
+    int LogicalWidth() const;
     // Attaches the window and applies the settings (fullscreen, size).
     void Attach(Window* window);
 
@@ -33,12 +43,17 @@ public:
     // ---- DisplayControl ----
     std::string ResolutionName() const override { return std::to_string(s_.scale) + "x"; }
     void CycleResolution(int dir) override;
+    std::string WidescreenName() const override;
+    void CycleWidescreen(int dir) override;
     bool Fullscreen() const override { return s_.fullscreen; }
     void ToggleFullscreen() override;
     std::string ScalingName() const override { return s_.scaling == Scaling::Fit ? "Fit" : "Integer"; }
     void CycleScaling() override;
 
 private:
+    // The client size the window should have for the current size choice.
+    void ApplySize();
+
     DisplaySettings s_;
     std::string cfgPath_;
     Window* window_ = nullptr;

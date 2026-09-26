@@ -240,6 +240,7 @@
 #include "render/corridor_assets.h"
 #include "render/flash_overlay.h"
 #include "render/game_renderer.h"
+#include "render/wide_corridor.h"
 #include "render/hotbar_assets.h"
 #include "render/hud_state.h"
 #include "render/message_popup.h"
@@ -488,6 +489,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     bool gameStarted = false;
 
     stormhold::CorridorAssets corridorAssets = stormhold::CorridorAssets::Load(assetRoot);
+    // PC-only widescreen: the 3D wall texture, recovered from the same wall art.
+    const stormhold::WideWallTexture wideWall = stormhold::WideWallTexture::Build(corridorAssets.wallTexture);
     stormhold::HotbarAssets hotbarAssets = stormhold::HotbarAssets::Load(assetRoot);
     stormhold::VisibleObjectAssets objectAssets = stormhold::VisibleObjectAssets::Load(assetRoot);
     stormhold::FlashOverlayAssets flashOverlayAssets = stormhold::FlashOverlayAssets::Load(assetRoot);
@@ -662,11 +665,26 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         secondAccumulatorMs = 0;
     };
 
+    // Whether what is in the backbuffer is the widescreen 3D corridor (it fills the whole width). The
+    // game only repaints on ticks and re-presents the same picture in between, so this outlives a frame.
+    bool wideScene = false;
     window.RunMessageLoop([&]() {
         if (toggleFullscreenRequested) {  // F11 / Alt+Enter
             toggleFullscreenRequested = false;
             display.ToggleFullscreen();
         }
+        // Widescreen: the canvas follows the Settings choice / window shape. Everything is laid
+        // out for the native 176 columns, so it all draws into a centred 176-wide view; only the
+        // 3D corridor (below) uses the whole width.
+        if (const int canvasWidth = display.LogicalWidth(); backbuffer.RealWidth() != canvasWidth)
+            backbuffer.Resize(canvasWidth);
+        backbuffer.CenterView(stormhold::Backbuffer::kWidth);
+        // Every screen but the 3D corridor is laid out for 176 columns and drawn centred; in
+        // widescreen its flat colours are simply continued into the space at the sides.
+        auto present = [&]() {
+            if (!wideScene && backbuffer.RealWidth() > stormhold::Backbuffer::kWidth) backbuffer.ExtendViewEdges();
+            window.Present(backbuffer);
+        };
         // Port-only diagnostic wrapper, no original counterpart -- added
         // this session after a real crash (M67's `RenderUnknownB`, fixed
         // above) reached the user with zero information beyond "the game
@@ -707,8 +725,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     100, elapsed * 100 / stormhold::BootSplash::kCopyrightStartMs));
                 bootSplash.SetPercent(percent);
                 backbuffer.Fill(stormhold::PackRGB565(0, 0, 0));
+                wideScene = false;
                 bootSplash.Render(backbuffer, elapsed);
-                window.Present(backbuffer);
+                present();
                 return;
             }
         }
@@ -736,8 +755,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             }
 
             backbuffer.Fill(stormhold::PackRGB565(0, 0, 0));
+            wideScene = false;
             stormhold::MenuFlow::Render(backbuffer, menuState, charData, dialogue);
-            window.Present(backbuffer);
+            present();
             if (menuState.exitRequested) window.RequestClose();
             return;
         }
@@ -1477,6 +1497,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             stormhold::VisibleObjects::Refresh(player, world, /*includeWarden=*/false, warden);
 
             backbuffer.Fill(stormhold::PackRGB565(0, 0, 0));
+            wideScene = false;
             if (npcDialogue.active) {
                 // M60: fully replaces the normal game view, matching
                 // `npcHelloUI` taking over `Display.setCurrent()` in the
@@ -1513,10 +1534,26 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             } else if (camp.state == 1 || camp.state == 2) {
                 PaintFullScreenMessage(backbuffer, "CAMPING");
             } else {
-                stormhold::GameRenderer::RenderCorridorView(
-                    backbuffer, corridorAssets, player.corridorView,
-                    /*ailment3Active=*/stormhold::PlayerCombatStats::HasAilment(player, 3),
-                    /*ailment4Active=*/stormhold::PlayerCombatStats::HasAilment(player, 4));
+                const bool wideView = backbuffer.RealWidth() > stormhold::Backbuffer::kWidth && wideWall.valid;
+                wideScene = wideView;
+                if (wideView) {
+                    // Widescreen: a real 3D view of the map across the whole width instead of the
+                    // hand-drawn 176-wide art. Sprites, HUD and popups stay native-size in the centre.
+                    const int centreX = backbuffer.ViewX() + 90;
+                    backbuffer.ResetView();
+                    stormhold::WideCorridor::Render(
+                        backbuffer, centreX, corridorAssets, wideWall,
+                        stormhold::WideCorridor::MakeWallQuery(levelLookup(player.currentLevel), levelLookup,
+                                                                player.tileX, player.tileY, player.facing),
+                        stormhold::PlayerCombatStats::HasAilment(player, 3),
+                        stormhold::PlayerCombatStats::HasAilment(player, 4));
+                    backbuffer.CenterView(stormhold::Backbuffer::kWidth);
+                } else {
+                    stormhold::GameRenderer::RenderCorridorView(
+                        backbuffer, corridorAssets, player.corridorView,
+                        /*ailment3Active=*/stormhold::PlayerCombatStats::HasAilment(player, 3),
+                        /*ailment4Active=*/stormhold::PlayerCombatStats::HasAilment(player, 4));
+                }
                 stormhold::VisibleObjectRenderer::RenderObjects(backbuffer, objectAssets, player);
                 // M67: GameCanvas.paintGameView()'s own `if (W) { stat =
                 // player.questShopAtPendingTile(); paintUnknown_b(g, stat);
@@ -1562,14 +1599,31 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 }
                 monsterRenderedLastFrame =
                     stormhold::VisibleObjectRenderer::RenderMonsters(backbuffer, objectAssets, player);
+                // Widescreen: the status bars and the minimap belong to the screen's left edge, not
+                // to the middle of the wider picture; everything else stays centred.
+                const bool wideCanvas = backbuffer.RealWidth() > stormhold::Backbuffer::kWidth;
+                auto anchorLeft = [&]() {
+                    if (wideCanvas) backbuffer.SetView(0, stormhold::Backbuffer::kWidth);
+                };
+                auto anchorCentre = [&]() { backbuffer.CenterView(stormhold::Backbuffer::kWidth); };
+                anchorLeft();
                 stormhold::GameRenderer::RenderStatusBars(backbuffer, stormhold::StatusBarPlan::Plan(player, charData));
+                anchorCentre();
                 std::optional<stormhold::TargetMonsterInfo> targetMonsterInfo;
                 if (targetMonster.has_value()) {
                     targetMonsterInfo = stormhold::TargetMonsterInfo{targetMonster->tileX, targetMonster->tileY,
                                                                       targetMonster->typeIndex};
                 }
                 int iconSet = stormhold::ResolveHudIconSet(hudState, player, targetMonsterInfo);
-                stormhold::GameRenderer::RenderHud(backbuffer, hotbarAssets, iconSet);
+                if (wideCanvas) {
+                    // The panel spans the full width and, as in the original, is painted after the
+                    // sprites so it covers anything that reaches down into it.
+                    backbuffer.ResetView();
+                    stormhold::GameRenderer::RenderHudPanel(backbuffer);
+                    anchorCentre();
+                }
+                stormhold::GameRenderer::RenderHud(backbuffer, hotbarAssets, iconSet,
+                                                    /*drawPanel=*/backbuffer.RealWidth() <= stormhold::Backbuffer::kWidth);
 
                 // paintGameView(): both minimap zooms are gated on
                 // `!player.hasAilment(3)` -- no minimap at all while it's
@@ -1580,14 +1634,22 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
                         levelLookup(player.currentLevel), world, player.tileX, player.tileY, player.facing, 7,
                         levelLookup);
+                    anchorLeft();
                     stormhold::GameRenderer::RenderMinimapZoomedOut(backbuffer, grid, player.facing);
+                    anchorCentre();
                 } else {
                     stormhold::SquareViewGrid grid = stormhold::DungeonRuntime::SampleSquareView(
                         levelLookup(player.currentLevel), world, player.tileX, player.tileY, player.facing, 17,
                         levelLookup);
+                    anchorLeft();
                     stormhold::GameRenderer::RenderMinimapNormal(backbuffer, grid, player.facing);
+                    anchorCentre();
                 }
+                // Widescreen: messages ("Creature attacks!") sit at the right edge of the screen.
+                if (wideCanvas) backbuffer.SetView(backbuffer.RealWidth() - stormhold::Backbuffer::kWidth,
+                                                   stormhold::Backbuffer::kWidth);
                 stormhold::MessagePopup::Paint(backbuffer, messagePopup);
+                anchorCentre();
                 // M45: paintGameView()'s own call order has this directly
                 // after paintMessagePopup() (see this file's own header
                 // comment) -- combatRng reused for the jitter, see
@@ -1596,7 +1658,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 stormhold::FlashOverlay::Paint(backbuffer, flashOverlay, flashOverlayAssets, combatRng);
             }
         }
-        window.Present(backbuffer);
+        present();
         } catch (const std::exception& e) {
             std::fprintf(stderr, "FATAL: %s\n", e.what());
             std::fflush(stderr);

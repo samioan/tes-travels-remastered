@@ -45,6 +45,7 @@ public:
     // Resizes the windowed client area (ignored while fullscreen -- it applies
     // on leaving fullscreen).
     void SetClientSize(int width, int height);
+    void ClientSize(int* w, int* h) const;  // the current client area
 
     // Lets the app itself end RunMessageLoop from inside its own onIdle
     // callback (same effect as the close button).
