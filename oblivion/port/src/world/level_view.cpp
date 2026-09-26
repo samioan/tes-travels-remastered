@@ -40,7 +40,7 @@ void LevelView::CellScreenPos(int cx, int cy, int* sx, int* sy) const {
 void LevelView::CenterOnCell(int cx, int cy) {
     int sx, sy;
     CellScreenPos(cx, cy, &sx, &sy);
-    camX_ = Backbuffer::kWidth / 2 - sx;
+    camX_ = screenW_ / 2 - sx;
     camY_ = Backbuffer::kHeight / 2 - sy;
 }
 
@@ -73,7 +73,7 @@ Grid LevelView::grid() const {
 }
 
 void LevelView::CenterOnScreen(int sx, int sy) {
-    camX_ = Backbuffer::kWidth / 2 - sx;
+    camX_ = screenW_ / 2 - sx;
     camY_ = Backbuffer::kHeight / 2 - sy;
 }
 
@@ -93,7 +93,7 @@ void LevelView::Draw(Backbuffer& bb, const std::vector<Actor*>& actors) {
                 sy += camY_;
                 int h = tiles_.Height(tile);
                 // The engine own visibility test (Game.drawTileLayers).
-                if (sx > -kTileWidth && sx < Backbuffer::kWidth && sy > -kTileHeight &&
+                if (sx > -kTileWidth && sx < bb.Width() && sy > -kTileHeight &&
                     sy < Backbuffer::kHeight + h) {
                     DrawSprite(bb, images_, tiles_, tile, sx, sy);
                 }
@@ -112,7 +112,7 @@ void LevelView::Draw(Backbuffer& bb, const std::vector<Actor*>& actors) {
             sx += camX_;
             sy += camY_;
             if (tile != 0) lastH = tiles_.Height(tile);
-            if (sx > -kTileWidth && sx < Backbuffer::kWidth && sy > -kTileHeight &&
+            if (sx > -kTileWidth && sx < bb.Width() && sy > -kTileHeight &&
                 sy < Backbuffer::kHeight + lastH) {
                 if (tile != 0) DrawSprite(bb, images_, tiles_, tile, sx, sy);
                 for (Actor* a : actors)

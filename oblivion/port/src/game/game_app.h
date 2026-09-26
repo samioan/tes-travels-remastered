@@ -8,6 +8,7 @@
 #include "graphics/backbuffer.h"
 #include "game/analog_input.h"
 #include "game/dialogue_screen.h"
+#include "game/display_control.h"
 #include "game/help_pages.h"
 #include "world/game_world.h"
 
@@ -48,6 +49,10 @@ public:
     // Where the save record lives (the original's RecordStore "ESO", record 1).
     // Empty (the default) disables persistence, which keeps tests off real saves.
     void SetSavePath(std::string path) { savePath_ = std::move(path); }
+    // Enables the Settings menu (resolution, fullscreen, scaling); null hides it.
+    void SetDisplayControl(DisplayControl* d) { display_ = d; }
+    // The screen width this frame will be drawn at (>= 176); the camera centres on it.
+    void SetScreenWidth(int w) { world_.SetScreenWidth(w); }
     bool HasSavedGame() const;
     // Game.saveGame / loadGame: key bindings, sound flag, current level and the
     // player. loadGame(false) (start-up) restores settings and player only.
@@ -121,12 +126,14 @@ private:
     // menus
     std::vector<std::vector<std::string>> menus_;
     int menuId_ = -1;
-    int menuSelection_[7] = {};
+    int menuSelection_[8] = {};
     int menuReturn_ = 0;
     bool stateFlagF_ = false;  // true once the player has left the playing state
     std::shared_ptr<Image> titleImage_;
     bool newGameLocked_ = false;
     std::string savePath_;
+    DisplayControl* display_ = nullptr;
+    void RefreshSettingsMenu();
 
     // text screens
     std::vector<std::vector<std::string>> textLines_;

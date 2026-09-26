@@ -8,6 +8,7 @@
 //     gameData=data
 //     font=fonts/Ceurope.gdr
 //     scale=3
+//     fullscreen=0
 //
 // Paths are stored relative to the install root when they live inside it
 // (which, after the setup flow unpacks the jar in, they always do), so the
@@ -33,6 +34,10 @@ struct LauncherConfig {
     // Integer window scale over the native 176x208 (OBLIVION_SCALE, read by
     // main.cpp). 3 is what the port's window always used.
     int scale = 3;
+
+    // Borderless fullscreen instead of a window (the launcher passes --fullscreen / --windowed;
+    // the in-game Settings menu can still change it).
+    bool fullscreen = false;
 
     static constexpr int kMinScale = 1;
     static constexpr int kMaxScale = 8;

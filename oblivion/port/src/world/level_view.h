@@ -55,6 +55,9 @@ public:
     void SetMap(JtmMap map) { map_ = std::move(map); }
     bool loaded() const { return !map_.layers.empty(); }
     void SetCamera(int x, int y) { camX_ = x; camY_ = y; }
+    // The width of the screen the camera centres on (widescreen makes it wider than 176).
+    void SetScreenWidth(int w) { screenW_ = w; }
+    int screenWidth() const { return screenW_; }
 
     // Collision data for ActorSystem::IsBlocked (jtm layer 0).
     Grid grid() const;
@@ -78,6 +81,7 @@ private:
     SpriteSet tiles_;
     std::string jtmPath_, cmlPath_;
     int camX_ = 0, camY_ = 0;
+    int screenW_ = Backbuffer::kWidth;
 };
 
 }  // namespace oblivion

@@ -180,6 +180,24 @@ Canvas for its size, so this is a port decision).
   compare, release-list parser) needs neither the game nor a network. Cutting a
   release: `git tag oblivion-v0.1.0 && git push origin oblivion-v0.1.0`.
 
+- **Display settings** (`graphics/backbuffer.h` views, `platform/win32/display`,
+  `game/display_control.h`, the Settings menu, launcher Fullscreen button):
+  modelled on the rac-j2me-decomp ports. The canvas keeps the original 208 rows
+  and widens to the chosen aspect (Original / Auto / 4:3 / 16:10 / 16:9 / 21:9,
+  176..554 columns); nothing is scaled, so sprites and HUD stay pixel-native.
+  The playing field uses the full width (camera centres on it, HUD and soft-key
+  labels hug the corners, message strip spans it); every 176-column screen
+  (menus, text, inventory, shop, prompts, the script dialogue box) draws into a
+  centred 176-wide *view* of the buffer (`Backbuffer::CenterView`), the bars
+  beside it taking the screen colour. Borderless fullscreen (F11 / Alt+Enter),
+  resizable window, Fit or Integer scaling, mouse aim mapped through the
+  letterboxing. Settings item in the main and pause menus (Resolution, Display,
+  Scaling, Back); values persist in `display.cfg`. The launcher's display row
+  gained a Fullscreen button (`fullscreen=` in launcher.cfg -> `--fullscreen` /
+  `--windowed`). `display_smoke` covers the aspect table, views, camera
+  centring, column-blank menus and the Settings menu; `--width N` renders
+  headless at any canvas width.
+
 **The port is feature-complete** against the original's engine. Remaining work
 is verification and polish, not milestones.
 

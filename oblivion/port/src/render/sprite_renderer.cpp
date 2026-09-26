@@ -13,8 +13,8 @@ int DrawSprite(Backbuffer& bb, ImageCache& images, const SpriteSet& set, int gro
     }
     int clipX = x + f.dx;
     int clipY = y + f.dy;
-    if (clipX < Backbuffer::kWidth && clipY < Backbuffer::kHeight) {
-        int clipW = std::min<int>(Backbuffer::kWidth, f.width);
+    if (clipX < bb.Width() && clipY < Backbuffer::kHeight) {
+        int clipW = std::min<int>(bb.Width(), f.width);
         int clipH = std::min<int>(Backbuffer::kHeight, f.height);
         if (f.isSprite == 1) {
             // The whole sheet, mirrored, positioned so this frame window

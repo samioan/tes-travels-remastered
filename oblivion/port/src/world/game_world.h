@@ -43,6 +43,14 @@ public:
     // A movement / fire action held this frame (3 up, 4 down, 5 left, 6 right, 7 fire),
     // Game.handleInput case 0. 0 = none.
     void HeldAction(int action, int dtMs);
+    // The screen width (>= 176) the camera centres on; widescreen shows more of the world.
+    void SetScreenWidth(int w) {
+        if (w == screenW_) return;
+        screenW_ = w;
+        view_.SetScreenWidth(w);
+        redraw_ = true;
+    }
+    int screenWidth() const { return screenW_; }
     // ---- modern controls (screen-relative free movement) ----
     // Move the player by a screen-space stick vector (+x right, +y down, length
     // 0..1): straight up the screen is the world diagonal, so all eight
@@ -216,6 +224,7 @@ private:
     std::shared_ptr<Actor> actors_[kMaxActors];
     std::shared_ptr<Actor> player_;  // persists across levels (Game.player)
     int maxActorSlot_ = 0;
+    int screenW_ = Backbuffer::kWidth;
     int cameraActor_ = -1;
     bool redraw_ = true;  // Game.redraw: makes updateCamera recentre
     int playerClass_ = 1;  // menuSelection[1] + 1 in the original

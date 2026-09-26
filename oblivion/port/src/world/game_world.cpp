@@ -13,7 +13,6 @@ namespace oblivion {
 
 namespace {
 
-constexpr int kScreenW = Backbuffer::kWidth;
 constexpr int kScreenH = Backbuffer::kHeight;
 
 }  // namespace
@@ -126,7 +125,7 @@ void World::SpawnActor(const std::string& name, int slot, const std::string& cml
         a.deathScript = -1;
         cameraActor_ = 0;
         redraw_ = true;
-        view_.SetCamera(kScreenW / 2 - a.screenPos[0], kScreenH / 2 - a.screenPos[1]);
+        view_.SetCamera(screenW_ / 2 - a.screenPos[0], kScreenH / 2 - a.screenPos[1]);
     }
     if (slot > maxActorSlot_) maxActorSlot_ = slot;
 }
@@ -156,7 +155,7 @@ void World::RemoveActor(int slot) {
 void World::CameraTo(int x, int y) {
     // Game.worldToIso, centred on the screen.
     const int sx = (x - y) >> 3, sy = (x + y) >> 4;
-    view_.SetCamera(kScreenW / 2 - sx, kScreenH / 2 - sy);
+    view_.SetCamera(screenW_ / 2 - sx, kScreenH / 2 - sy);
     redraw_ = true;
     cameraActor_ = -1;
     SetSpeaker(nullptr);
@@ -167,7 +166,7 @@ void World::CameraFollow(int slot) {
     if (!a) return;
     cameraActor_ = slot;
     redraw_ = true;
-    view_.SetCamera(kScreenW / 2 - a->screenPos[0], kScreenH / 2 - a->screenPos[1]);
+    view_.SetCamera(screenW_ / 2 - a->screenPos[0], kScreenH / 2 - a->screenPos[1]);
     SetSpeaker(a->name.empty() ? nullptr : &a->name);
 }
 
@@ -180,9 +179,9 @@ void World::UpdateCamera() {
         if (a->screenPos[1] - ActorSystem::SpriteHeight(*a) + camY < 0) redraw_ = true;
         else if (a->screenPos[1] + camY > kScreenH) redraw_ = true;
         else if (a->screenPos[0] + camX < 0) redraw_ = true;
-        else if (a->screenPos[0] + ActorSystem::SpriteWidth(*a) + camX > kScreenW) redraw_ = true;
+        else if (a->screenPos[0] + ActorSystem::SpriteWidth(*a) + camX > screenW_) redraw_ = true;
         if (redraw_)
-            view_.SetCamera(kScreenW / 2 - a->screenPos[0],
+            view_.SetCamera(screenW_ / 2 - a->screenPos[0],
                             kScreenH / 2 - a->screenPos[1] + ActorSystem::SpriteHeight(*a));
     }
     redraw_ = false;
@@ -231,7 +230,7 @@ std::vector<std::string> World::WrapText(std::string text, int width) {
 void World::ShowDialogue(const std::string& text) {
     // Game.showDialogue: box geometry comes from the HUD sprites.
     const int capW = hudSprites_.Width(54);
-    dialogue.right = kScreenW - 10;
+    dialogue.right = Backbuffer::kWidth - 10;  // the box is a 176-wide column, centred when the screen is wider
     dialogue.textWidth = dialogue.right - capW - 13;
     dialogue.height = std::min(kScreenH >> 1, hudSprites_.Height(51)) - 4;
     dialogue.lines = WrapText(text, dialogue.textWidth);

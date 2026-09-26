@@ -2,17 +2,24 @@
 
 #include <windows.h>
 
+#include <algorithm>
+
 namespace oblivion {
 
 struct Window::Impl {
     HWND hwnd = nullptr;
-    int clientWidth = 0;
-    int clientHeight = 0;
     KeyCallback onKey;
-    BITMAPINFO bmi{};
+    bool fullscreen = false;
+    DWORD windowedStyle = 0;
+    WINDOWPLACEMENT windowedPlacement = {sizeof(WINDOWPLACEMENT)};
+    // Where the last frame landed in the client area (for mouse aiming).
+    int vpX = 0, vpY = 0, vpW = 1, vpH = 1;
+    int srcW = Backbuffer::kWidth, srcH = Backbuffer::kHeight;
 };
 
 namespace {
+
+constexpr DWORD kWindowedStyle = WS_OVERLAPPEDWINDOW;
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     Window::Impl* impl = reinterpret_cast<Window::Impl*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -23,8 +30,23 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            // Alt+Enter is fullscreen too (reported as F11); other Alt combos stay with the system.
+            if (msg == WM_SYSKEYDOWN && wParam == VK_RETURN) {
+                if (impl && impl->onKey && !(lParam & (1 << 30))) impl->onKey(VK_F11);
+                return 0;
+            }
+            if (msg == WM_SYSKEYDOWN && wParam != VK_F10) return DefWindowProcW(hwnd, msg, wParam, lParam);
             if (impl && impl->onKey) impl->onKey(static_cast<unsigned>(wParam));
             return 0;
+        case WM_ERASEBKGND:
+            return 1;  // Present paints everything, bars included
+        case WM_SETCURSOR:
+            if (impl && impl->fullscreen && LOWORD(lParam) == HTCLIENT) {
+                SetCursor(LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)));
+                return TRUE;
+            }
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
         case WM_CLOSE:
             DestroyWindow(hwnd);
             return 0;
@@ -40,17 +62,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 Window::Window(int clientWidth, int clientHeight, const std::wstring& title) {
     impl_ = new Impl();
-    impl_->clientWidth = clientWidth;
-    impl_->clientHeight = clientHeight;
-
-    BITMAPINFOHEADER& h = impl_->bmi.bmiHeader;
-    h.biSize = sizeof(BITMAPINFOHEADER);
-    h.biWidth = Backbuffer::kWidth;
-    h.biHeight = -Backbuffer::kHeight;  // top-down
-    h.biPlanes = 1;
-    h.biBitCount = 32;
-    h.biCompression = BI_RGB;
-
     static const wchar_t* kClassName = L"OblivionPortWindow";
     static bool registered = false;
     if (!registered) {
@@ -63,12 +74,18 @@ Window::Window(int clientWidth, int clientHeight, const std::wstring& title) {
         registered = true;
     }
 
+    // Never open bigger than the desktop's work area.
+    RECT work = {};
+    SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
     RECT rect = {0, 0, clientWidth, clientHeight};
-    DWORD style = WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX;
-    AdjustWindowRect(&rect, style, FALSE);
-    impl_->hwnd = CreateWindowExW(0, kClassName, title.c_str(), style, CW_USEDEFAULT, CW_USEDEFAULT,
-                                  rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr,
-                                  GetModuleHandleW(nullptr), impl_);
+    AdjustWindowRect(&rect, kWindowedStyle, FALSE);
+    int w = rect.right - rect.left, h = rect.bottom - rect.top;
+    if (work.right > work.left) {
+        w = std::min<int>(w, work.right - work.left);
+        h = std::min<int>(h, work.bottom - work.top);
+    }
+    impl_->hwnd = CreateWindowExW(0, kClassName, title.c_str(), kWindowedStyle, CW_USEDEFAULT, CW_USEDEFAULT, w, h,
+                                  nullptr, nullptr, GetModuleHandleW(nullptr), impl_);
     ShowWindow(impl_->hwnd, SW_SHOW);
 }
 
@@ -89,14 +106,81 @@ void Window::RunMessageLoop(const IdleCallback& onIdle) {
     }
 }
 
-void Window::Present(const Backbuffer& bb) {
+void Window::ClientSize(int* w, int* h) const {
+    RECT rc;
+    GetClientRect(impl_->hwnd, &rc);
+    *w = rc.right - rc.left;
+    *h = rc.bottom - rc.top;
+}
+
+void Window::Present(const Backbuffer& bb, Scaling scaling) {
     HDC dc = GetDC(impl_->hwnd);
-    StretchDIBits(dc, 0, 0, impl_->clientWidth, impl_->clientHeight, 0, 0, Backbuffer::kWidth,
-                  Backbuffer::kHeight, bb.Data(), &impl_->bmi, DIB_RGB_COLORS, SRCCOPY);
+    int cw, ch;
+    ClientSize(&cw, &ch);
+    const int sw = bb.RealWidth(), sh = Backbuffer::kHeight;
+    int w = cw, h = ch;
+    if (cw > 0 && ch > 0) {
+        if (scaling == Scaling::Integer && cw >= sw && ch >= sh) {
+            const int k = std::min(cw / sw, ch / sh);
+            w = sw * k;
+            h = sh * k;
+        } else if (static_cast<long long>(cw) * sh >= static_cast<long long>(ch) * sw) {
+            h = ch;  // pillarbox
+            w = static_cast<int>(static_cast<long long>(ch) * sw / sh);
+        } else {
+            w = cw;  // letterbox
+            h = static_cast<int>(static_cast<long long>(cw) * sh / sw);
+        }
+    }
+    const int x = (cw - w) / 2, y = (ch - h) / 2;
+    impl_->vpX = x;
+    impl_->vpY = y;
+    impl_->vpW = std::max(1, w);
+    impl_->vpH = std::max(1, h);
+    impl_->srcW = sw;
+    impl_->srcH = sh;
+
+    HBRUSH black = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+    const RECT bars[4] = {{0, 0, cw, y}, {0, y + h, cw, ch}, {0, y, x, y + h}, {x + w, y, cw, y + h}};
+    for (const RECT& b : bars)
+        if (b.right > b.left && b.bottom > b.top) FillRect(dc, &b, black);
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = sw;
+    bmi.bmiHeader.biHeight = -sh;  // top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+    SetStretchBltMode(dc, COLORONCOLOR);  // nearest neighbour keeps the pixel art crisp
+    StretchDIBits(dc, x, y, w, h, 0, 0, sw, sh, bb.Data(), &bmi, DIB_RGB_COLORS, SRCCOPY);
     ReleaseDC(impl_->hwnd, dc);
 }
 
 void Window::SetTitle(const std::wstring& title) { SetWindowTextW(impl_->hwnd, title.c_str()); }
+
+void Window::SetFullscreen(bool on) {
+    HWND hwnd = impl_->hwnd;
+    if (on == impl_->fullscreen) return;
+    if (on) {
+        impl_->windowedStyle = static_cast<DWORD>(GetWindowLongW(hwnd, GWL_STYLE));
+        GetWindowPlacement(hwnd, &impl_->windowedPlacement);
+        MONITORINFO mi = {sizeof(mi)};
+        if (!GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) return;
+        SetWindowLongW(hwnd, GWL_STYLE, static_cast<LONG>((impl_->windowedStyle & ~WS_OVERLAPPEDWINDOW) | WS_POPUP));
+        SetWindowPos(hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                     mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_FRAMECHANGED | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+    } else {
+        SetWindowLongW(hwnd, GWL_STYLE, static_cast<LONG>(impl_->windowedStyle ? impl_->windowedStyle : kWindowedStyle));
+        SetWindowPlacement(hwnd, &impl_->windowedPlacement);
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
+    impl_->fullscreen = on;
+    InvalidateRect(hwnd, nullptr, TRUE);
+}
+
+bool Window::IsFullscreen() const { return impl_->fullscreen; }
 
 void* Window::Handle() const { return impl_->hwnd; }
 
@@ -105,11 +189,12 @@ bool Window::HasFocus() const { return GetForegroundWindow() == impl_->hwnd; }
 bool Window::CursorPos(int* x, int* y) const {
     POINT pt;
     if (!GetCursorPos(&pt) || !ScreenToClient(impl_->hwnd, &pt)) return false;
-    RECT rc;
-    GetClientRect(impl_->hwnd, &rc);
-    if (pt.x < 0 || pt.y < 0 || pt.x >= rc.right || pt.y >= rc.bottom || rc.right <= 0 || rc.bottom <= 0) return false;
-    *x = pt.x * Backbuffer::kWidth / rc.right;
-    *y = pt.y * Backbuffer::kHeight / rc.bottom;
+    int cw, ch;
+    ClientSize(&cw, &ch);
+    if (pt.x < 0 || pt.y < 0 || pt.x >= cw || pt.y >= ch) return false;
+    // Through the letterboxing, into backbuffer pixels (bars map outside [0, width)).
+    *x = (pt.x - impl_->vpX) * impl_->srcW / impl_->vpW;
+    *y = (pt.y - impl_->vpY) * impl_->srcH / impl_->vpH;
     return true;
 }
 

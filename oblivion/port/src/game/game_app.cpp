@@ -21,6 +21,9 @@ using Text::Face;
 const std::vector<int> kXpForLevel = {0, 0, 100, 210, 340, 500, 700, 950, 1260, 1640, 2100, 2650, 3300,
                                       4060, 4940, 5950, 7100, 8400, 9860, 11490, 13300, 15300, 17500, 19910, 22540, 25400};
 
+// The PC-only options screen (menu 7). Not part of the original game, so not in its string tables.
+const char* const kSettingsLabel = "Settings";
+
 constexpr int kW = Backbuffer::kWidth;
 constexpr int kH = Backbuffer::kHeight;
 constexpr int kCenterX = kW / 2;
@@ -167,7 +170,7 @@ void GameApp::OnStateChange(int oldState, int newState) {
 // ---- menus -----------------------------------------------------------------
 
 void GameApp::BuildMenus() {
-    menus_.assign(7, {});
+    menus_.assign(8, {});
     menus_[2] = {"Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6",
                  "Level 7", "Level 8", "Level 9", "Level 10", "Level 11", "Level 12"};
     menus_[3] = {"/l01_1.scr",   "/l02_2_1.scr",  "/l03_3.scr",    "/l04_4.scr",
@@ -178,14 +181,26 @@ void GameApp::BuildMenus() {
     const bool saved = HasSavedGame();
     menus_[0] = {S(2)};
     if (saved) menus_[0].push_back(S(3));
+    if (display_) menus_[0].push_back(kSettingsLabel);
     for (int id : {456, 6, 22}) menus_[0].push_back(S(id));
     menus_[5] = {S(21), S(2)};
     if (saved) menus_[5].push_back(S(3));
+    if (display_) menus_[5].push_back(kSettingsLabel);
     for (int id : {456, 6, 22}) menus_[5].push_back(S(id));
+    RefreshSettingsMenu();
     optionLabels_ = {S(292), S(293), S(463), S(294)};
     const ScrTables& t = world_.script().tables();
     for (int i = 0; i < 9; i++)
         if (t.classBase[i][0] > 0) menus_[1].push_back(world_.script().ItemName(t.classBase[i][1]));
+}
+
+// Menu 7: one row per PC option, "Name: value"; Fire changes the row, Back returns.
+void GameApp::RefreshSettingsMenu() {
+    if (menus_.size() < 8) return;
+    menus_[7].clear();
+    if (!display_) return;
+    menus_[7] = {"Resolution: " + display_->ResolutionName(), std::string("Display: ") + (display_->Fullscreen() ? "Fullscreen" : "Windowed"),
+                 "Scaling: " + display_->ScalingName(), "Back"};
 }
 
 void GameApp::ResetMenu() {
@@ -278,6 +293,18 @@ void GameApp::ActivateMenuItem() {
         else menuId_ = 1;
     } else if (item == S(6)) {  // About
         world_.SetState(4);
+    } else if (menuId_ == 7) {  // Settings rows
+        const int row = menuSelection_[7];
+        if (display_ && row == 0) display_->CycleResolution(1);
+        else if (display_ && row == 1) display_->ToggleFullscreen();
+        else if (display_ && row == 2) display_->CycleScaling();
+        else menuId_ = menuReturn_;  // Back
+        RefreshSettingsMenu();
+    } else if (item == kSettingsLabel) {
+        menuReturn_ = menuId_;
+        menuId_ = 7;
+        menuSelection_[7] = 0;
+        RefreshSettingsMenu();
     } else if (item == S(456)) {  // Help
         menuReturn_ = menuId_;
         menuId_ = 6;
@@ -454,7 +481,7 @@ void GameApp::HandleMenuKey(Key key) {
     } else if (key == Key::Right) {
         if (++sel == n) sel = 0;
     } else if (key == Key::SoftLeft) {
-        if (menuId_ == 6) menuId_ = menuReturn_;
+        if (menuId_ == 6 || menuId_ == 7) menuId_ = menuReturn_;
         else if (menuId_ == 1) menuId_ = stateFlagF_ ? 5 : 0;
     } else if (key == Key::Fire) {
         ActivateMenuItem();
@@ -859,6 +886,11 @@ void GameApp::Tick(int dt) {
 // ---- painting --------------------------------------------------------------
 
 void GameApp::Draw(Backbuffer& bb) {
+    // Screens laid out for the original 176 columns draw in a centred 176-wide view
+    // (so nothing is stretched on a wider canvas); the playing field takes the whole width.
+    const bool playing = world_.state() == 0;
+    if (playing) bb.ResetView();
+    else bb.CenterView(Backbuffer::kWidth);
     const int fhs = FontH(Face::SmallBold);
     const int fhl = FontH(Face::LargeBold);
     const SpriteSet& hud = world_.hudSprites();
@@ -976,7 +1008,11 @@ void GameApp::Draw(Backbuffer& bb) {
     }
     // Script dialogue box over any state that draws it (Game.paint case 0 only,
     // but the box is only ever open while playing).
-    if (world_.state() == 0 && world_.dialogue.open) DrawDialogue(bb);
+    if (world_.state() == 0 && world_.dialogue.open) {
+        bb.CenterView(Backbuffer::kWidth);
+        DrawDialogue(bb);
+    }
+    bb.ResetView();
 }
 
 void GameApp::DrawPrompt(Backbuffer& bb, const std::string& text, bool twoSoftKeys, bool large) {
@@ -1002,13 +1038,13 @@ void GameApp::DrawHud(Backbuffer& bb) {
         }
         DrawSprite(bb, images_, world_.tileSprites(), -56, 0, 0);  // the frame around the bars
         if (p->attackIcon != -1)
-            DrawSprite(bb, images_, hud, p->attackIcon, kW - hud.Width(p->attackIcon) - 2, 2);
+            DrawSprite(bb, images_, hud, p->attackIcon, bb.Width() - hud.Width(p->attackIcon) - 2, 2);
         if (p->effectIcon != -1)
-            DrawSprite(bb, images_, hud, p->effectIcon, kW - (hud.Width(p->attackIcon) << 1) - 4, 2);
+            DrawSprite(bb, images_, hud, p->effectIcon, bb.Width() - (hud.Width(p->attackIcon) << 1) - 4, 2);
     }
     Text::DrawString(bb, 2, kH - fhs - 2, Upper(S(422)), kWhite, Face::SmallBold);
     if (world_.hudVisible())
-        Text::DrawString(bb, kW - FontW(S(421), Face::SmallBold) - 2, kH - fhs - 2, Upper(S(421)), kWhite,
+        Text::DrawString(bb, bb.Width() - FontW(S(421), Face::SmallBold) - 2, kH - fhs - 2, Upper(S(421)), kWhite,
                          Face::SmallBold);
     DrawMessage(bb);
 }
@@ -1017,13 +1053,14 @@ void GameApp::DrawMessage(Backbuffer& bb) {
     World::Message& m = world_.message;
     if (m.text.empty()) return;
     const Face f = Face::MediumPlain;
+    const int sw = bb.Width();
     m.y = kH - FontH(f) - 5;
-    bb.FillRect(0, m.y - 5, kW, kH - (m.y - 5), 0);
+    bb.FillRect(0, m.y - 5, sw, kH - (m.y - 5), 0);
     if (m.blank) return;
     if (m.x == -1) {
-        if (m.style == 0 || m.style == 1) m.x = kCenterX - (FontW(m.text, f) >> 1);
+        if (m.style == 0 || m.style == 1) m.x = sw / 2 - (FontW(m.text, f) >> 1);
         else if (m.style == 2) m.x = -FontW(m.text, f);
-        else if (m.style == 3) m.x = kW;
+        else if (m.style == 3) m.x = sw;
     }
     Text::DrawString(bb, m.x, m.y, m.text, static_cast<uint32_t>(m.color), f);
 }
@@ -1071,6 +1108,7 @@ void GameApp::DrawDialogue(Backbuffer& bb) {
 
 void GameApp::DrawMenu(Backbuffer& bb) {
     bb.Fill(0);
+    if (menuId_ == 7) RefreshSettingsMenu();  // F11 / F8 can change a value while it is showing
     if (menuId_ < 0 || menuId_ >= static_cast<int>(menus_.size()) || menus_[menuId_].empty()) return;
     const Face f = Face::LargeBold;
     const int fhl = FontH(f);

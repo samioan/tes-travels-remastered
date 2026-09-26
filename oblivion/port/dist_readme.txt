@@ -33,7 +33,7 @@ HOW TO PLAY
 -----------
 
 Run Oblivion.exe. Choose your .jar file. Optionally choose Ceurope.gdr.
-Press Play. Everything you add is copied into this folder, so you can
+Pick a window size (2x-4x) or Fullscreen (borderless). Press Play. Everything you add is copied into this folder, so you can
 delete or move your original download afterwards and nothing breaks.
 
 The launcher checks GitHub for a newer release each time it opens and
@@ -60,6 +60,20 @@ Gamepad (XInput, any Xbox-style pad)
   In menus: d-pad / stick to move, A to choose, B to go back, LB / RB switch tabs.
 The old phone keypad keys still work (digits, Z / X soft keys) and can be
 rebound under Help > Controls.
+
+
+DISPLAY SETTINGS
+----------------
+
+Settings is in the main menu and the in-game pause menu (or use the keys):
+  Resolution (F8)  Original 176x208, Auto (follows the window), 4:3, 16:10,
+                   16:9, 21:9. The picture keeps its 208-row height and gets
+                   wider, so sprites and the HUD are never stretched -- you
+                   just see more of the world at the sides. Menus, text and
+                   the inventory stay in their original centred layout.
+  Display (F11)    Fullscreen (borderless) or Windowed. Alt+Enter also works.
+  Scaling          Fit (any size) or Integer (whole multiples: crisp pixels).
+The window can be resized freely. Your choices are remembered (user\display.cfg).
 
 
 WHERE THINGS LIVE

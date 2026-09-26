@@ -258,6 +258,7 @@ int main(int, char**) {
         written.gameData = "data";
         written.font = "fonts/Ceurope.gdr";
         written.scale = 4;
+        written.fullscreen = true;
         Check(SaveLauncherConfig(path, written), "SaveLauncherConfig writes the file");
 
         LauncherConfig read;
@@ -265,6 +266,7 @@ int main(int, char**) {
         Check(read.gameData == written.gameData, "gameData survives the round trip");
         Check(read.font == written.font, "font survives the round trip (M78)");
         Check(read.scale == written.scale, "scale survives the round trip");
+        Check(read.fullscreen == written.fullscreen, "fullscreen survives the round trip");
 
         LauncherConfig missing;
         Check(!LoadLauncherConfig((scratch / "nope.cfg").string(), missing),

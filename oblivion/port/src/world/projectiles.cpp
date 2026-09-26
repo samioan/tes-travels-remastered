@@ -174,7 +174,7 @@ void Projectiles::Draw(Backbuffer& bb, ImageCache& images, int camX, int camY) {
         if (pool_[i] == -1 || (pool_[i + 4] & 0xFF00) == 0xFF00) continue;
         const int sx = ((pool_[i + 1] - pool_[i + 2]) >> 3) + camX;
         const int sy = ((pool_[i + 1] + pool_[i + 2]) >> 4) + camY;
-        if (sx >= 0 && sx <= Backbuffer::kWidth && sy >= 0 && sy <= Backbuffer::kHeight) {
+        if (sx >= 0 && sx <= bb.Width() && sy >= 0 && sy <= Backbuffer::kHeight) {
             const int type = pool_[i] & 255;
             frames_.SetFrame(type, pool_[i + 4]);
             DrawSprite(bb, images, frames_, type, sx, sy);

@@ -163,7 +163,7 @@ void DialogueScreen::HandleKey(int action) {
 
 void DialogueScreen::Paint(Backbuffer& bb) {
     if (roots_.empty()) return;
-    bb = backdrop_;
+    bb.CopyIn(backdrop_);
     const int lh = LineHeight();
     const int fh = Text::LineHeight(Face::SmallPlain);
     const int h5 = ui_.Height(5);

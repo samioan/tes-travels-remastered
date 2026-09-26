@@ -68,6 +68,7 @@ target_link_libraries(oblivion_world PUBLIC oblivion_assets)
 add_executable(oblivion_port WIN32
   src/main.cpp
   src/platform/win32/window.cpp
+  src/platform/win32/display.cpp
   src/platform/win32/input_device.cpp
 )
 target_link_libraries(oblivion_port PRIVATE oblivion_world)
@@ -159,4 +160,7 @@ add_test(NAME save_smoke COMMAND save_smoke ${CMAKE_SOURCE_DIR}/../extracted)
 add_executable(input_smoke src/tests/input_smoke.cpp)
 target_link_libraries(input_smoke PRIVATE oblivion_world)
 add_test(NAME input_smoke COMMAND input_smoke ${CMAKE_SOURCE_DIR}/../extracted)
+add_executable(display_smoke src/tests/display_smoke.cpp src/platform/win32/display.cpp src/platform/win32/window.cpp)
+target_link_libraries(display_smoke PRIVATE oblivion_world)
+add_test(NAME display_smoke COMMAND display_smoke ${CMAKE_SOURCE_DIR}/../extracted)
 endif()  # NOT OBLIVION_DIST

@@ -23,6 +23,7 @@
 #include "assets/asset_root.h"
 #include "assets/image.h"
 #include "graphics/backbuffer.h"
+#include "platform/win32/display.h"
 #include "platform/win32/input_device.h"
 #include "platform/win32/window.h"
 #include "game/game_app.h"
@@ -40,9 +41,9 @@ constexpr int kLevelCount = static_cast<int>(sizeof(kLevels) / sizeof(kLevels[0]
 bool WritePpm(const char* path, const oblivion::Backbuffer& bb) {
     FILE* f = std::fopen(path, "wb");
     if (!f) return false;
-    std::fprintf(f, "P6\n%d %d\n255\n", oblivion::Backbuffer::kWidth, oblivion::Backbuffer::kHeight);
+    std::fprintf(f, "P6\n%d %d\n255\n", bb.RealWidth(), oblivion::Backbuffer::kHeight);
     const uint32_t* p = bb.Data();
-    for (int i = 0; i < oblivion::Backbuffer::kWidth * oblivion::Backbuffer::kHeight; i++) {
+    for (int i = 0; i < bb.RealWidth() * oblivion::Backbuffer::kHeight; i++) {
         unsigned char rgb[3] = {static_cast<unsigned char>(p[i] >> 16), static_cast<unsigned char>(p[i] >> 8),
                                 static_cast<unsigned char>(p[i])};
         std::fwrite(rgb, 1, 3, f);
@@ -127,6 +128,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     std::string assetDir = firstExisting({"extracted", "../../extracted"}, "startup.scr");
     std::string fontDir = firstExisting({"fonts", "../assets/fonts"}, ".");
     std::string level, then, dump, keys, savePath;
+    int dumpWidth = 0;  // --width N: render headless at a widescreen canvas of N columns
+    int fullscreenArg = -1;  // --fullscreen / --windowed override the saved display setting
     int runMs = 6000, runScript = -1;
     for (int i = 1; i < __argc; i++) {
         auto narrow = [](const wchar_t* w) {
@@ -140,6 +143,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         else if (a == "--fonts") fontDir = next();
         else if (a == "--level") level = next();
         else if (a == "--save") savePath = next();  // save record file (default: %APPDATA%/OblivionPort/oblivion.eso)
+        else if (a == "--width") dumpWidth = std::atoi(next().c_str());
+        else if (a == "--fullscreen") fullscreenArg = 1;
+        else if (a == "--windowed") fullscreenArg = 0;
         else if (a == "--then") then = next();  // after --level has played, load this level too
         else if (a == "--script") runScript = std::atoi(next().c_str());  // with --then: run this script id too
         else if (a == "--dump") dump = next();
@@ -155,6 +161,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         oblivion::ImageCache images(assets);
         oblivion::GameApp app(assets, images);
         oblivion::Backbuffer bb;
+        if (dumpWidth > 0) {
+            bb.Resize(dumpWidth);
+            app.SetScreenWidth(bb.RealWidth());
+        }
         // Headless runs (--dump) only touch a save when told to.
         if (savePath.empty() && dump.empty()) {
             const char* appdata = std::getenv("APPDATA");
@@ -162,6 +172,14 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                         : std::string(appdata ? appdata : ".") + "/OblivionPort/oblivion.eso";
         }
         app.SetSavePath(savePath);
+        // Display settings (resolution / aspect, fullscreen, scaling) live next to the save.
+        const std::string displayCfg =
+            !userDir.empty() ? (std::filesystem::path(userDir) / "display.cfg").string()
+                             : (std::filesystem::path(std::getenv("APPDATA") ? std::getenv("APPDATA") : ".") /
+                                "OblivionPort" / "display.cfg").string();
+        oblivion::Display display(dump.empty() ? displayCfg : std::string());  // headless runs never touch the config
+        if (fullscreenArg >= 0) display.settings().fullscreen = fullscreenArg == 1;
+        app.SetDisplayControl(&display);
 
         if (!level.empty()) app.StartLevel(level);
         else if (!keys.empty()) app.StartMenu();
@@ -262,8 +280,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             if (level == kLevels[i]) levelIndex = i;
 
         const int scale = ResolveScale();
-        oblivion::Window window(oblivion::Backbuffer::kWidth * scale, oblivion::Backbuffer::kHeight * scale,
-                                L"Oblivion Port");
+        int clientW, clientH;
+        display.InitialClientSize(scale, &clientW, &clientH);
+        oblivion::Window window(clientW, clientH, L"Oblivion Port");
+        display.Attach(&window);
         window.SetKeyCallback([&](unsigned vk) {
             switch (vk) {
                 case VK_NEXT:
@@ -276,6 +296,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     }
                     break;
                 }
+                case VK_F11: display.ToggleFullscreen(); return;
+                case VK_F8: display.CycleResolution(GetKeyState(VK_SHIFT) & 0x8000 ? -1 : 1); return;
                 // Arrows / WASD / Space / Enter / Esc / the mouse and the gamepad go through
                 // the input mapper; what is left is the phone keypad (digits for the
                 // rebindable quick keys, * and #) and the soft-key letters.
@@ -306,9 +328,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             }
             app.SetHeldKey(mapped.held);
             app.SetAnalogInput(mapped.analog);
+            // The canvas width follows the resolution setting (and the window's shape for Auto).
+            const int width = display.LogicalWidth();
+            if (bb.RealWidth() != width) bb.Resize(width);
+            app.SetScreenWidth(width);
             app.Tick(dt);
             app.Draw(bb);
-            window.Present(bb);
+            window.Present(bb, display.settings().scaling);
             if (app.quit()) window.RequestClose();
         });
     } catch (const std::exception& e) {
