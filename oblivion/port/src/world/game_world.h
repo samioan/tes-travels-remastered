@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -41,13 +42,60 @@ public:
     // A key press (script key hooks, WAIT_KEY, dialogue dismissal).
     void KeyPressed(int action);
 
-    void Draw(Backbuffer& bb);
+    // The map with its actors (state 0 backdrop); the HUD is GameApp's.
+    void DrawField(Backbuffer& bb);
+
+    // Game.dialogue* fields: the script dialogue box (SAY / TALK).
+    struct Dialogue {
+        bool open = false;
+        int ageMs = 0;
+        std::vector<std::string> lines;
+        int scroll = -1;
+        bool atEnd = true;  // set by the painter (Game.drawDialogue)
+        int left = 12, top = 7, right = 0, textWidth = 0, height = 0;
+    };
+    // Game.message*: the one-line message strip above the bottom edge.
+    struct Message {
+        std::string text;  // empty = none
+        int durationMs = 0, elapsedMs = 0, color = 0, style = 0;
+        int x = -1, y = -1, blinkTimerMs = 0, scrollTimerMs = 0;
+        bool blank = false;
+    };
+    Dialogue dialogue;
+    int gold = 100;  // Game.gold
+    int cutsceneSprite = 0, cutsceneColor = 0;  // END_LEVEL: splash / cutscene image
+    std::function<void()> onLoadLevel;
+    std::function<void(int)> onOpenMenu;  // 0 = main/pause menu, 4 = shop menu
+    const std::string* speaker() const { return hasSpeaker_ ? &speaker_ : nullptr; }  // Game.loadLevel start (text scroll reset)
+    Message message;
+    // Text of the last SHOW_TEXT_SCREEN.
+    std::string textScreenText;
+    // Called after every accepted state change (old, new): the UI sets up
+    // the per-state screens (Game.setState's tail).
+    std::function<void(int, int)> onStateChange;
 
     int state() const { return state_; }
+    bool hudVisible() const { return hudVisible_; }
+    int backgroundColor() const { return background_; }
+    const SpriteSet& hudSprites() const { return hudSprites_; }
+    const SpriteSet& tileSprites() const { return view_.tiles(); }
+    ImageCache& images() { return images_; }
+    const SpriteSet& SpritesFor(const std::string& cml);
+    const Strings& strings() const { return strings_; }
+    // Game.wrapText: word-wraps `text` into lines no wider than `width`
+    // (SmallBold), prefixing/learning the speaker name like the original.
+    std::vector<std::string> WrapText(std::string text, int width);
+    // Actor slot by index for HUD/camera code.
+    int cameraActor() const { return cameraActor_; }
+    int playerClass() const { return playerClass_; }
+    void SetPlayerClass(int c) { playerClass_ = c; }
+    // Drops the player (a new game starts with no player object).
+    void ForgetPlayer() {
+        player_.reset();
+        for (auto& a : actors_) a.reset();
+    }
     Actor* player() { return player_.get(); }
     const std::string& currentLevel() const { return currentLevel_; }
-    // The text a HUD would show right now (dialogue, message or text screen).
-    std::string Caption() const;
     const std::map<std::string, int>& unimplemented() const { return unimplemented_; }
     const LevelView& view() const { return view_; }
     ScriptInterpreter& script() { return script_; }
@@ -55,7 +103,7 @@ public:
 
     // ---- ScriptHost ----
     Actor* ActorAt(int slot) override;
-    bool DialogueOpen() const override { return dialogueOpen_; }
+    bool DialogueOpen() const override { return dialogue.open; }
     bool ShopOpen() const override { return state_ == 1; }
     void LoadMap(const std::string& jtm, const std::string& tileCml) override;
     void EndLevel(int kind, int arg) override;
@@ -81,18 +129,23 @@ public:
     void CameraFollow(int slot) override;
     void ShowDialogue(const std::string& text) override;
     void ShowMessage(const std::string& text, int seconds, int color, int style) override;
-    void HideMessage() override { message_.clear(); }
+    void HideMessage() override { message = Message{}; }
     void ShowTextScreen(const std::string& text) override;
     std::string GetString(int id) override { return strings_.Get(id); }
     void LoadLang(int packIndex) override;
     void LoadHudSprites(const std::string& cml) override;
     void EvictSprites(const std::string& prefix) override { images_.Evict(prefix); }
     void SetSpeaker(const std::string* name) override;
+    void OpenMenu(bool shop) override {
+        if (onOpenMenu) onOpenMenu(shop ? 4 : 0);
+        else SetState(3);
+    }
     void Unimplemented(const char* what) override { unimplemented_[what]++; }
 
 private:
-    const SpriteSet& SpritesFor(const std::string& cml);
     void UpdateCamera();
+    void HandleDialogueKey(int action);
+    void UpdateMessage(int dt);
     void CheckPlayerTriggers(Actor& p, int8_t oldEnter, int8_t oldLeave);
     int8_t ZoneUnder(const Actor& a) const;
     void ResizeLayers();
@@ -123,18 +176,8 @@ private:
     int respawn_[2] = {0, 0};
     std::string currentLevel_;
 
-    bool dialogueOpen_ = false;
-    int dialogueAgeMs_ = 0;
-    std::string dialogueText_, speaker_;
+    std::string speaker_;
     bool hasSpeaker_ = false;
-
-    std::string message_;
-    int messageDurationMs_ = 0, messageElapsedMs_ = 0, messageColor_ = 0, messageStyle_ = 0;
-
-    // Text screens (states 4, 9, 10, 21...) scroll in the original; until the
-    // fonts land they simply run a timer.
-    std::string textScreen_;
-    int textTimerMs_ = 0;
 
     std::map<std::string, int> unimplemented_;
 };

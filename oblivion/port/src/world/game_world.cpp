@@ -1,6 +1,10 @@
 #include "world/game_world.h"
 
+#include <algorithm>
 #include <cstdio>
+#include <cstring>
+
+#include "graphics/text.h"
 
 namespace oblivion {
 
@@ -8,7 +12,6 @@ namespace {
 
 constexpr int kScreenW = Backbuffer::kWidth;
 constexpr int kScreenH = Backbuffer::kHeight;
-constexpr int kTextScreenMs = 2500;  // placeholder for the text-scroll duration
 
 // ActorSystem.revive (the parts that exist so far; hp/mp refill included).
 void Revive(Actor& a) {
@@ -39,6 +42,7 @@ const SpriteSet& World::SpritesFor(const std::string& cml) {
 // ---- level loading -------------------------------------------------------
 
 void World::LoadLevel(const std::string& scrPath) {
+    if (onLoadLevel) onLoadLevel();
     SetState(6);
     currentLevel_ = scrPath;
     view_.Unload();
@@ -48,8 +52,8 @@ void World::LoadLevel(const std::string& scrPath) {
     inputEnabled_ = true;
     playerCollides_ = true;
     maxActorSlot_ = 0;
-    dialogueOpen_ = false;
-    message_.clear();
+    dialogue.open = false;
+    message = Message{};
     cameraActor_ = -1;
     for (auto& a : actors_) a.reset();
     script_.Load(ParseScr(assets_.Read(scrPath)));
@@ -90,12 +94,14 @@ void World::SetScreenSize(int, int) {
 
 void World::SetState(int state) {
     if (!stateChangesEnabled_ || state_ == 12) return;
+    const int old = state_;
     state_ = state;
-    textTimerMs_ = 0;
+    if (onStateChange) onStateChange(old, state);
 }
 
 void World::EndLevel(int kind, int arg) {
-    std::fprintf(stderr, "end level: kind %d arg %06x\n", kind, arg);
+    cutsceneSprite = kind;
+    cutsceneColor = arg;
     SetState(kind == 4 ? 21 : 8);
 }
 
@@ -174,7 +180,7 @@ void World::RemoveActor(int slot) {
         SetState(11);
         Revive(*actors_[0]);
         ActorSystem::SetPosition(*actors_[0], respawn_[0], respawn_[1]);
-        message_.clear();
+        message = Message{};
         return;
     }
     if (slot == cameraActor_) SetSpeaker(nullptr);
@@ -229,32 +235,66 @@ void World::SetSpeaker(const std::string* name) {
     speaker_ = name ? *name : std::string();
 }
 
-void World::ShowDialogue(const std::string& text) {
-    // Game.wrapText prefixes the speaker, or learns it from a "Name:" lead-in.
-    dialogueText_ = text;
+// Game.wrapText.
+std::vector<std::string> World::WrapText(std::string text, int width) {
+    using Text::Face;
+    auto replace = [&](const char* key, const std::string& value) {
+        size_t p = text.find(key);
+        if (p != std::string::npos) text = text.substr(0, p) + value + text.substr(p + std::strlen(key));
+    };
+    // Key-name placeholders are filled from the key labels (Game.keyLabels);
+    // the desktop port shows fixed labels for now.
+    replace("ACTION_KEY", "5");
+    replace("TOGGLE_WEAPON_KEY", "3");
+    replace("QUICK_HEALTH_KEY", "7");
+    replace("QUICK_MAGIKA_KEY", "9");
     if (hasSpeaker_) {
-        dialogueText_ = speaker_ + ": " + text;
-    } else {
-        const size_t colon = text.find(':');
-        if (colon != std::string::npos) {
-            speaker_ = text.substr(0, colon);
-            hasSpeaker_ = true;
+        text = speaker_ + ": " + text;
+    } else if (text.find(':') != std::string::npos) {
+        speaker_ = text.substr(0, text.find(':'));
+        hasSpeaker_ = true;
+    }
+    std::vector<std::string> lines;
+    size_t start = 0, lastSpace = 0, i = 0;
+    for (i = 0; i + 1 < text.size(); i++) {
+        if (text[i] == ' ') lastSpace = i;
+        const int w = Text::SubstringWidth(text, start, i - start + 1, Face::SmallBold);
+        if (w >= width && lastSpace > 0) {
+            lines.push_back(text.substr(start, lastSpace - start));
+            start = i = lastSpace + 1;
+            lastSpace = 0;
         }
     }
-    dialogueOpen_ = true;
-    dialogueAgeMs_ = 0;
+    if (i > start) lines.push_back(text.substr(start, i + 1 - start));
+    return lines;
+}
+
+void World::ShowDialogue(const std::string& text) {
+    // Game.showDialogue: box geometry comes from the HUD sprites.
+    const int capW = hudSprites_.Width(54);
+    dialogue.right = kScreenW - 10;
+    dialogue.textWidth = dialogue.right - capW - 13;
+    dialogue.height = std::min(kScreenH >> 1, hudSprites_.Height(51)) - 4;
+    dialogue.lines = WrapText(text, dialogue.textWidth);
+    // beginDialogue
+    dialogue.scroll = -1;
+    dialogue.atEnd = true;
+    dialogue.open = true;
+    dialogue.ageMs = 0;
 }
 
 void World::ShowMessage(const std::string& text, int seconds, int color, int style) {
-    message_ = text;
-    messageDurationMs_ = seconds * 1000;
-    messageElapsedMs_ = 0;
-    messageColor_ = color;
-    messageStyle_ = style;
+    Message m;
+    m.text = text;
+    m.durationMs = seconds * 1000;
+    m.style = style;
+    static const int kColors[] = {0x000000, 0xFFFFFF, 0xFF0000, 0x0000FF, 0xFFFF00, 0x00FF00};
+    m.color = color >= 0 && color <= 5 ? kColors[color] : 0;
+    message = m;
 }
 
 void World::ShowTextScreen(const std::string& text) {
-    textScreen_ = text;
+    textScreenText = text;
     SetState(10);
 }
 
@@ -265,12 +305,6 @@ void World::LoadLang(int packIndex) {
 }
 
 void World::LoadHudSprites(const std::string& cml) { hudSprites_ = SpritesFor(cml); }
-
-std::string World::Caption() const {
-    if (dialogueOpen_) return dialogueText_;
-    if (state_ == 10 || state_ == 9 || state_ == 4) return textScreen_;
-    return message_;
-}
 
 // ---- per-frame -----------------------------------------------------------
 
@@ -296,18 +330,11 @@ void World::CheckPlayerTriggers(Actor& p, int8_t oldEnter, int8_t oldLeave) {
 
 void World::Tick(int dtMs) {
     if (state_ == 12) return;
-    if (dialogueOpen_) dialogueAgeMs_ += dtMs;
+    if (dialogue.open) dialogue.ageMs += dtMs;
 
     if (state_ != 3 && state_ != 10 && state_ != 9 && state_ != 13) script_.Tick(dtMs);
 
-    if (message_.size()) {
-        if (messageElapsedMs_ > messageDurationMs_) {
-            message_.clear();
-            messageElapsedMs_ = messageDurationMs_ = 0;
-        } else {
-            messageElapsedMs_ += dtMs;
-        }
-    }
+    UpdateMessage(dtMs);
 
     if (state_ == 0) {
         for (int slot = 0; slot <= maxActorSlot_; slot++) {
@@ -319,20 +346,10 @@ void World::Tick(int dtMs) {
         }
         UpdateCamera();
     }
-
-    // Text screens end on their own after the (placeholder) scroll time:
-    // 10 -> playing; 9 -> 4 -> menu.
-    if (state_ == 10 || state_ == 9 || state_ == 4) {
-        textTimerMs_ += dtMs;
-        if (textTimerMs_ >= kTextScreenMs) {
-            const int next = state_ == 10 ? 0 : state_ == 9 ? 4 : 3;
-            SetState(next);
-        }
-    }
 }
 
 void World::HeldAction(int action, int dtMs) {
-    if (state_ != 0 || dialogueOpen_ || !inputEnabled_ || !player_ || player_->dead != 0) return;
+    if (state_ != 0 || dialogue.open || !inputEnabled_ || !player_ || player_->dead != 0) return;
     Actor& p = *player_;
     const int oldZone = p.zoneId;
     switch (action) {
@@ -349,18 +366,50 @@ void World::HeldAction(int action, int dtMs) {
 
 void World::KeyPressed(int action) {
     script_.KeyPressed(action);
-    // Game.handleDialogueKey: fire closes the box, but not in its first second.
-    if (dialogueOpen_ && action == 7 && dialogueAgeMs_ >= 1000) {
-        dialogueOpen_ = false;
-        if (player_) player_->zoneId = 0;
-    }
-    // Text screens can be skipped with fire (placeholder for the scroll).
-    if ((state_ == 10 || state_ == 9 || state_ == 4) && action == 7) textTimerMs_ = kTextScreenMs;
+    HandleDialogueKey(action);
 }
 
-void World::Draw(Backbuffer& bb) {
-    bb.Fill(state_ == 0 ? static_cast<uint32_t>(background_) : 0);
-    if (state_ != 0 || !view_.loaded()) return;
+// Game.handleDialogueKey.
+void World::HandleDialogueKey(int action) {
+    if (!dialogue.open) return;
+    if (action == 3 && dialogue.scroll > -1) {
+        dialogue.scroll -= 4;
+    } else if (action == 4 && !dialogue.atEnd) {
+        dialogue.scroll += 4;
+    } else if (action == 7 && dialogue.ageMs >= 1000) {
+        dialogue.open = false;
+        if (player_) player_->zoneId = 0;
+    }
+}
+
+// Game.updateMessage.
+void World::UpdateMessage(int dt) {
+    Message& m = message;
+    if (m.text.empty()) return;
+    if (m.style == 1) {
+        if (m.blinkTimerMs >= 500) {
+            m.blank = !m.blank;
+            m.blinkTimerMs = 0;
+        }
+        m.blinkTimerMs += dt;
+    } else if (m.style == 2 || m.style == 3) {
+        if (m.scrollTimerMs >= 50) {
+            m.x += m.style == 2 ? 2 : -2;
+            if (m.x == -1) m.x += m.style == 2 ? 1 : -1;
+            m.scrollTimerMs = 0;
+        }
+        m.scrollTimerMs += dt;
+    }
+    if (m.elapsedMs > m.durationMs) {
+        m = Message{};
+        return;
+    }
+    m.elapsedMs += dt;
+}
+
+void World::DrawField(Backbuffer& bb) {
+    bb.Fill(static_cast<uint32_t>(background_));
+    if (!view_.loaded()) return;
     std::vector<Actor*> list;
     for (int i = 0; i <= maxActorSlot_; i++)
         if (actors_[i]) list.push_back(actors_[i].get());

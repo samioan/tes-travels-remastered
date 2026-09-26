@@ -26,6 +26,18 @@ public:
             for (int xx = x0; xx < x1; xx++) pixels_[static_cast<size_t>(yy) * kWidth + xx] = rgb;
     }
 
+    // Graphics.drawRect: outline of a (w+1) x (h+1) box, like MIDP.
+    void DrawRect(int x, int y, int w, int h, uint32_t rgb) {
+        for (int i = 0; i <= w; i++) {
+            SetPixel(x + i, y, rgb);
+            SetPixel(x + i, y + h, rgb);
+        }
+        for (int j = 0; j <= h; j++) {
+            SetPixel(x, y + j, rgb);
+            SetPixel(x + w, y + j, rgb);
+        }
+    }
+
     // Copies the source rectangle (sx, sy, w, h) of `img` to (dx, dy), clipped
     // to the screen and to the clip rectangle [cx0,cx1) x [cy0,cy1). Pixels
     // with alpha < 128 are skipped (MIDP 1.0 style 1-bit transparency). With
@@ -46,6 +58,10 @@ public:
                 pixels_[static_cast<size_t>(y) * kWidth + x] = p & 0xFFFFFF;
             }
         }
+    }
+
+    void SetPixel(int x, int y, uint32_t rgb) {
+        if (x >= 0 && y >= 0 && x < kWidth && y < kHeight) pixels_[static_cast<size_t>(y) * kWidth + x] = rgb;
     }
 
     const uint32_t* Data() const { return pixels_.data(); }

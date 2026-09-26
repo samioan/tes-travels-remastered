@@ -14,6 +14,7 @@
 # epoc32/release/wins/udeb/z/system/fonts/).
 /dawnstar/port/assets/fonts/
 /stormhold/port/assets/fonts/
+/oblivion/port/assets/fonts/
 
 # --- Third-party tooling ---
 # Not project source; fetched locally, not tracked in git.

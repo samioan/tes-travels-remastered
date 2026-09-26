@@ -13,7 +13,7 @@
 
 #include "assets/asset_root.h"
 #include "assets/image.h"
-#include "world/game_world.h"
+#include "game/game_app.h"
 
 using namespace oblivion;
 namespace fs = std::filesystem;
@@ -31,22 +31,31 @@ int main(int argc, char** argv) {
     std::set<std::string> allUnimpl;
     for (const std::string& lvl : levels) {
         if (lvl == "/startup.scr" || lvl == "/startup2.scr") continue;
-        World world(assets, images);
+        GameApp app(assets, images);
+        Backbuffer bb;
+        World& world = app.world();
+        auto step = [&](int ms) {
+            const int st = world.state();
+            // Hold Down to scroll text screens along instead of waiting them out.
+            app.SetHeldKey(st == 10 || st == 9 || st == 4 ? Key::Down : Key::None);
+            app.Tick(ms);
+            app.Draw(bb);  // text-screen end detection happens while painting, as in Game.paint
+        };
         try {
             // Boot like the game does: splash screens, then the main menu (state 3).
-            world.Boot();
+            app.Start();
             for (int ms = 0; world.state() != 3; ms += 16) {
                 if (ms > 60000) throw std::runtime_error("boot never reached the menu");
-                if (ms % 1100 < 16) world.KeyPressed(7);
-                world.Tick(16);
+                if (ms % 1100 < 16) app.OnKeyDown(Key::Fire);
+                step(16);
             }
             world.LoadLevel(lvl);
             bool sawMenu = false, sawPlaying = false;
             int ms = 0;
             const int kDt = 16, kLimitMs = 60000;
             for (; ms < kLimitMs; ms += kDt) {
-                if (ms % 1100 < kDt) world.KeyPressed(7);
-                world.Tick(kDt);
+                if (ms % 1100 < kDt) app.OnKeyDown(Key::Fire);
+                step(kDt);
                 sawPlaying |= world.state() == 0;
                 if (world.state() == 3) sawMenu = true;
                 // Stop once the script settled: playing, or parked on a menu/shop screen.

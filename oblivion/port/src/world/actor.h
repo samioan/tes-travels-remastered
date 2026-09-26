@@ -47,6 +47,7 @@ struct Actor {
 
     // Script-visible state (Actor.java). Derived stats and combat arrive with M7.
     int8_t classId = -1, level = 0, aiType = -1, aiActive = 1, dropsLoot = 1, invulnerable = 0;
+    int8_t attackIcon = -45, effectIcon = -1;  // HUD icon frames (hud sprite groups)
     int8_t statusIcon = -1, deathScript = -1, ranged = 0, weapon = 0;
     int strength = 0, intelligence = 0, willpower = 0, agility = 0, endurance = 0, personality = 0;
     int sightRange = 0, attackRange = 0, attackInterval = 1000;

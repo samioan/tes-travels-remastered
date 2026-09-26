@@ -52,6 +52,8 @@ public:
     virtual void LoadHudSprites(const std::string& cml) = 0;
     virtual void EvictSprites(const std::string& prefix) = 0;
     virtual void SetSpeaker(const std::string* name) = 0;
+    // OPEN_MENU (main/pause menu) and OPEN_SHOP_MENU (between-level menu).
+    virtual void OpenMenu(bool shop) = 0;
 
     // Subsystems that land in later milestones (default: record + ignore).
     virtual void Unimplemented(const char* what) = 0;

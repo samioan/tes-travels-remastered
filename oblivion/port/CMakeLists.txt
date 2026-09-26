@@ -22,6 +22,7 @@ endif()
 # derived from); see ../docs/ASSET_FORMATS.md.
 add_library(oblivion_assets STATIC
   src/assets/cml.cpp
+  src/assets/gdr_font.cpp
   src/assets/image.cpp
   src/assets/jtm.cpp
   src/assets/lang.cpp
@@ -32,6 +33,8 @@ target_link_libraries(oblivion_assets PUBLIC stb_image)
 
 # Rendering + the static level view.
 add_library(oblivion_world STATIC
+  src/game/game_app.cpp
+  src/graphics/text.cpp
   src/render/sprite_renderer.cpp
   src/script/interpreter.cpp
   src/world/actor.cpp

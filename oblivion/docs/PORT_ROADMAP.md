@@ -77,11 +77,28 @@ Canvas for its size, so this is a port decision).
   renders after N simulated ms. Ops still skipped (recorded, not crashing):
   `GIVE_ITEM`, `PLACE_ITEM`, `GENERATE_DUNGEON`, `SPAWN_*PROJECTILE`, menus.
 
+- **M6a -- game loop, fonts, HUD, menus** (`game/game_app`, `graphics/text`,
+  `assets/gdr_font`): `GameApp` is `Game` minus the playing field -- the
+  `setState` tail (title image, text screens), `handleInput`, and the `paint`
+  cases for states 0 (HUD bars, soft-key labels, message strip, script
+  dialogue box with scrolling and speaker colour), 3 (main/pause/shop menus,
+  class choice -> New Game), 4/9/10/21 (scrolling text screens that end on
+  their own after the 3 s pause), 6/7 loading, 8 splash/cutscene images
+  (`startup.cml`), 11/13/15/16/19/20 prompts. The real boot now runs:
+  ZeniMax/Bethesda splash -> Superscape -> menu -> New Game -> level 1 text
+  -> the level 1 cutscene with dialogue.
+  Fonts: the phone maps `Font.getFont` onto ROM bitmap fonts (small = LatinPlain12,
+  small bold = LatinBold12, large bold = LatinBold17, medium = Alp13). The
+  loader is the sibling ports' clean-room `.gdr` parser; the Nokia font files
+  are user-provided in `port/assets/fonts/` (gitignored), with a GDI stand-in
+  when absent. `script_smoke` now drives `GameApp` and holds Down through text
+  screens (their end detection lives in `Draw`, as in `Game.paint`).
+
 ## Next
 
-- **M6 -- game loop and states:** `Game.run`/`setState`, input (softkeys,
-  keypad mapping `mapKey`), the menu/help/loading screens, message line,
-  dialogue box and `DialogueScreen` menus (inventory, shop).
+- **M6b/c -- help pages, controls screen, inventory and shop** (states 1, 2,
+  5, 18, plus 23/17 paging): the help page builders (`getHelp*`), key
+  rebinding, and `DialogueScreen` (inventory tabs, shop).
 - **M7 -- combat/AI/leveling:** the rest of `ActorSystem`, `ProjectileManager`
   and the procedural dungeon generator (`Game.generateDungeon`).
 - **M8 -- save/load, fonts, audio, packaging** (the original stores one

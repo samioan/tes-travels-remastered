@@ -31,6 +31,7 @@ public:
     void LoadMap(const std::string& jtmPath, const std::string& cmlPath);
 
     const JtmMap& map() const { return map_; }
+    const SpriteSet& tiles() const { return tiles_; }
     const std::string& jtmPath() const { return jtmPath_; }
     const std::string& cmlPath() const { return cmlPath_; }
 

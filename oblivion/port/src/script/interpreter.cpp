@@ -276,14 +276,8 @@ void ScriptInterpreter::Step(int dtMs) {
             if (Actor* x = host_.ActorAt(a[0])) ActorSystem::SetMoveTarget(*x, x->pos[0], a[1]);
             return;
         case OP_LOAD_HUD_SPRITES: host_.LoadHudSprites(in.strings[0].text); return;
-        case OP_OPEN_MENU:
-            host_.Unimplemented("OPEN_MENU (menu screens)");
-            host_.SetState(3);
-            return;
-        case OP_OPEN_SHOP_MENU:
-            host_.Unimplemented("OPEN_SHOP_MENU (shop screen)");
-            host_.SetState(3);
-            return;
+        case OP_OPEN_MENU: host_.OpenMenu(false); return;
+        case OP_OPEN_SHOP_MENU: host_.OpenMenu(true); return;
         case OP_SET_STATUS_ICON:
             if (Actor* x = host_.ActorAt(a[0])) ActorSystem::SetStatusIcon(*x, a[1]);
             return;

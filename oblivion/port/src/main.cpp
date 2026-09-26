@@ -21,7 +21,8 @@
 #include "assets/image.h"
 #include "graphics/backbuffer.h"
 #include "platform/win32/window.h"
-#include "world/game_world.h"
+#include "game/game_app.h"
+#include "graphics/text.h"
 
 namespace {
 
@@ -45,47 +46,40 @@ bool WritePpm(const char* path, const oblivion::Backbuffer& bb) {
     return true;
 }
 
-// Game.mapKey: keyboard -> game action (3 up, 4 down, 5 left, 6 right, 7 fire).
-int ActionForKey(unsigned vk) {
+// Desktop keys -> the phone keypad as Game.mapKey sees it.
+oblivion::Key KeyForVk(unsigned vk) {
+    using oblivion::Key;
     switch (vk) {
-        case VK_UP: return 3;
-        case VK_DOWN: return 4;
-        case VK_LEFT: return 5;
-        case VK_RIGHT: return 6;
+        case VK_UP: return Key::Up;
+        case VK_DOWN: return Key::Down;
+        case VK_LEFT: return Key::Left;
+        case VK_RIGHT: return Key::Right;
         case VK_RETURN:
-        case VK_SPACE: return 7;
-        default: return 0;
+        case VK_SPACE: return Key::Fire;
+        case 'Z':
+        case VK_F1: return Key::SoftLeft;
+        case 'X':
+        case VK_F2: return Key::SoftRight;
+        case '7': return Key::Quick0;
+        case '9': return Key::Quick1;
+        case '3': return Key::Quick2;
+        default: return Key::Other;
     }
 }
 
-int HeldAction() {
+oblivion::Key HeldKey() {
     static const unsigned keys[] = {VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_SPACE};
     for (unsigned k : keys)
-        if (GetAsyncKeyState(static_cast<int>(k)) & 0x8000) return ActionForKey(k);
-    return 0;
-}
-
-std::wstring Widen(const std::string& s) {
-    std::wstring w;
-    for (unsigned char c : s) w += static_cast<wchar_t>(c);
-    return w;
-}
-
-// Boots like the game: the startup scripts run until the main menu opens.
-void BootToMenu(oblivion::World& world) {
-    world.Boot();
-    for (int ms = 0; world.state() != 3 && ms < 60000; ms += 16) {
-        if (ms % 1100 < 16) world.KeyPressed(7);
-        world.Tick(16);
-    }
+        if (GetAsyncKeyState(static_cast<int>(k)) & 0x8000) return KeyForVk(k);
+    return oblivion::Key::None;
 }
 
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     std::string assetDir = "../../extracted";  // from oblivion/port/build/
-    std::string level = kLevels[0];
-    std::string dump;
+    std::string fontDir = "../assets/fonts";    // Nokia ROM fonts, user-provided (see .gitignore)
+    std::string level, dump;
     int runMs = 6000;
     for (int i = 1; i < __argc; i++) {
         auto narrow = [](const wchar_t* w) {
@@ -96,27 +90,32 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         std::string a = narrow(__wargv[i]);
         auto next = [&]() { return i + 1 < __argc ? narrow(__wargv[++i]) : std::string(); };
         if (a == "--assets") assetDir = next();
+        else if (a == "--fonts") fontDir = next();
         else if (a == "--level") level = next();
         else if (a == "--dump") dump = next();
         else if (a == "--run-ms") runMs = std::atoi(next().c_str());
     }
 
     try {
+        oblivion::Text::LoadDeviceFonts(fontDir);
         oblivion::AssetRoot assets(assetDir);
         oblivion::ImageCache images(assets);
-        oblivion::World world(assets, images);
+        oblivion::GameApp app(assets, images);
         oblivion::Backbuffer bb;
 
-        BootToMenu(world);
-        world.LoadLevel(level);
+        if (!level.empty()) app.StartLevel(level);
+        else app.Start();
 
         if (!dump.empty()) {
             for (int ms = 0; ms < runMs; ms += 16) {
-                if (ms % 1100 < 16) world.KeyPressed(7);
-                world.Tick(16);
+                if (ms % 1100 < 16) app.OnKeyDown(oblivion::Key::Fire);
+                const int st = app.world().state();  // scroll text screens along
+                app.SetHeldKey(st == 10 || st == 9 || st == 4 ? oblivion::Key::Down : oblivion::Key::None);
+                app.Tick(16);
+                app.Draw(bb);
             }
-            world.Draw(bb);
-            for (const auto& u : world.unimplemented())
+            app.Draw(bb);
+            for (const auto& u : app.world().unimplemented())
                 std::fprintf(stderr, "not ported yet: %s (x%d)\n", u.first.c_str(), u.second);
             return WritePpm(dump.c_str(), bb) ? 0 : 1;
         }
@@ -130,41 +129,32 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         window.SetKeyCallback([&](unsigned vk) {
             switch (vk) {
                 case VK_NEXT:
-                case VK_PRIOR: {
+                case VK_PRIOR: {  // developer shortcut: jump between story levels
                     levelIndex = (levelIndex + (vk == VK_NEXT ? 1 : kLevelCount - 1)) % kLevelCount;
                     try {
-                        world.LoadLevel(kLevels[levelIndex]);
+                        app.world().LoadLevel(kLevels[levelIndex]);
                     } catch (const std::exception& e) {
                         MessageBoxA(nullptr, e.what(), "Oblivion Port", MB_OK);
                     }
                     break;
                 }
                 case VK_ESCAPE: window.RequestClose(); return;
-                default:
-                    if (int action = ActionForKey(vk)) world.KeyPressed(action);
-                    return;
+                default: app.OnKeyDown(KeyForVk(vk)); return;
             }
         });
 
         ULONGLONG last = GetTickCount64();
-        std::wstring lastTitle;
         window.RunMessageLoop([&]() {
             ULONGLONG now = GetTickCount64();
             int dt = static_cast<int>(now - last);
             if (dt < 16) return;
             last = now;
             if (dt > 200) dt = 200;  // a stall (window drag) must not fast-forward the game
-            world.HeldAction(HeldAction(), dt);
-            world.Tick(dt);
-            world.Draw(bb);
+            app.SetHeldKey(HeldKey());
+            app.Tick(dt);
+            app.Draw(bb);
             window.Present(bb);
-            std::wstring title = L"Oblivion Port";
-            const std::string caption = world.Caption();
-            if (!caption.empty()) title += L" - " + Widen(caption);
-            if (title != lastTitle) {
-                window.SetTitle(title);
-                lastTitle = title;
-            }
+            if (app.quit()) window.RequestClose();
         });
     } catch (const std::exception& e) {
         std::fprintf(stderr, "error: %s\n", e.what());
