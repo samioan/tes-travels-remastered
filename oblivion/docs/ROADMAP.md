@@ -54,10 +54,9 @@ has a `--check` mode that verifies every extracted file parses exactly to EOF.
 unidentified tables (`table6`, `pairTable`), a few opcode operands and the
 tile-id/`.cml` group-id meanings are, best found by rendering a level.
 
-**Phase 3 (not started): PC port.** Scaffold is in `port/` (CMake + Ninja
-+ MSVC, matching the shadowkey-decomp port's toolchain). Because content
-lives in the `.scr`/`.cml` binary resources rather than Java code, a
-faithful port likely means porting the *interpreter* (the engine classes)
-to C++ and loading the original resource files directly, rather than
-transcribing each level by hand -- confirm this is feasible once the
-format is understood.
+**Phase 3 (in progress): PC port.** See [`PORT_ROADMAP.md`](PORT_ROADMAP.md). The
+port in `port/` (CMake + Ninja + MSVC, software-rendered Win32) is an engine
+reimplementation that loads the original resources directly. Done so far: the
+asset loaders (`.jtm`/`.cml`/`.scr`/PNG, smoke-tested against all 70 extracted
+files), sprite drawing, and a level viewer that renders the isometric tile maps
+of the 12 story levels. Next: actors and collision, then the script interpreter.

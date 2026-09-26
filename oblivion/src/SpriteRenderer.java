@@ -260,10 +260,10 @@ public final class SpriteRenderer {
                      }
                   }
 
-                  sprite.setPosition(x + frame.width - image.getWidth() + frame.offsetX + frame.frameDx, y - frame.frameDx + frame.width);
+                  sprite.setPosition(x + frame.width - image.getWidth() + frame.offsetX + frame.frameDx, y - frame.offsetY + frame.frameDy);
                   sprite.paint(g);
                } else {
-                  g.drawImage(image, x - frame.offsetX + frame.frameDx, y - frame.frameDx + frame.width, 0);
+                  g.drawImage(image, x - frame.offsetX + frame.frameDx, y - frame.offsetY + frame.frameDy, 0);
                }
 
                g.setClip(0, 0, Game.screenWidth, Game.screenHeight);
