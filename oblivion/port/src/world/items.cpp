@@ -345,6 +345,7 @@ void SetClass(Actor& a, int classId, bool fromSave, ScriptInterpreter& sc) {
 
 void InitFromTemplate(Actor& a, const int* row, ScriptInterpreter& sc) {
     if (!row) return;
+    a.spawnRow = row;
     a.level = static_cast<int8_t>(row[2]);
     if (a.slot != 1) {  // monsters and NPCs; the player's attributes come from its class
         a.strength = row[3];
@@ -391,15 +392,22 @@ void Revive(Actor& a, ScriptInterpreter& sc) {
     a.enterScript = a.leaveScript = a.zoneId = -1;
     a.dead = 0;
     a.statusIcon = -1;
+    a.target.reset();
+    a.deathTimer = 0;
+    a.floatText.clear();
+    a.floatTextY = 0;
+    a.floatTextColor = 0xFF0000;
     a.animState = 0;
     a.moveTarget[0] = a.moveTarget[1] = -1;
     a.dotRemaining = 0;
     a.dotTick = 0;
+    a.dotSource.reset();
     a.hp = a.maxHp = a.level * 4 + (a.strength + a.buffStrength) * 2 + a.endurance * 2 + a.bonusMaxHp;
     a.hpRegenInterval = 40000 / std::max(1, a.maxHp);
     a.mp = a.maxMp = a.level * 4 + a.intelligence * 2 + a.bonusMaxMp;
     a.mpRegenInterval = 40000 / std::max(1, a.maxMp);
     RecalcDerivedStats(a, sc);
+    ActorSystem::UpdateSortCell(a);
     ActorSystem::UpdateCells(a);
 }
 

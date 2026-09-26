@@ -56,6 +56,14 @@ public:
     // OPEN_MENU (main/pause menu) and OPEN_SHOP_MENU (between-level menu).
     virtual void OpenMenu(bool shop) = 0;
 
+    // Combat-side ops.
+    virtual void PlaceItem(int itemId, int cellX, int cellY) = 0;                 // PLACE_ITEM
+    virtual void SpawnProjectile(int type, int x, int y, int durationMs) = 0;     // SPAWN_(TIMED_)PROJECTILE
+    virtual void ClearProjectileAt(int x, int y) = 0;
+    virtual void LevelUpTo(int slot, int level) = 0;
+    // GENERATE_DUNGEON: `group` is the spawn-group row, `spawnIds` the level's item ids.
+    virtual void GenerateDungeon(const int* group, const int* spawnIds, int zone, int exitScript) = 0;
+
     // Subsystems that land in later milestones (default: record + ignore).
     virtual void Unimplemented(const char* what) = 0;
 };
@@ -93,6 +101,9 @@ public:
     const int* FindByName(const std::string& text);
     int ItemCategory(const std::string& text);  // 0 weapon, 2 consumable, 1 armour, -1 none
     bool ClassAllows(int classId, int type) const;
+    // rollLoot: the first loot row whose odds divide `rnd` and that has stock left
+    // (uses one up); returns the pickup id or 0.
+    int RollLoot(int rnd);
 
 private:
     void Reset();

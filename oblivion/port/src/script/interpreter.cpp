@@ -153,6 +153,19 @@ bool ScriptInterpreter::ClassAllows(int classId, int type) const {
     return false;
 }
 
+int ScriptInterpreter::RollLoot(int rnd) {
+    for (int i = 1; i < 30 && t_.loot[i][1] != 0; i++) {
+        if (t_.loot[i][2] != 0 && rnd % t_.loot[i][2] == 0 && t_.loot[i][3] > 0) {
+            t_.loot[i][3]--;
+            return t_.loot[i][1];
+        }
+    }
+    return 0;
+}
+
+// SPAWN_PROJECTILE's effect number -> projectile type (0 puff, 1 buff glow, 2 magic hit).
+static int ProjectileType(int v) { return v == 0 ? 8 : v == 2 ? 10 : v == 1 ? 9 : v; }
+
 std::string ScriptInterpreter::Str(const ScrString& s) {
     return s.isId ? host_.GetString(s.id) : s.text;
 }
@@ -325,9 +338,9 @@ void ScriptInterpreter::Step(int dtMs) {
         case OP_SET_STATUS_ICON:
             if (Actor* x = host_.ActorAt(a[0])) ActorSystem::SetStatusIcon(*x, a[1]);
             return;
-        case OP_GENERATE_DUNGEON: host_.Unimplemented("GENERATE_DUNGEON"); return;
+        case OP_GENERATE_DUNGEON: host_.GenerateDungeon(GetRow(9, a[0]), t_.spawnIds, a[1], a[2]); return;
         case OP_CLEAR_LAYERS: host_.ClearLayers(); return;
-        case OP_PLACE_ITEM: host_.Unimplemented("PLACE_ITEM"); return;
+        case OP_PLACE_ITEM: host_.PlaceItem(a[0], a[1], a[2]); return;
         case OP_SET_TRIGGER_RECT:
             for (int x = a[0]; x <= a[2]; x++)
                 for (int y = a[1]; y <= a[3]; y++) host_.SetTrigger(x, y, a[4], a[5], a[6]);
@@ -365,15 +378,15 @@ void ScriptInterpreter::Step(int dtMs) {
         case OP_WAIT_KEY: waitingForKey_ = true; return;
         case OP_SET_STATE_9: host_.SetState(9); return;
         case OP_SET_BACKGROUND_COLOR: host_.SetBackgroundColor(a[0]); return;
-        case OP_LEVEL_UP_TO: host_.Unimplemented("LEVEL_UP_TO"); return;
+        case OP_LEVEL_UP_TO: host_.LevelUpTo(a[0], a[1]); return;
         case OP_SHOW_TEXT_SCREEN: host_.ShowTextScreen(Str(in.strings[0])); return;
         case OP_RESTORE_MONSTER_TYPE:
             if (a[0] >= 0 && a[0] < 25)
                 std::memcpy(t_.monsterTypes[a[0]], monsterBackup_[a[0]], sizeof(t_.monsterTypes[0]));
             return;
-        case OP_SPAWN_PROJECTILE: host_.Unimplemented("SPAWN_PROJECTILE"); return;
-        case OP_SPAWN_TIMED_PROJECTILE: host_.Unimplemented("SPAWN_TIMED_PROJECTILE"); return;
-        case OP_CLEAR_PROJECTILE_AT: host_.Unimplemented("CLEAR_PROJECTILE_AT"); return;
+        case OP_SPAWN_PROJECTILE: host_.SpawnProjectile(ProjectileType(a[0]), a[1], a[2], 0); return;
+        case OP_SPAWN_TIMED_PROJECTILE: host_.SpawnProjectile(ProjectileType(a[0]), a[1], a[2], a[3] * 1000); return;
+        case OP_CLEAR_PROJECTILE_AT: host_.ClearProjectileAt(a[0], a[1]); return;
         case OP_SET_RESPAWN_POINT: host_.SetRespawnPoint(a[0], a[1]); return;
         case OP_EVICT_SPRITES: host_.EvictSprites(in.strings[0].text); return;
         case OP_BEGIN_FADE:

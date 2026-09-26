@@ -56,6 +56,10 @@ public:
 
     // Collision data for ActorSystem::IsBlocked (jtm layer 0).
     Grid grid() const;
+    // The object overlay (last layer; pickups are drawn into it) and the first
+    // visual layer (the floor; 0 = void). nullptr when the map has none.
+    std::vector<uint8_t>* Overlay() { return map_.layers.size() >= 2 ? &map_.layers.back() : nullptr; }
+    const std::vector<uint8_t>* Ground() const { return map_.layers.size() >= 2 ? &map_.layers[1] : nullptr; }
 
     // Centres the camera on an isometric screen position (Game.updateCamera,
     // without its dead zone).

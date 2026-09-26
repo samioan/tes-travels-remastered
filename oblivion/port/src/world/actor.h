@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -20,7 +21,7 @@ struct Grid {
 // The movement / collision / animation / drawing subset of Actor + ActorSystem
 // (src/Actor.java, src/ActorSystem.java). Combat, stats, AI and items arrive
 // with M7; the fields they need are added then.
-struct Actor {
+struct Actor : std::enable_shared_from_this<Actor> {
     // Sub-tile world points (128 per grid cell): pos, and the two other feet
     // of the sprite's isometric footprint (footB half, footC full sprite width).
     int pos[2] = {0, 0}, footB[2] = {0, 0}, footC[2] = {0, 0}, prevPos[2] = {0, 0};
@@ -71,6 +72,20 @@ struct Actor {
     const int* classList = nullptr;
     std::string name;
 
+    // Combat state (Actor.java). Actor links are weak: the world's actor table
+    // owns the actors, and a removed actor simply reads as "no target".
+    int attackTimer = 0, killTimer = 0, deathTimer = 0, hpRegenTimer = 0, mpRegenTimer = 0;
+    int buffTimer = 0;
+    int8_t buffFxSlot = -1;  // projectile pool slot of the buff glow
+    int16_t teleportTimer = 0;
+    int8_t vanished = 0, dotDamage = 0;
+    std::weak_ptr<Actor> target, dotSource, summon, owner;
+    const int* spawnRow = nullptr;
+    std::string floatText;  // empty = none
+    int8_t floatKind = 0;  // 0 damage (red), 1 dodged (green), 2 blocked (blue)
+    int floatTextTimer = 0, floatTextY = 0, floatTextStartY = 0;
+    int floatTextColor = 0xFF0000, floatTextShadow = 0;
+
     std::string cmlPath;
     SpriteSet sprite;
 };
@@ -90,6 +105,7 @@ void Init(Actor& a, const std::string& cmlPath, int8_t slot, const SpriteSet& sp
 // setPosition / updateCells / updateSortCell / undoMove.
 void SetPosition(Actor& a, int x, int y);
 void UpdateCells(Actor& a);
+void UpdateSortCell(Actor& a);
 void UndoMove(Actor& a);
 
 // isBlocked: is any of the three footprint points inside a blocking cell or

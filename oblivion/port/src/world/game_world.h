@@ -1,7 +1,9 @@
 #pragma once
 #include <functional>
 #include <map>
+#include <array>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -10,7 +12,9 @@
 #include "graphics/backbuffer.h"
 #include "script/interpreter.h"
 #include "world/actor.h"
+#include "world/combat.h"
 #include "world/level_view.h"
+#include "world/projectiles.h"
 
 namespace oblivion {
 
@@ -19,7 +23,7 @@ namespace oblivion {
 // (which it hosts). Menus, HUD, combat and the dungeon generator are later
 // milestones; whatever the scripts ask of them is recorded in
 // unimplemented().
-class World : public ScriptHost {
+class World : public ScriptHost, public CombatHost {
 public:
     static constexpr int kMaxActors = 25;
 
@@ -99,6 +103,7 @@ public:
     const std::string& currentLevel() const { return currentLevel_; }
     const std::map<std::string, int>& unimplemented() const { return unimplemented_; }
     const LevelView& view() const { return view_; }
+    int pickupCount() const { return static_cast<int>(pickups_.size()); }
     ScriptInterpreter& script() { return script_; }
     bool inputEnabled() const { return inputEnabled_; }
 
@@ -142,7 +147,28 @@ public:
         if (onOpenMenu) onOpenMenu(shop ? 4 : 0);
         else SetState(3);
     }
+    void PlaceItem(int itemId, int cellX, int cellY) override { SpawnItem(itemId, true, cellX, cellY); }
+    void SpawnProjectile(int type, int x, int y, int durationMs) override {
+        projectiles_.SpawnFixed(type, x, y, durationMs);
+    }
+    void ClearProjectileAt(int x, int y) override { projectiles_.ClearAt(x, y); }
+    void LevelUpTo(int slot, int level) override {
+        if (Actor* a = ActorAt(slot)) Combat::LevelUpTo(*a, level, script_);
+    }
+    void GenerateDungeon(const int* group, const int* spawnIds, int zone, int exitScript) override;
     void Unimplemented(const char* what) override { unimplemented_[what]++; }
+
+    // ---- CombatHost ----
+    Actor* ActorSlot(int index) override { return ActorAt(index); }
+    int SlotCount() const override { return kMaxActors; }
+    int Random() override { return static_cast<int32_t>(rng_()); }
+    ScriptInterpreter& Script() override { return script_; }
+    Projectiles& Fx() override { return projectiles_; }
+    void RemoveActorSlot(int index) override { RemoveActor(index); }
+    Actor* SpawnFreeActor(const std::string& cml, int x, int y, const int* row) override;
+    void SpawnItem(int itemId, bool fromScript, int cellX, int cellY) override;
+    Grid CurrentGrid() override { return view_.grid(); }
+    const std::vector<uint8_t>* GroundLayer() override { return view_.Ground(); }
 
 private:
     void UpdateCamera();
@@ -151,6 +177,9 @@ private:
     void CheckPlayerTriggers(Actor& p, int8_t oldEnter, int8_t oldLeave);
     int8_t ZoneUnder(const Actor& a) const;
     void ResizeLayers();
+    void ReviveActor(Actor& a);
+    void UpdatePickupPrompt();
+    void TryPickup(Actor& p);
 
     const AssetRoot& assets_;
     ImageCache& images_;
@@ -182,6 +211,11 @@ private:
     bool hasSpeaker_ = false;
 
     std::map<std::string, int> unimplemented_;
+
+    Projectiles projectiles_;
+    std::mt19937 rng_{0x0B11}; 
+    // Game.pickups: items lying on the map (cell x, cell y, table6 row), at most 24.
+    std::vector<std::array<uint8_t, 3>> pickups_;
 };
 
 }  // namespace oblivion

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "graphics/text.h"
 #include "render/sprite_renderer.h"
 
 namespace oblivion {
@@ -21,20 +22,6 @@ void IsoToWorld(int out[2], int isoX, int isoY) {
 void UpdateScreenPos(Actor& a) {
     a.screenPos[0] = (a.pos[0] - a.pos[1]) >> 3;
     a.screenPos[1] = (a.pos[0] + a.pos[1]) >> 4;
-}
-
-// Draw-order cell: the footprint cell nearest the camera (updateSortCell).
-void UpdateSortCell(Actor& a) {
-    if (a.footCCell[0] > a.footBCell[0]) {
-        a.sortCell[0] = a.footCCell[0];
-        a.sortCell[1] = a.footCCell[1];
-    } else if (a.footBCell[1] <= a.footCCell[1] && a.footBCell[0] <= a.cell[0]) {
-        a.sortCell[0] = a.cell[0];
-        a.sortCell[1] = a.cell[1];
-    } else {
-        a.sortCell[0] = a.footBCell[0];
-        a.sortCell[1] = a.footBCell[1];
-    }
 }
 
 void MoveBy(Actor& a, int dx, int dy) {
@@ -75,6 +62,20 @@ bool FootBlocked(const Grid& grid, const int8_t cell[2], const int p[2]) {
 }
 
 }  // namespace
+
+// Draw-order cell: the footprint cell nearest the camera (updateSortCell).
+void UpdateSortCell(Actor& a) {
+    if (a.footCCell[0] > a.footBCell[0]) {
+        a.sortCell[0] = a.footCCell[0];
+        a.sortCell[1] = a.footCCell[1];
+    } else if (a.footBCell[1] <= a.footCCell[1] && a.footBCell[0] <= a.cell[0]) {
+        a.sortCell[0] = a.cell[0];
+        a.sortCell[1] = a.cell[1];
+    } else {
+        a.sortCell[0] = a.footBCell[0];
+        a.sortCell[1] = a.footBCell[1];
+    }
+}
 
 int GroupOf(const Actor& a, int state) { return a.facing + kAnimStateOffset[state]; }
 
@@ -264,6 +265,43 @@ void Draw(Actor& a, Backbuffer& bb, ImageCache& images, int camX, int camY) {
                sy - a.sprite.Height(-56) + 3 + (a.animState == 2 || a.animState == 3 ? 3 : 0));
     const int g = GroupOf(a, a.animState);
     DrawSprite(bb, images, a.sprite, g, sx, sy - a.sprite.Height(g));
+
+    // Enemy health bar.
+    if (a.dead == 0 && a.slot != 1 && a.team == 0) {
+        const int bx = sx + (a.sprite.Width(a.facing) >> 1) - 10;
+        const int by = sy - a.sprite.Height(a.facing) - 6;
+        bb.DrawRect(bx, by, 20, 3, 0xFFFFFF);
+        bb.FillRect(bx + 1, by + 1, 19 * a.hp / std::max(1, a.maxHp), 2, 0xFF0000);
+    }
+
+    // Floating damage text: starts above the head, drifts up and fades.
+    if (a.dead == 0 && !a.floatText.empty()) {
+        if (a.floatTextY == 0) {
+            a.floatTextStartY = a.floatTextY =
+                a.screenPos[1] - a.sprite.Height(a.facing) - (a.slot == 1 ? 6 : 10);
+            if (a.floatKind == 1) {  // dodged
+                a.floatTextColor = 0x00FF00;
+                a.floatTextShadow = 8704;
+            } else if (a.floatKind == 2) {  // blocked
+                a.floatTextColor = 0x0000FF;
+                a.floatTextShadow = 34;
+            } else {
+                a.floatTextColor = 0xFF0000;
+                a.floatTextShadow = 2228224;
+            }
+        }
+        Text::DrawString(bb, sx + (a.sprite.Width(a.facing) >> 1) - 10, a.floatTextY + camY, a.floatText,
+                         static_cast<uint32_t>(std::max(0, a.floatTextColor)), Text::Face::SmallPlain);
+    }
+
+    // Status icon (poison, buff ...) over the head.
+    if (a.statusIcon != -1) {
+        const int ix = sx + a.sprite.Width(a.facing) - 4;
+        int iy = sy - a.sprite.Height(g) - a.sprite.Width(-54) - 4;
+        if (a.slot != 1) iy -= 8;
+        DrawSprite(bb, images, a.sprite, -54, ix, iy);
+        if (a.statusIcon != -2) DrawSprite(bb, images, a.sprite, a.statusIcon, ix, iy);
+    }
 }
 
 }  // namespace ActorSystem

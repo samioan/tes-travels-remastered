@@ -23,6 +23,7 @@
 #include "platform/win32/window.h"
 #include "game/game_app.h"
 #include "graphics/text.h"
+#include "world/combat.h"
 
 namespace {
 
@@ -139,6 +140,28 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 else if (tok == "fire") app.OnKeyDown(Key::Fire);
                 else if (tok == "softl") app.OnKeyDown(Key::SoftLeft);
                 else if (tok == "softr") app.OnKeyDown(Key::SoftRight);
+                else if (tok == "foe") {  // debug: stand next to the nearest enemy
+                    auto& w = app.world();
+                    if (oblivion::Actor* p = w.player()) {
+                        int best = 1 << 30;
+                        for (int i = 1; i < oblivion::World::kMaxActors; i++) {
+                            oblivion::Actor* o = w.ActorAt(i);
+                            if (!o || o->dead || o->team == p->team) continue;
+                            const int d = oblivion::Combat::Distance(p->pos, o->pos);
+                            if (d >= best) continue;
+                            best = d;
+                            oblivion::ActorSystem::SetPosition(*p, o->pos[0] - 60, o->pos[1]);
+                            p->facing = 3;
+                        }
+                    }
+                } else if (tok == "hold") {  // debug: hold fire for one second
+                    app.SetHeldKey(Key::Fire);
+                    for (int ms = 0; ms < 1000; ms += 16) {
+                        app.Tick(16);
+                        app.Draw(bb);
+                    }
+                    app.SetHeldKey(Key::None);
+                }
                 else if (tok.size() == 1) app.OnKeyDown(Key::Char, tok[0]);
                 for (int ms = 0; ms < 300; ms += 16) {
                     app.Tick(16);

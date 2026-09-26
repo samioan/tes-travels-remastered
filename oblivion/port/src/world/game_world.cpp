@@ -19,6 +19,7 @@ constexpr int kScreenH = Backbuffer::kHeight;
 World::World(const AssetRoot& assets, ImageCache& images)
     : assets_(assets), images_(images), view_(assets, images), script_(*this) {
     strings_.pack0.Parse(assets.Read("/lang_0.txt"));
+    projectiles_.SetFrames(SpritesFor("/oh_magic.cml"));
 }
 
 const SpriteSet& World::SpritesFor(const std::string& cml) {
@@ -40,6 +41,8 @@ void World::LoadLevel(const std::string& scrPath) {
     inputEnabled_ = true;
     playerCollides_ = true;
     maxActorSlot_ = 0;
+    projectiles_.ClearAll();
+    pickups_.clear();
     dialogue.open = false;
     message = Message{};
     cameraActor_ = -1;
@@ -57,7 +60,7 @@ void World::LoadMap(const std::string& jtm, const std::string& tileCml) {
     // Game.finishMapLoad: only the player survives a map load.
     for (int i = 1; i < kMaxActors; i++) actors_[i].reset();
     if (actors_[0]) {
-        Items::Revive(*actors_[0], script_);
+        ReviveActor(*actors_[0]);
     }
 }
 
@@ -73,7 +76,7 @@ void World::SetTrigger(int x, int y, int enter, int leave, int zone) {
 void World::ClearLayers() {
     view_.ClearVisualLayers();
     redraw_ = true;
-    if (actors_[0]) Items::Revive(*actors_[0], script_);
+    if (actors_[0]) ReviveActor(*actors_[0]);
 }
 
 void World::SetScreenSize(int, int) {
@@ -103,7 +106,7 @@ void World::SpawnActor(const std::string& name, int slot, const std::string& cml
     if (slot < 0 || slot >= kMaxActors) return;
     if (slot == 0 && player_) {
         actors_[0] = player_;
-        Items::Revive(*player_, script_);
+        ReviveActor(*player_);
     } else {
         auto a = std::make_shared<Actor>();
         ActorSystem::Init(*a, cml, static_cast<int8_t>(slot + 1), SpritesFor(cml));
@@ -129,10 +132,11 @@ void World::SpawnActor(const std::string& name, int slot, const std::string& cml
 void World::RemoveActor(int slot) {
     if (slot < 0 || slot >= kMaxActors || !actors_[slot]) return;
     if (slot == 0) {
+        projectiles_.ClearAll();
         // The player "dies": the original goes to the continue screen (state 11)
         // and respawns at the respawn point.
         SetState(11);
-        Items::Revive(*actors_[0], script_);
+        ReviveActor(*actors_[0]);
         ActorSystem::SetPosition(*actors_[0], respawn_[0], respawn_[1]);
         message = Message{};
         return;
@@ -262,18 +266,6 @@ void World::LoadHudSprites(const std::string& cml) { hudSprites_ = SpritesFor(cm
 
 // ---- per-frame -----------------------------------------------------------
 
-int8_t World::ZoneUnder(const Actor& a) const {
-    if (zoneLayer_.empty()) return -1;
-    const int h = view_.map().height;
-    const int idx[3] = {a.cell[0] * h + a.cell[1], a.footBCell[0] * h + a.footBCell[1], a.footCCell[0] * h + a.footCCell[1]};
-    for (int i : idx) {
-        if (i < 0 || i >= static_cast<int>(zoneLayer_.size())) return -1;
-        const int8_t z = zoneLayer_[static_cast<size_t>(i)];
-        if (z >= 0) return z;  // 255 is stored as -1: no zone
-    }
-    return -1;
-}
-
 void World::CheckPlayerTriggers(Actor& p, int8_t oldEnter, int8_t oldLeave) {
     const int8_t now = ActorSystem::CheckTriggerTiles(p, enterLayer_, leaveLayer_, view_.map().height);
     if (now == oldEnter) return;
@@ -282,21 +274,106 @@ void World::CheckPlayerTriggers(Actor& p, int8_t oldEnter, int8_t oldLeave) {
     else if (now == -2) ShowMessage(strings_.Get(24), 60, 4, 0);
 }
 
+// ActorSystem.revive: also drops every actor's target.
+void World::ReviveActor(Actor& a) {
+    for (auto& o : actors_)
+        if (o) o->target.reset();
+    Items::Revive(a, script_);
+}
+
+Actor* World::SpawnFreeActor(const std::string& cml, int x, int y, const int* row) {
+    int slot = kMaxActors - 1;
+    while (slot >= 0 && actors_[slot]) slot--;
+    if (slot < 0) return nullptr;
+    SpawnActor(std::string(), slot, cml, row, x, y);
+    return actors_[slot].get();
+}
+
+// Game.spawnItem: an item lying on a cell, drawn into the overlay layer.
+void World::SpawnItem(int itemId, bool fromScript, int cellX, int cellY) {
+    std::vector<uint8_t>* overlay = view_.Overlay();
+    const int idx = cellX * view_.map().height + cellY;
+    if (!overlay || pickups_.size() >= 24 || idx < 0 || idx >= view_.map().cellCount()) return;
+    (*overlay)[static_cast<size_t>(idx)] = fromScript ? 211 : 22;  // -45 / 22
+    pickups_.push_back({static_cast<uint8_t>(cellX), static_cast<uint8_t>(cellY), static_cast<uint8_t>(itemId)});
+}
+
+// The fire key next to an item picks it up (Game.handleInput case 7).
+void World::TryPickup(Actor& p) {
+    for (size_t k = 0; k < pickups_.size(); k++) {
+        const int at[2] = {pickups_[k][0] << 7, pickups_[k][1] << 7};
+        const int* row = script_.GetRow(6, pickups_[k][2]);
+        if (Combat::Distance(at, p.pos) >= 350 || !row) continue;
+        projectiles_.SpawnFixed(8, at[0], at[1] + 128);
+        if (std::vector<uint8_t>* overlay = view_.Overlay()) {
+            uint8_t& tile = (*overlay)[static_cast<size_t>(pickups_[k][0] * view_.map().height + pickups_[k][1])];
+            tile = tile == 211 ? 212 : 0;  // -45 -> -44 (opened chest), else gone
+        }
+        pickups_.erase(pickups_.begin() + static_cast<std::ptrdiff_t>(k));
+        if (row[2] > 0) {
+            ShowMessage(std::to_string(row[2]) + " " + strings_.Get(38), 3, 4, 0);
+            gold += row[2];
+        } else if (row[4] > 0) {
+            if (const int* item = script_.GetRow(1, row[4])) {
+                ShowMessage(script_.ItemName(item[1]), 3, 4, 0);
+                Items::AddItem(p, 1, item, script_);
+            }
+        } else if (row[3] > 0) {
+            if (const int* item = script_.GetRow(4, row[3])) {
+                ShowMessage(script_.ItemName(item[1]), 3, 4, 0);
+                Items::AddItem(p, 0, item, script_);
+            }
+        } else if (row[5] > 0) {
+            if (const int* item = script_.GetRow(2, row[5])) {
+                ShowMessage(script_.ItemName(item[1]), 3, 4, 0);
+                Items::AddItem(p, 2, item, script_);
+            }
+        }
+        break;
+    }
+}
+
+// Standing near an item shows the "pick up" prompt (string 363).
+void World::UpdatePickupPrompt() {
+    const std::string prompt = strings_.Get(363);
+    bool shown = false;
+    if (Actor* p = player_.get()) {
+        for (const auto& pk : pickups_) {
+            const int at[2] = {pk[0] << 7, pk[1] << 7};
+            if (Combat::Distance(at, p->pos) < 350) {
+                ShowMessage(prompt, 60, 4, 0);
+                shown = true;
+                break;
+            }
+        }
+    }
+    if ((message.text.empty() || message.text == prompt) && !shown) HideMessage();
+}
+
+void World::GenerateDungeon(const int*, const int*, int, int) { unimplemented_["GENERATE_DUNGEON"]++; }
+
 void World::Tick(int dtMs) {
     if (state_ == 12) return;
     if (dialogue.open) dialogue.ageMs += dtMs;
 
-    if (!scriptPaused && state_ != 3 && state_ != 10 && state_ != 9 && state_ != 13) script_.Tick(dtMs);
+    if (!scriptPaused && state_ != 3 && state_ != 10 && state_ != 9 && state_ != 13) {
+        projectiles_.Tick(dtMs, *this);
+        script_.Tick(dtMs);
+    }
 
     UpdateMessage(dtMs);
 
     if (state_ == 0) {
         for (int slot = 0; slot <= maxActorSlot_; slot++) {
-            Actor* a = actors_[slot].get();
+            std::shared_ptr<Actor> keep = actors_[slot];  // Update may remove the actor
+            Actor* a = keep.get();
             if (!a) continue;
             const int8_t oldEnter = a->enterScript, oldLeave = a->leaveScript;
-            ActorSystem::Update(*a, dtMs);
-            if (slot == 0 && actors_[0]) CheckPlayerTriggers(*a, oldEnter, oldLeave);
+            Combat::Update(*a, dtMs, !dialogue.open && inputEnabled_, *this);
+            if (slot == 0 && actors_[0]) {
+                CheckPlayerTriggers(*a, oldEnter, oldLeave);
+                UpdatePickupPrompt();
+            }
         }
         UpdateCamera();
     }
@@ -311,11 +388,12 @@ void World::HeldAction(int action, int dtMs) {
         case 4: ActorSystem::SetAnimState(p, 1); ActorSystem::MoveDir(p, view_.grid(), 1, dtMs); break;
         case 5: ActorSystem::SetAnimState(p, 1); ActorSystem::MoveDir(p, view_.grid(), 4, dtMs); break;
         case 6: ActorSystem::SetAnimState(p, 1); ActorSystem::MoveDir(p, view_.grid(), 3, dtMs); break;
-        case 7: p.zoneId = ZoneUnder(p); break;  // checkZoneTiles (the melee fall-through is M7)
+        case 7: Combat::CheckZoneTiles(p, zoneLayer_, view_.map().height, *this); break;
         default: break;
     }
     if (oldZone != p.zoneId && p.zoneId != 0 && p.zoneId != -1 && p.zoneId != -2)
         script_.RunScript(static_cast<uint8_t>(p.zoneId));
+    if (action == 7 && p.killTimer > 1000) TryPickup(p);
 }
 
 void World::KeyPressed(int action) {
@@ -368,6 +446,7 @@ void World::DrawField(Backbuffer& bb) {
     for (int i = 0; i <= maxActorSlot_; i++)
         if (actors_[i]) list.push_back(actors_[i].get());
     view_.Draw(bb, list);
+    projectiles_.Draw(bb, images_, view_.camX(), view_.camY());
 }
 
 }  // namespace oblivion

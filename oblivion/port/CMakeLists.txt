@@ -42,6 +42,8 @@ add_library(oblivion_world STATIC
   src/world/actor.cpp
   src/world/game_world.cpp
   src/world/items.cpp
+  src/world/combat.cpp
+  src/world/projectiles.cpp
   src/world/level_view.cpp
 )
 target_link_libraries(oblivion_world PUBLIC oblivion_assets)
@@ -66,3 +68,7 @@ add_test(NAME actor_smoke COMMAND actor_smoke ${CMAKE_SOURCE_DIR}/../extracted)
 add_executable(script_smoke src/tests/script_smoke.cpp)
 target_link_libraries(script_smoke PRIVATE oblivion_world)
 add_test(NAME script_smoke COMMAND script_smoke ${CMAKE_SOURCE_DIR}/../extracted)
+
+add_executable(combat_smoke src/tests/combat_smoke.cpp)
+target_link_libraries(combat_smoke PRIVATE oblivion_world)
+add_test(NAME combat_smoke COMMAND combat_smoke ${CMAKE_SOURCE_DIR}/../extracted)
