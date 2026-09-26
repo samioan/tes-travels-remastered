@@ -13,6 +13,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <initializer_list>
@@ -81,6 +82,39 @@ oblivion::Key KeyForVk(unsigned vk) {
 
 }  // namespace
 
+// OBLIVION_USER_DIR (set by the launcher to <install>/user) is where the save
+// and the log live; OBLIVION_SCALE (the launcher's window-size picker) is the
+// integer window scale over the native 176x208. Unset (a plain dev build), the
+// game behaves exactly as before: save in %APPDATA%, no log, 3x window.
+std::string EnvString(const char* name) {
+    char* value = nullptr;
+    size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || !value) return std::string();
+    std::string result(value);
+    std::free(value);
+    return result;
+}
+
+int ResolveScale() {
+    const std::string v = EnvString("OBLIVION_SCALE");
+    if (v.empty()) return 3;
+    return std::max(1, std::min(8, std::atoi(v.c_str())));
+}
+
+// stdout/stderr into <userDir>/oblivion_port.log: this is a WINAPI-subsystem
+// app with no console, so a bug report needs somewhere to look.
+void OpenLogFile(const std::string& userDir) {
+    if (userDir.empty()) return;
+    std::error_code error;
+    std::filesystem::create_directories(userDir, error);
+    const std::string path = (std::filesystem::path(userDir) / "oblivion_port.log").string();
+    FILE* unused = nullptr;
+    freopen_s(&unused, path.c_str(), "a", stdout);
+    freopen_s(&unused, path.c_str(), "a", stderr);
+    std::printf("--- oblivion_port starting ---\n");
+    std::fflush(stdout);
+}
+
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // Defaults: a packaged copy keeps `extracted/` and `fonts/` next to the exe; a
     // dev build finds them from oblivion/port/build/. Both are user-provided
@@ -113,6 +147,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         else if (a == "--run-ms") runMs = std::atoi(next().c_str());
     }
 
+    const std::string userDir = EnvString("OBLIVION_USER_DIR");
+    OpenLogFile(userDir);
     try {
         oblivion::Text::LoadDeviceFonts(fontDir);
         oblivion::AssetRoot assets(assetDir);
@@ -122,7 +158,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         // Headless runs (--dump) only touch a save when told to.
         if (savePath.empty() && dump.empty()) {
             const char* appdata = std::getenv("APPDATA");
-            savePath = std::string(appdata ? appdata : ".") + "/OblivionPort/oblivion.eso";
+            savePath = !userDir.empty() ? (std::filesystem::path(userDir) / "oblivion.eso").string()
+                                        : std::string(appdata ? appdata : ".") + "/OblivionPort/oblivion.eso";
         }
         app.SetSavePath(savePath);
 
@@ -224,7 +261,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         for (int i = 0; i < kLevelCount; i++)
             if (level == kLevels[i]) levelIndex = i;
 
-        oblivion::Window window(oblivion::Backbuffer::kWidth * 3, oblivion::Backbuffer::kHeight * 3,
+        const int scale = ResolveScale();
+        oblivion::Window window(oblivion::Backbuffer::kWidth * scale, oblivion::Backbuffer::kHeight * scale,
                                 L"Oblivion Port");
         window.SetKeyCallback([&](unsigned vk) {
             switch (vk) {

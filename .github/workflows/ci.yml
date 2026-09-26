@@ -15,8 +15,7 @@ name: CI
 #     tag-prefix-filtered release parser) passes -- the one smoke test per
 #     game that needs neither the real game data nor a network call.
 #
-# Oblivion has no buildable port yet (see NOTICE.md) and so no job here --
-# add one once it does, following either job below as the template.
+# Oblivion is the third job, built the same way.
 
 on:
   push:
@@ -93,4 +92,35 @@ jobs:
         with:
           name: stormhold-remastered-ci-${{ github.run_number }}
           path: stormhold/port/dist/
+          retention-days: 14
+
+  windows-oblivion:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y --no-progress
+
+      # Debug build of every target: the game, the launcher, the smoke tests
+      # that need no game data (asset/combat/save/... tests need the user's own
+      # extracted jar, so only the launcher's own one runs here).
+      - name: Build Oblivion (Debug, all targets)
+        run: .\oblivion\portuild.bat
+
+      - name: Oblivion launcher smoke test
+        working-directory: oblivion/port/build
+        run: .\launcher_smoke.exe
+
+      - name: Build Oblivion (shipping configuration)
+        run: .\oblivion\portuild_dist.bat ci-${{ github.run_number }}
+
+      - name: Check the Oblivion package
+        run: .\oblivion\port\check_dist.ps1
+
+      - name: Upload the Oblivion build
+        uses: actions/upload-artifact@v4
+        with:
+          name: oblivion-remastered-ci-${{ github.run_number }}
+          path: oblivion/port/dist/
           retention-days: 14

@@ -3,6 +3,17 @@ project(oblivion_port CXX C)
 # Static CRT: the packaged exe runs without the VC++ redistributable.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+# `OBLIVION_VERSION` is what the launcher prints in its corner. A local
+# build says 0.0.0-local; the release workflow passes the git tag with its
+# "oblivion-v" prefix stripped.
+set(OBLIVION_VERSION "0.1.0-dev" CACHE STRING "Version string shown by the launcher")
+# Where the launcher looks for updates. The tag prefix keeps Oblivion's own
+# releases apart from Dawnstar's and Stormhold's in the same repository.
+set(OBLIVION_UPDATE_OWNER "samioan" CACHE STRING "GitHub owner to check for updates")
+set(OBLIVION_UPDATE_REPO "tes-travels-remastered" CACHE STRING "GitHub repo to check for updates")
+set(OBLIVION_UPDATE_TAG_PREFIX "oblivion-v" CACHE STRING "Release tag prefix identifying an Oblivion build")
+option(OBLIVION_DIST "Build only the shipped executables (launcher + game)" OFF)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -61,8 +72,66 @@ add_executable(oblivion_port WIN32
 )
 target_link_libraries(oblivion_port PRIVATE oblivion_world)
 
-# Milestone smoke tests (plain executables that exit non-zero on failure).
+
+# The "unzip and play" front end: picks your own TEST-Oblivion.jar (and the
+# optional Nokia font), plays, and updates itself from GitHub releases. Ported
+# from stormhold's launcher (itself dawnstar's, itself shadowkey-decomp's).
+# The artwork the .rc embeds (src/launcher/assets/banner.png and oblivion.ico)
+# is generated from src/launcher/assets/banner_source.png by:
+#
+#   python tools/make_banner.py oblivion/port/src/launcher/assets/banner_source.png -o oblivion/port/src/launcher/assets/banner.png
+#   python tools/make_icon.py   oblivion/port/src/launcher/assets/banner_source.png --box 136,420,205,205 -o oblivion/port/src/launcher/assets/oblivion.ico
+configure_file(src/launcher/version.h.in
+               "${CMAKE_BINARY_DIR}/generated/launcher/version.h" @ONLY)
+
+# third_party/puff (zlib's reference inflate), for the launcher's zip reader.
+add_library(puff STATIC third_party/puff/puff.c)
+target_include_directories(puff PUBLIC third_party/puff)
+if(MSVC)
+  target_compile_options(puff PRIVATE /W3)
+endif()
+
+add_executable(oblivion_launcher WIN32
+  src/launcher/launcher_main.cpp
+  src/launcher/banner.cpp
+  src/launcher/install.cpp
+  src/launcher/launcher_config.cpp
+  src/launcher/update_check.cpp
+  src/launcher/updater.cpp
+  src/launcher/zip_reader.cpp
+  src/launcher/launcher.rc
+  src/assets/gdr_font.cpp
+  src/platform/win32/exe_dir.cpp
+)
+set_target_properties(oblivion_launcher PROPERTIES OUTPUT_NAME "Oblivion")
+target_include_directories(oblivion_launcher PRIVATE src "${CMAKE_BINARY_DIR}/generated")
+# ole32 is COM (IFileOpenDialog); winhttp is the update check/download.
+target_link_libraries(oblivion_launcher PRIVATE stb_image puff comctl32 ole32 winhttp)
+target_compile_definitions(oblivion_launcher PRIVATE UNICODE _UNICODE)
+# The manifest is a resource in launcher.rc; CMake's generated one must be off.
+target_link_options(oblivion_launcher PRIVATE /MANIFEST:NO)
+
+# Headless launcher check: banner decode, config, jar install against a
+# synthetic jar, the zip reader, version compare, the release parser.
+add_executable(launcher_smoke
+  src/tests/launcher_smoke.cpp
+  src/assets/gdr_font.cpp
+  src/launcher/banner.cpp
+  src/launcher/install.cpp
+  src/launcher/launcher_config.cpp
+  src/launcher/update_check.cpp
+  src/launcher/updater.cpp
+  src/launcher/zip_reader.cpp
+)
+target_include_directories(launcher_smoke PRIVATE src "${CMAKE_BINARY_DIR}/generated")
+target_link_libraries(launcher_smoke PRIVATE stb_image puff ole32 winhttp)
 enable_testing()
+add_test(NAME launcher_smoke COMMAND launcher_smoke)
+
+# Milestone smoke tests (plain executables that exit non-zero on failure).
+# Skipped in the shipping build (OBLIVION_DIST=ON), which only needs the two exes.
+enable_testing()
+if(NOT OBLIVION_DIST)
 add_executable(asset_smoke src/tests/asset_smoke.cpp)
 target_link_libraries(asset_smoke PRIVATE oblivion_assets)
 add_test(NAME asset_smoke COMMAND asset_smoke ${CMAKE_SOURCE_DIR}/../extracted)
@@ -87,12 +156,7 @@ add_executable(save_smoke src/tests/save_smoke.cpp)
 target_link_libraries(save_smoke PRIVATE oblivion_world)
 add_test(NAME save_smoke COMMAND save_smoke ${CMAKE_SOURCE_DIR}/../extracted)
 
-# `cmake --install build-release --prefix dist` (see package.bat): just the exe
-# and the README. The game data (extracted/) and the Nokia fonts (fonts/) are
-# the user's own and are not redistributed.
-install(TARGETS oblivion_port RUNTIME DESTINATION .)
-install(FILES README.txt DESTINATION .)
-
 add_executable(input_smoke src/tests/input_smoke.cpp)
 target_link_libraries(input_smoke PRIVATE oblivion_world)
 add_test(NAME input_smoke COMMAND input_smoke ${CMAKE_SOURCE_DIR}/../extracted)
+endif()  # NOT OBLIVION_DIST

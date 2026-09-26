@@ -164,6 +164,22 @@ Canvas for its size, so this is a port decision).
   auto-repeat from d-pad / stick / keys. `input_smoke` checks the mapper and the
   movement in a real level. The original keypad path is unchanged underneath.
 
+- **Launcher and releases** (`src/launcher/`, `build_dist.bat`, `check_dist.ps1`,
+  `.github/workflows/release-oblivion.yml`): the same "unzip and play" front end
+  as Dawnstar and Stormhold, ported from Stormhold's. `Oblivion.exe` shows the
+  key art (`assets/banner_source.png` -> `banner.png`, icon = the wordmark's "O"),
+  asks for your own `TEST-Oblivion.jar` (unpacked into `data\`; a folder counts
+  as the game when it has `startup.scr`, `startup2.scr` and `lang_0.txt`), takes
+  an optional Nokia `Ceurope.gdr`, offers 2x/3x/4x windows, and starts
+  `bin\oblivion_port.exe --assets data --fonts fonts` with `OBLIVION_USER_DIR`
+  (`user\`: `oblivion.eso` save + `oblivion_port.log`) and `OBLIVION_SCALE`.
+  It checks GitHub releases tagged `oblivion-v*` on start (a tag prefix keeps
+  the three games' releases apart) and self-updates from the release zip; dev
+  builds (`-dev` / `0.0.0-local`) never update. `launcher_smoke` (89 checks:
+  banner decode, config, jar install on a synthetic jar, zip reader, version
+  compare, release-list parser) needs neither the game nor a network. Cutting a
+  release: `git tag oblivion-v0.1.0 && git push origin oblivion-v0.1.0`.
+
 **The port is feature-complete** against the original's engine. Remaining work
 is verification and polish, not milestones.
 
