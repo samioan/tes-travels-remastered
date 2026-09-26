@@ -132,53 +132,39 @@ Confirmed pieces (method line numbers from `decompiled/b.java`):
 contents, the full `paint()` HUD layout, and the save/load (`RecordStore`)
 code path.
 
-## `e` -- the `.scr` bytecode interpreter (Phase 2's actual target)
+## `e` -> renamed `ScriptInterpreter.java` (`.scr` loader + bytecode interpreter)
 
-**Not yet renamed**; proposed name **`ScriptInterpreter`**. This *is* the
-class `ROADMAP.md` Phase 2 is looking for -- confirmed by direct evidence,
-not guesswork. Two halves:
+Renamed with the descriptor-aware renamer (`docs/rename.map`). Two halves:
 
-1. **Level-data table loader**, `a(String)` (85) -- parses a `.scr` file
-   (via `b.a`/`b.b`, the shared resource loader) into 11 fixed-shape
-   tables, each populated by its own field-tag parser (`a(int)` through
-   `j(int)`, 142-434, tag-per-record: tag `0` sets the record's row index,
-   other tags fill specific columns, tag `31` ends a record). Tables (all
-   `int[][]`, sizes are `[rows][cols]`): `a`/`b`=`[25][21]` (`a`=live
-   copy, `b`=pristine backup restored via opcode 67 -- almost certainly
-   the **item/object placement table**, 25 slots), `c`=`[37][8]`
-   (**NPC/monster spawn table**, matches the 37-level cap seen in
-   dawnstar's `ESGame`, though here per-*level* not global), `d`=`[42][10]`,
-   `e`=`[11][14]` (has 3 parallel int[15] side-tables `h`/`i`/`j` per
-   record, `i`/`j` being `-1`-terminated lists -- **exits/doors table**,
-   `i`/`j` = linked destination coordinate pairs), `f`=`[10][21]`,
-   `g`=`[25][7]`, `k`=`[10][15]`, `l`=`[30][4]` (**random-encounter/loot
-   table**, confirmed: `a()` at 1240 rolls `b.a.nextInt()` -- yes, `e`'s
-   own field `a`, the shared `Random`, is a *third* unrelated field also
-   spelled `a` on class `b` -- against `l[][2]` as a modulus and decrements
-   a per-row counter `l[][3]`, classic weighted-loot-with-limited-uses).
-   Also loads a local string pool (field `a: String[255]`, count `d`) used
-   by the `0xF000`-tagged string-id convention shared with `b.a(int)`.
-2. **Bytecode interpreter**, `b(long)` (462) -- a `switch` on opcode byte
-   `var8` (read via the tiny stack-machine helpers `b()`/`c()`/`d()` =
-   read-byte/read-int24/read-short from the script buffer at the current
-   program counter, itself stored as `this.a[this.a[this.a-1]]` i.e. a
-   **call-stack of PC values**, `this.a-1` = current stack depth -- this
-   supports subroutine calls, not just linear execution). ~78 opcodes
-   (0-78+) confirmed at the call-site level: most delegate straight into
-   `b`'s own methods (dialogue text via `this.a.f(str)`/`this.a.i()`,
-   32-40=actor spawn/teleport/palette, `h.a`/`h.b` for actor state and
-   position, `i.a` for magic-projectile spawning, `56`=load a different
-   language pack (`b.a(name, count)`), `73`/`74`=fade transition flags).
-   Case bodies are individually understood (see inline evidence in the
-   decompiled source) but **not yet given symbolic opcode names** -- that
-   naming pass, plus writing an actual `.scr` disassembler
-   (`tools/parse_scr.py`), is the natural next Phase-2 milestone once this
-   survey lands.
+1. **Level-data loader**, `load(path)`: reads the resource via `Game.loadResource`
+   into `Game.resourceBuffer`, then a header of `(script id, 16-bit offset)`
+   entries (`scriptOffsets`), then a sequence of `30, tag, <record>, 31`
+   table records, then the bytecode. Each record is `field-id, value` pairs
+   (`0` = row index; string fields `1` are literal or `0xF0xx` localized ids).
+   Tables (tag -> field), corrected from the first survey:
+   `0` `monsterTypes[25][21]` (+ `monsterTypesBackup`, restored by opcode 67;
+   column 1 = sprite path string, 2 = level, 3-9 attributes, 10 weapon, 11
+   armor, 13 team, 14/15 sight/attack range, 17 growth archetype, 18 AI type,
+   19 special, 20 attack interval), `1` `armors[42][10]`, `2` `consumables[11][14]`,
+   `4` `weapons[37][8]`, `5` `classBase[9][15]` (+ `classItemTypes`, `classLists`
+   from its list fields 2 and 3), `6` `table6[25][7]` (unidentified), `7`
+   `pairTable` (-1 terminated pairs), `8` `specials[10][15]` (special attacks),
+   `9` `spawnGroups[10][21]` (random-dungeon groups; field 20 appends to
+   `spawnIds`), `10` `lootTable[30][4]` (`rollLoot`: weighted, limited uses).
+   `getRow(table, index)` exposes them by number: 0 monsters, 1 armor, 2
+   consumables, 4 weapons, 5 classes, 6 table6, 7 pairs, 8 specials, 9 spawn
+   groups, 10 loot.
+2. **Interpreter**, `step(dt)`: a `switch` over ~80 opcodes reading operands
+   from `code` at the top of a call stack of program counters (`pcStack`,
+   `depth`; `runScript(id)` pushes, `returnFromScript` pops). Blocked while a
+   dialogue is open, on a `WAIT`, on `WAIT_ACTORS_STOP`, a walk cutscene
+   (`walkPhase`) or `WAIT_KEY`. **All opcodes are now named** as `OP_*`
+   constants; operand layouts are in [`SCR_OPCODES.md`](SCR_OPCODES.md).
+   `keyPressed(key)` fires the per-key hooks set by `SET_KEY_HOOK`.
 
-**Open questions for `e`:** symbolic names for all ~78 opcodes (mechanical
-work now that the dispatch table is mapped); which of the 11 tables is
-which exact game concept (educated guesses above, not confirmed against a
-save file or by cross-referencing a specific `.scr` hexdump yet).
+**Open**: what `table6`, `pairTable`, and a few operands (`END_LEVEL`,
+`SET_POINT`, `GENERATE_DUNGEON`'s two extra bytes) mean; several `Game` state
+ids (`SET_STATE_4/9`).
 
 ## `a` -> renamed `Strings.java` (localization / text-resource loader)
 
@@ -379,9 +365,9 @@ map, regenerate, and copy the result. `Game`/`ScriptInterpreter`/
 
 `Strings.java`, `DialogueNode.java`, `SpriteFrame.java`,
 `SpriteRenderer.java`, `ProjectileManager.java`, **`Actor.java`** and
-**`ActorSystem.java`** and **`DialogueScreen.java`** live in `../src/`. They still refer to `b` (Game) and
+**`ActorSystem.java`** and **`DialogueScreen.java`** and **`ScriptInterpreter.java`** live in `../src/`. They still refer to `b` (Game) and
 `e` (ScriptInterpreter) by their decompiled names, plus the few mapped members
 (`b.actors`, `b.collision`, `b.random`, `e.runScript`, ...).
 
-`Game.java` (`b`) and `ScriptInterpreter.java` (`e`) are still `decompiled/{b,e}.java`.
-Next: those two, with the renamer (`--uniquify` output first).
+`Game.java` (`b`) is the last unrenamed class (`decompiled/b.java`); many of its members
+are already in `rename.map`. Next: finish it with `--uniquify` output.
