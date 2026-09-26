@@ -5,6 +5,7 @@
 #include "assets/asset_root.h"
 #include "assets/image.h"
 #include "graphics/backbuffer.h"
+#include "game/dialogue_screen.h"
 #include "game/help_pages.h"
 #include "world/game_world.h"
 
@@ -65,6 +66,9 @@ private:
     void HandleControlsKey(Key key, int code);
     void HandleHelpKey(Key key);
     void OpenHelp(int titleId);
+    void OpenInventory();
+    void OpenShop();
+    void MenuSelected(DialogueNode& node);
     void ActivateMenuItem();
     void BuildMenus();
     void StartNewGame();
@@ -121,6 +125,9 @@ private:
     int blinkTimer_ = -1;
     bool blinkOn_ = true;
     int spinnerTimer_ = 0;
+    std::unique_ptr<DialogueScreen> dialogue_;  // inventory / shop screen
+    DialogueNode* equippedWeaponNode_ = nullptr;
+    DialogueNode* equippedSpellNode_ = nullptr;
     SpriteSet playerSprites_;  // /oh_pc.cml: group 5 is the "please wait" spinner
 };
 

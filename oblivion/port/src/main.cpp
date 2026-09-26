@@ -116,6 +116,15 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         else app.Start();
 
         if (!dump.empty() && !keys.empty()) {
+            // With --level the script plays first (fire pressed for dialogue, text scrolled along).
+            for (int ms = 0; !level.empty() && ms < runMs; ms += 16) {
+                if (ms % 1100 < 16) app.OnKeyDown(oblivion::Key::Fire);
+                const int st = app.world().state();
+                app.SetHeldKey(st == 10 || st == 9 || st == 4 ? oblivion::Key::Down : oblivion::Key::None);
+                app.Tick(16);
+                app.Draw(bb);
+            }
+            app.SetHeldKey(oblivion::Key::None);
             // --keys up,down,left,right,fire,softl,softr,<digit>: typed 300 ms apart.
             size_t pos = 0;
             while (pos <= keys.size()) {

@@ -63,6 +63,7 @@ public:
     };
     Dialogue dialogue;
     int gold = 100;  // Game.gold
+    bool scriptPaused = false;  // an inventory/shop screen is up: the VM does not tick
     int cutsceneSprite = 0, cutsceneColor = 0;  // END_LEVEL: splash / cutscene image
     std::function<void()> onLoadLevel;
     std::function<void(int)> onOpenMenu;  // 0 = main/pause menu, 4 = shop menu
@@ -132,6 +133,7 @@ public:
     void HideMessage() override { message = Message{}; }
     void ShowTextScreen(const std::string& text) override;
     std::string GetString(int id) override { return strings_.Get(id); }
+    int StringId(const std::string& text) override { return strings_.IdOf(text); }
     void LoadLang(int packIndex) override;
     void LoadHudSprites(const std::string& cml) override;
     void EvictSprites(const std::string& prefix) override { images_.Evict(prefix); }

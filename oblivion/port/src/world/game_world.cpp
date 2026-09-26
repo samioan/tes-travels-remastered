@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "graphics/text.h"
+#include "world/items.h"
 
 namespace oblivion {
 
@@ -12,19 +13,6 @@ namespace {
 
 constexpr int kScreenW = Backbuffer::kWidth;
 constexpr int kScreenH = Backbuffer::kHeight;
-
-// ActorSystem.revive (the parts that exist so far; hp/mp refill included).
-void Revive(Actor& a) {
-    a.sortCell[0] = a.sortCell[1] = 0;
-    a.enterScript = a.leaveScript = a.zoneId = -1;
-    a.dead = 0;
-    a.statusIcon = -1;
-    a.animState = 0;
-    a.moveTarget[0] = a.moveTarget[1] = -1;
-    a.hp = a.maxHp = a.level * 4 + (a.strength + a.buffStrength) * 2 + a.endurance * 2 + a.bonusMaxHp;
-    a.mp = a.maxMp = a.level * 4 + a.intelligence * 2 + a.bonusMaxMp;
-    ActorSystem::UpdateCells(a);
-}
 
 }  // namespace
 
@@ -69,7 +57,7 @@ void World::LoadMap(const std::string& jtm, const std::string& tileCml) {
     // Game.finishMapLoad: only the player survives a map load.
     for (int i = 1; i < kMaxActors; i++) actors_[i].reset();
     if (actors_[0]) {
-        Revive(*actors_[0]);
+        Items::Revive(*actors_[0], script_);
     }
 }
 
@@ -85,7 +73,7 @@ void World::SetTrigger(int x, int y, int enter, int leave, int zone) {
 void World::ClearLayers() {
     view_.ClearVisualLayers();
     redraw_ = true;
-    if (actors_[0]) Revive(*actors_[0]);
+    if (actors_[0]) Items::Revive(*actors_[0], script_);
 }
 
 void World::SetScreenSize(int, int) {
@@ -115,46 +103,12 @@ void World::SpawnActor(const std::string& name, int slot, const std::string& cml
     if (slot < 0 || slot >= kMaxActors) return;
     if (slot == 0 && player_) {
         actors_[0] = player_;
-        Revive(*player_);
+        Items::Revive(*player_, script_);
     } else {
         auto a = std::make_shared<Actor>();
         ActorSystem::Init(*a, cml, static_cast<int8_t>(slot + 1), SpritesFor(cml));
-        // ActorSystem.initFromTemplate (the stat part; specials/items come with M7).
-        a->level = static_cast<int8_t>(row[2]);
-        if (slot == 0) {
-            // setClass: the player's attributes come from the class table.
-            const int* c = script_.GetRow(5, playerClass_);
-            a->classId = static_cast<int8_t>(playerClass_);
-            if (c) {
-                a->speed = c[6];
-                a->strength = c[7];
-                a->intelligence = c[8];
-                a->willpower = c[9];
-                a->agility = c[10];
-                a->endurance = c[11];
-                a->personality = c[12];
-                a->attackRange = c[13];
-                a->sightRange = c[14];
-            }
-        } else {
-            a->strength = row[3];
-            a->intelligence = row[4];
-            a->willpower = row[5];
-            a->agility = row[6];
-            a->speed = row[7];
-            a->endurance = row[8];
-            a->personality = row[9];
-            a->sightRange = row[14];
-            a->attackRange = row[15];
-            a->weapon = static_cast<int8_t>(row[10]);
-            a->aiType = static_cast<int8_t>(row[18]);
-            a->ranged = a->aiType == 4 ? 1 : 0;
-            if (row[20] > 0) a->attackInterval = row[20] * 1000;
-        }
-        a->team = static_cast<int8_t>(row[13]);
-        ActorSystem::SetStat(*a, 2, row[2]);  // recomputes max hp/mp and default ranges
-        a->hp = a->maxHp;
-        a->mp = a->maxMp;
+        if (slot == 0) Items::SetClass(*a, playerClass_, false, script_);
+        Items::InitFromTemplate(*a, row, script_);
         actors_[slot] = a;
         if (slot == 0) player_ = a;
     }
@@ -178,7 +132,7 @@ void World::RemoveActor(int slot) {
         // The player "dies": the original goes to the continue screen (state 11)
         // and respawns at the respawn point.
         SetState(11);
-        Revive(*actors_[0]);
+        Items::Revive(*actors_[0], script_);
         ActorSystem::SetPosition(*actors_[0], respawn_[0], respawn_[1]);
         message = Message{};
         return;
@@ -332,7 +286,7 @@ void World::Tick(int dtMs) {
     if (state_ == 12) return;
     if (dialogue.open) dialogue.ageMs += dtMs;
 
-    if (state_ != 3 && state_ != 10 && state_ != 9 && state_ != 13) script_.Tick(dtMs);
+    if (!scriptPaused && state_ != 3 && state_ != 10 && state_ != 9 && state_ != 13) script_.Tick(dtMs);
 
     UpdateMessage(dtMs);
 

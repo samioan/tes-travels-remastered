@@ -48,6 +48,7 @@ public:
     virtual void HideMessage() = 0;
     virtual void ShowTextScreen(const std::string& text) = 0;
     virtual std::string GetString(int id) = 0;
+    virtual int StringId(const std::string& text) = 0;  // Game.stringToId
     virtual void LoadLang(int packIndex) = 0;
     virtual void LoadHudSprites(const std::string& cml) = 0;
     virtual void EvictSprites(const std::string& prefix) = 0;
@@ -87,6 +88,11 @@ public:
     const int* GetRow(int table, int index) const;
     // A table string field: literal index or 0xF000|id, as getItemName.
     std::string ItemName(int field);
+    // findString / findByName / itemCategory / classAllows of the original.
+    int FindString(const std::string& text);
+    const int* FindByName(const std::string& text);
+    int ItemCategory(const std::string& text);  // 0 weapon, 2 consumable, 1 armour, -1 none
+    bool ClassAllows(int classId, int type) const;
 
 private:
     void Reset();

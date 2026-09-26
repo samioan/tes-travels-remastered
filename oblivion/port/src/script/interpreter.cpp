@@ -4,6 +4,8 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "world/items.h"
+
 namespace oblivion {
 
 namespace {
@@ -117,6 +119,40 @@ std::string ScriptInterpreter::ItemName(int field) {
     return "";
 }
 
+int ScriptInterpreter::FindString(const std::string& text) {
+    for (size_t i = 0; i < t_.strings.size(); i++)
+        if (t_.strings[i] == text) return static_cast<int>(i);
+    const int id = host_.StringId(text);
+    return id == -1 ? -1 : (0xF000 | id);
+}
+
+const int* ScriptInterpreter::FindByName(const std::string& text) {
+    const int s = FindString(text);
+    if (s == -1) return nullptr;
+    for (auto& r : t_.weapons) if (r[1] == s && r[0] != 0) return r;
+    for (auto& r : t_.consumables) if (r[1] == s && r[0] != 0) return r;
+    for (auto& r : t_.armors) if (r[1] == s && r[0] != 0) return r;
+    for (auto& r : t_.classBase) if (r[1] == s && r[0] != 0) return r;
+    for (auto& r : t_.specials) if (r[1] == s && r[0] != 0) return r;
+    return nullptr;
+}
+
+int ScriptInterpreter::ItemCategory(const std::string& text) {
+    const int s = FindString(text);
+    if (s == -1) return -1;
+    for (auto& r : t_.weapons) if (r[1] == s && r[0] != 0) return 0;
+    for (auto& r : t_.consumables) if (r[1] == s && r[0] != 0) return 2;
+    for (auto& r : t_.armors) if (r[1] == s && r[0] != 0) return 1;
+    return -1;
+}
+
+bool ScriptInterpreter::ClassAllows(int classId, int type) const {
+    if (classId < 0 || classId >= 9) return false;
+    for (int v : t_.classItemTypes[classId])
+        if (v == type) return true;
+    return false;
+}
+
 std::string ScriptInterpreter::Str(const ScrString& s) {
     return s.isId ? host_.GetString(s.id) : s.text;
 }
@@ -159,13 +195,13 @@ void ScriptInterpreter::Step(int dtMs) {
                 if (walkAxis_ != 0 && walkAxis_ != 1) ActorSystem::SetMoveTarget(*a, walkTarget_[0], a->pos[1]);
                 else ActorSystem::SetMoveTarget(*a, a->pos[0], walkTarget_[1]);
                 ActorSystem::SetAnimState(*a, 2);
-                ActorSystem::SetStat(*a, 7, 900);
+                Items::SetStat(*a, 7, 900, *this);
                 walkPhase_ = 1;
                 return;
             case 1:
                 if (a->moveTarget[0] == -1) {
                     ActorSystem::SetAnimState(*a, 3);
-                    ActorSystem::SetStat(*a, 7, 400);
+                    Items::SetStat(*a, 7, 400, *this);
                     ActorSystem::SetMoveTarget(*a, walkTarget_[0], walkTarget_[1]);
                     walkPhase_ = 2;
                 }
@@ -260,13 +296,21 @@ void ScriptInterpreter::Step(int dtMs) {
             if (Actor* x = host_.ActorAt(a[0])) x->deathScript = -1;
             return;
         case OP_SET_STAT:
-            if (Actor* x = host_.ActorAt(a[0])) ActorSystem::SetStat(*x, a[1], a.size() > 2 ? a[2] : 0);
+            if (Actor* x = host_.ActorAt(a[0])) Items::SetStat(*x, a[1], a.size() > 2 ? a[2] : 0, *this);
             return;
         case OP_SET_POSITION:
             if (Actor* x = host_.ActorAt(a[0])) ActorSystem::SetPosition(*x, a[1], a[2]);
             return;
-        case OP_GIVE_ITEM: host_.Unimplemented("GIVE_ITEM"); return;
-        case OP_REMOVE_ITEM: host_.Unimplemented("REMOVE_ITEM"); return;
+        case OP_GIVE_ITEM:
+        case OP_REMOVE_ITEM: {
+            Actor* x = host_.ActorAt(a[0]);
+            static const int kTable[3] = {4, 1, 2};  // weapons, armours, consumables
+            if (!x || a[1] < 0 || a[1] > 2) return;
+            const int* row = GetRow(kTable[a[1]], a[2]);
+            if (op == OP_GIVE_ITEM) Items::AddItem(*x, a[1], row, *this);
+            else Items::RemoveItem(*x, a[1], row, *this);
+            return;
+        }
         case OP_SHOW_MESSAGE: host_.ShowMessage(Str(in.strings[0]), a[0], a[1], a[2]); return;
         case OP_HIDE_MESSAGE: host_.HideMessage(); return;
         case OP_MOVE_ACTOR_X:

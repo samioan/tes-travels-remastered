@@ -4,6 +4,7 @@
 #include <cctype>
 
 #include "graphics/text.h"
+#include "world/items.h"
 #include "render/sprite_renderer.h"
 
 namespace oblivion {
@@ -11,6 +12,10 @@ namespace oblivion {
 namespace {
 
 using Text::Face;
+
+// ActorSystem.xpForLevel
+const std::vector<int> kXpForLevel = {0, 0, 100, 210, 340, 500, 700, 950, 1260, 1640, 2100, 2650, 3300,
+                                      4060, 4940, 5950, 7100, 8400, 9860, 11490, 13300, 15300, 17500, 19910, 22540, 25400};
 
 constexpr int kW = Backbuffer::kWidth;
 constexpr int kH = Backbuffer::kHeight;
@@ -38,6 +43,8 @@ void DrawCentered(Backbuffer& bb, const std::string& s, int y, uint32_t color, F
 GameApp::GameApp(const AssetRoot& assets, ImageCache& images)
     : assets_(assets), images_(images), world_(assets, images) {
     playerSprites_ = ParseCml(assets.Read("/oh_pc.cml"), images);
+    dialogue_ = std::make_unique<DialogueScreen>(ParseCml(assets.Read("/oh_menu.cml"), images), images, world_.strings());
+    dialogue_->onSelected = [this](DialogueNode& n) { MenuSelected(n); };
     world_.onStateChange = [this](int o, int n) { OnStateChange(o, n); };
     world_.onLoadLevel = [this]() {
         textScrollY_ = kH - (FontH(Face::SmallBold) << 3);
@@ -226,7 +233,8 @@ void GameApp::ActivateMenuItem() {
     } else if (item == S(522) || item == S(459) || item == S(460) || item == S(461) || item == S(462)) {
         OpenHelp(item == S(522) ? 522 : item == S(459) ? 459 : item == S(460) ? 460 : item == S(461) ? 461 : 462);
     } else if (item == S(18)) {  // Go Shopping
-        world_.Unimplemented("shop screen (M6c)");
+        OpenShop();
+        world_.SetState(1);
     } else if (item == S(20)) {  // Continue playing (shop menu)
         world_.SetState(0);
     } else if (menuId_ == 1) {  // class chosen
@@ -273,14 +281,45 @@ void GameApp::HandleKey(Key key, int code) {
     switch (state) {
         case 0:
             if (key == Key::SoftRight) {
-                if (world_.player() && world_.hudVisible()) world_.Unimplemented("inventory screen (M6c)");
+                if (world_.player() && world_.hudVisible()) {
+                    OpenInventory();
+                    world_.SetState(2);
+                }
             } else if (key == Key::SoftLeft) {
                 BuildMenus();
                 menuId_ = 5;
                 for (int& s : menuSelection_) s = 0;
                 world_.SetState(3);
+            } else if (Actor* p = world_.player()) {
+                const int act = MapKey(key, code);
+                if (!world_.dialogue.open && world_.inputEnabled() && p->dead == 0) {
+                    if (act == 0) Items::QuaffPotion(*p, true, world_.script());
+                    else if (act == 1) Items::QuaffPotion(*p, false, world_.script());
+                    else if (act == 2) {  // handleAction(2): toggle the alternative special
+                        p->special = (p->special == nullptr && p->altSpecial != nullptr) ? p->altSpecial : nullptr;
+                        Items::UpdateSpecialIcon(*p);
+                    }
+                }
             }
             break;
+        case 1:
+        case 2: {
+            const int act = MapKey(key, code);
+            if (key == Key::SoftLeft) {
+                if (state == 1) {
+                    dialogue_->open = false;
+                    world_.scriptPaused = false;
+                    world_.SetState(3);
+                } else if (!dialogue_->GoBack()) {
+                    dialogue_->open = false;
+                    world_.scriptPaused = false;
+                    world_.SetState(0);
+                }
+            } else if (key != Key::SoftRight && dialogue_->open && act >= 3) {
+                dialogue_->HandleKey(act);
+            }
+            break;
+        }
         case 3:
             HandleMenuKey(MapKey(key, code) == 5 ? Key::Left : MapKey(key, code) == 6 ? Key::Right
                           : MapKey(key, code) == 7 ? Key::Fire : key);
@@ -345,6 +384,234 @@ void GameApp::HandleMenuKey(Key key) {
         else if (menuId_ == 1) menuId_ = stateFlagF_ ? 5 : 0;
     } else if (key == Key::Fire) {
         ActivateMenuItem();
+    }
+}
+
+// ---- inventory / shop --------------------------------------------------------
+
+namespace {
+
+std::string Num(int v) { return std::to_string(v); }
+
+DialogueNode* AddNode(DialogueNode* parent, const std::string& text, const std::string* tooltip, bool marked) {
+    auto n = std::make_unique<DialogueNode>(text);
+    n->marked = marked;
+    if (tooltip) {
+        n->tooltip = *tooltip;
+        n->hasTooltip = true;
+    }
+    return parent->Add(std::move(n));
+}
+
+}  // namespace
+
+// Game.openInventory: Arms / Armor / Items / Character tabs.
+void GameApp::OpenInventory() {
+    Actor* p = world_.player();
+    if (!p) return;
+    ScriptInterpreter& sc = world_.script();
+    std::vector<std::unique_ptr<DialogueNode>> roots;
+    roots.push_back(std::make_unique<DialogueNode>(S(25)));
+    roots.push_back(std::make_unique<DialogueNode>(S(26)));
+    roots.push_back(std::make_unique<DialogueNode>(S(27)));
+    roots.push_back(std::make_unique<DialogueNode>(S(394)));
+    DialogueNode* arms = roots[0].get();
+    DialogueNode* armor = roots[1].get();
+    DialogueNode* items = roots[2].get();
+    DialogueNode* sheet = roots[3].get();
+    DialogueNode* slots[8];
+    for (int i = 0; i < 8; i++) slots[i] = AddNode(armor, S(28 + i), nullptr, false);
+
+    static const int kClassName[9] = {0, 9, 10, 11, 12, 13, 14, 15, 16};
+    const std::string className = p->classId >= 1 && p->classId <= 8 ? S(kClassName[p->classId]) : std::string();
+    const auto& xp = kXpForLevel;
+    sheet->hasAnswer = true;
+    sheet->answerLines = {
+        S(443) + ": ", className,
+        S(17) + ": ", Num(p->level),
+        S(441) + ": ", Num(p->xp),
+        S(442) + ": ", p->level < 25 ? Num(xp[static_cast<size_t>(p->level) + 1] - p->xp) : "0",
+        S(415) + ": ", Num(p->strength * 3),
+        S(416) + ": ", Num(p->intelligence * 3),
+        S(417) + ": ", Num(p->willpower * 3),
+        S(418) + ": ", Num(p->agility * 3),
+        S(419) + ": ", Num(p->endurance * 3),
+        S(420) + ": ", Num(p->personality * 3),
+        S(431) + ": ", Num(p->defenseRating * 3),
+        S(432) + ": ", Num(p->attackRating * 3),
+        S(563) + ": ", "42",
+        S(562) + ": ", "40",
+        S(38) + ": ", Num(world_.gold)};
+
+    bool armorSlotEquipped[8] = {};
+    bool weaponMarked = false, hpMarked = false, mpMarked = false;
+    equippedWeaponNode_ = equippedSpellNode_ = nullptr;
+    for (int i = 0; i < 255 && p->inventory[i] != 0; i++) {
+        const int cat = (p->inventory[i] >> 8) & 0xFF, id = p->inventory[i] & 0xFF;
+        if (cat == 0) {
+            const int* w = sc.GetRow(4, id);
+            if (!w) continue;
+            const bool bow = w[2] == 4;
+            const std::string tip = S(432) + ": " + Num(w[3]);
+            const bool equipped = Items::IsWeaponRowEquipped(*p, w, false) && !weaponMarked;
+            DialogueNode* n = AddNode(arms, (bow ? S(400) : S(305)) + sc.ItemName(w[1]), &tip, equipped);
+            n->available = Items::CanUseItem(*p, 0, w, sc);
+            if (!bow && Items::IsWeaponRowEquipped(*p, w, false)) equippedWeaponNode_ = n;
+            weaponMarked |= Items::IsWeaponRowEquipped(*p, w, false);
+        } else if (cat == 1) {
+            const int* r = sc.GetRow(1, id);
+            if (!r || r[3] < 0 || r[3] > 7) continue;
+            const bool worn = Items::HasArmor(*p, r[0]);
+            const std::string tip = S(444) + ": " + Num(r[4]);
+            DialogueNode* n = AddNode(slots[r[3]], sc.ItemName(r[1]), &tip, worn && !armorSlotEquipped[r[3]]);
+            n->available = Items::CanUseItem(*p, 1, r, sc);
+            armorSlotEquipped[r[3]] |= worn;
+        } else if (cat == 2) {
+            const int* r = sc.GetRow(2, id);
+            if (!r) continue;
+            DialogueNode* n = AddNode(items, sc.ItemName(r[1]), nullptr, false);
+            if (r == p->hpPotion && !hpMarked) {
+                n->marked = true;
+                hpMarked = true;
+            }
+            if (r == p->mpPotion && !mpMarked) {
+                n->marked = true;
+                mpMarked = true;
+            }
+        }
+    }
+    if (p->classList) {
+        for (int i = 0; i < 15 && p->classList[i] != -1; i++) {
+            const int* sp = sc.GetRow(8, p->classList[i]);
+            if (!sp) continue;
+            const bool eq = Items::IsWeaponRowEquipped(*p, sp, true);
+            DialogueNode* n = AddNode(arms, S(304) + sc.ItemName(sp[1]), nullptr, eq);
+            if (eq) equippedSpellNode_ = n;
+        }
+    }
+    dialogue_->OpenTabs({4, 1, 2, 3, 18}, std::move(roots), nullptr);
+    world_.scriptPaused = true;
+}
+
+// Game.openShop: Buy (the level's shop list, a pair table) and Sell (the inventory).
+void GameApp::OpenShop() {
+    Actor* p = world_.player();
+    ScriptInterpreter& sc = world_.script();
+    std::vector<std::unique_ptr<DialogueNode>> roots;
+    roots.push_back(std::make_unique<DialogueNode>(S(36)));
+    roots.push_back(std::make_unique<DialogueNode>(S(37)));
+    DialogueNode* buy = roots[0].get();
+    DialogueNode* sell = roots[1].get();
+    const int* list = sc.GetRow(7, 0);
+    const std::string coin = S(38);
+    for (int i = 0; list[i] != -1;) {
+        const int type = list[i++];
+        const int id = list[i++];
+        if (type == 0) {
+            const int* w = sc.GetRow(4, id);
+            if (!w) continue;
+            const std::string tip = S(432) + ": " + Num(w[3]);
+            AddNode(buy, sc.ItemName(w[1]) + " : " + Num(w[7]) + " " + coin, &tip, false)->available =
+                p && Items::CanUseItem(*p, 0, w, sc);
+        } else if (type == 1) {
+            const int* r = sc.GetRow(1, id);
+            if (!r) continue;
+            const std::string tip = S(444) + ": " + Num(r[4]);
+            AddNode(buy, sc.ItemName(r[1]) + " : " + Num(r[9]) + " " + coin, &tip, false)->available =
+                p && Items::CanUseItem(*p, 1, r, sc);
+        } else if (type == 2) {
+            const int* r = sc.GetRow(2, id);
+            if (r) AddNode(buy, sc.ItemName(r[1]) + " : " + Num(r[13]) + " " + coin, nullptr, false);
+        }
+    }
+    if (p) {
+        for (int i = 0; i < 255 && p->inventory[i] != 0; i++) {
+            const int cat = (p->inventory[i] >> 8) & 0xFF, id = p->inventory[i] & 0xFF;
+            if (cat == 0) {
+                const int* w = sc.GetRow(4, id);
+                if (!w) continue;
+                const std::string tip = S(432) + ": " + Num(w[3]);
+                AddNode(sell, sc.ItemName(w[1]) + " : " + Num(w[7] >> 2) + " " + coin, &tip, false)->available =
+                    Items::CanUseItem(*p, 0, w, sc);
+            } else if (cat == 1) {
+                const int* r = sc.GetRow(1, id);
+                if (!r) continue;
+                const std::string tip = S(444) + ": " + Num(r[4]);
+                AddNode(sell, sc.ItemName(r[1]) + " : " + Num(r[9] >> 2) + " " + coin, &tip, false)->available =
+                    Items::CanUseItem(*p, 1, r, sc);
+            } else if (cat == 2) {
+                const int* r = sc.GetRow(2, id);
+                if (r) AddNode(sell, sc.ItemName(r[1]) + " : " + Num(r[13] >> 2) + " " + coin, nullptr, false);
+            }
+        }
+    }
+    const std::string caption = coin + " : " + Num(world_.gold);
+    dialogue_->OpenTabs({17, 15, 16}, std::move(roots), &caption);
+    world_.scriptPaused = true;
+}
+
+// Game.menuSelected: a leaf was chosen in the inventory or the shop.
+void GameApp::MenuSelected(DialogueNode& node) {
+    Actor* p = world_.player();
+    ScriptInterpreter& sc = world_.script();
+    const std::string text = node.text;
+    const std::string parent = node.parent ? node.parent->text : std::string();
+    // "Name : price coin": the price sits after ": ", the name before " : ".
+    auto priceOf = [&](int* namePos) {
+        const size_t colon = text.find(':');
+        const size_t start = colon == std::string::npos ? 0 : colon + 2;
+        const size_t end = text.find(' ', start);
+        *namePos = static_cast<int>(start) - 3;
+        return std::atoi(text.substr(start, end == std::string::npos ? std::string::npos : end - start).c_str());
+    };
+    if (parent == S(36)) {  // Buy
+        int np;
+        const int price = priceOf(&np);
+        if (world_.gold >= price) {
+            world_.gold -= price;
+            const std::string name = text.substr(0, static_cast<size_t>(std::max(0, np)));
+            const int cat = sc.ItemCategory(name);
+            const int* row = sc.FindByName(name);
+            if (row && p) {
+                Items::AddItem(*p, cat, row, sc);
+                OpenShop();
+            }
+        }
+        node.marked = false;
+        dialogue_->caption = S(38) + " : " + Num(world_.gold);
+    } else if (parent == S(37)) {  // Sell
+        int np;
+        const int price = priceOf(&np);
+        if (p) {
+            const std::string name = text.substr(0, static_cast<size_t>(std::max(0, np)));
+            const int cat = sc.ItemCategory(name);
+            if (const int* row = sc.FindByName(name)) Items::RemoveItem(*p, cat, row, sc);
+            DialogueNode* par = node.parent;
+            const bool last = !par->children.empty() && par->children.back().get() == &node;
+            if (last) dialogue_->HandleKey(3);
+            for (size_t i = 0; i < par->children.size(); i++)
+                if (par->children[i].get() == &node) {
+                    par->children.erase(par->children.begin() + static_cast<std::ptrdiff_t>(i));
+                    break;
+                }
+        }
+        world_.gold += price;
+        dialogue_->caption = S(38) + " : " + Num(world_.gold);
+        return;  // the node is gone
+    } else if (parent == S(26)) {  // Armor tab header rows
+        node.marked = false;
+    } else if (parent == S(25)) {  // Arms: weapon or spell
+        if (p && Items::EquipFromString(*p, text, sc, world_.strings())) {
+            if (equippedWeaponNode_) equippedWeaponNode_->marked = true;
+            equippedSpellNode_ = &node;
+        } else {
+            if (equippedSpellNode_) equippedSpellNode_->marked = true;
+            equippedWeaponNode_ = &node;
+        }
+    } else if (parent == S(27)) {  // Items
+        if (p) Items::UseConsumable(*p, sc.FindByName(text), sc, world_.strings());
+    } else if (p) {  // an armour piece under one of the body-part rows
+        Items::EquipArmor(*p, sc.FindByName(text), sc);
     }
 }
 
@@ -442,6 +709,8 @@ void GameApp::Tick(int dt) {
     if (state == 0) world_.HeldAction(action, dt);
     if (action) world_.KeyPressed(action);
 
+    world_.scriptPaused = dialogue_->open;
+    if (dialogue_->open) dialogue_->Tick(dt);
     world_.Tick(dt);
 
     if (blinkTimer_ >= 0) {
@@ -520,6 +789,11 @@ void GameApp::Draw(Backbuffer& bb) {
         case 21:
         case 23:
             DrawTextScreen(bb);
+            break;
+        case 1:
+        case 2:
+            bb.Fill(0);
+            if (dialogue_->open) dialogue_->Paint(bb);
             break;
         case 5:
             DrawControls(bb);

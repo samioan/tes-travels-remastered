@@ -52,6 +52,23 @@ struct Actor {
     int strength = 0, intelligence = 0, willpower = 0, agility = 0, endurance = 0, personality = 0;
     int sightRange = 0, attackRange = 0, attackInterval = 1000;
     int hp = 1, maxHp = 100, mp = 1, maxMp = 100, bonusMaxHp = 0, bonusMaxMp = 0, buffStrength = 0;
+    int hpRegenInterval = 400, mpRegenInterval = 400;  // ms per point: 40000 / max
+    int xp = 0;
+
+    // Equipment and derived combat numbers (ActorSystem.recalcDerivedStats).
+    int weaponPower = 0, armor = 0, dodgeChance = 0, blockChance = 0, defenseRating = 100, attackRating = 100;
+    int dodgeScale = 100, buffAttack = 0, buffArmor = 0, buffDefense = 0, buffAttack2 = 0;
+    int itemBuffElapsed = 0, itemBuffDuration = 0, dotRemaining = 0, dotTick = 0;
+    // 255 packed slots (category << 8) | id: 0 weapon, 1 armour, 2 consumable; 0 = empty.
+    int inventory[255] = {};
+    int wornArmor[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+    // Rows of the script tables (stable arrays owned by the interpreter).
+    const int* hpPotion = nullptr;
+    const int* mpPotion = nullptr;
+    const int* special = nullptr;
+    const int* altSpecial = nullptr;
+    const int* classRow = nullptr;
+    const int* classList = nullptr;
     std::string name;
 
     std::string cmlPath;

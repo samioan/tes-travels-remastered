@@ -102,16 +102,22 @@ Canvas for its size, so this is a port decision).
   `mapKey`). `--keys up,down,fire,softl,...,<digit>` drives a headless run
   for screenshots.
 
+- **M6c -- inventory, shop, item logic** (`world/items`, `game/dialogue_screen`,
+  `GameApp`): the equipment half of `ActorSystem` (`addItem`/`removeItem`,
+  `canUseItem`, equip, `useConsumable`, `quaffPotion`, `equipFromString`,
+  `setClass`, `initFromTemplate`, `recalcDerivedStats` with the per-class
+  level-step tables) drives `DialogueScreen` (tabs, scrolling, tooltip box,
+  horizontal text scroll) for the inventory (Arms / Armor / Items /
+  Character) and the shop (Buy / Sell, prices, gold, class availability).
+  Quick-use keys (potions, toggle special) work. The `*_cr` between-level
+  scripts now run through the shop menu.
+
 ## Next
 
-- **M6c -- inventory and shop** (states 1, 2): `DialogueScreen` (tabbed
-  menus, description panel, scrolling) plus `Game.openInventory/openShop`.
-  These sit on the item logic of `ActorSystem` (`addItem`, equip,
-  `useConsumable`, `canUseItem`, `recalcDerivedStats`), so they are built
-  together with the first half of M7. The five `*_cr` between-level scripts
-  wait for the shop.
-- **M7 -- combat/AI/leveling:** the rest of `ActorSystem`, `ProjectileManager`
-  and the procedural dungeon generator (`Game.generateDungeon`).
+- **M7 -- combat, AI, projectiles, dungeon:** `ActorSystem.update` (regen,
+  poison, AI think/attack/teleport, floating text, death), `attack`/`applyDamage`,
+  XP and level-up, specials, `ProjectileManager`, pickups (`PLACE_ITEM`), loot
+  drops, and the procedural dungeon generator (`Game.generateDungeon`).
 - **M8 -- save/load, fonts, audio, packaging** (the original stores one
   RecordStore, "ESO"; see `Game.saveGame`). Audio: none found in the jar so far.
 
