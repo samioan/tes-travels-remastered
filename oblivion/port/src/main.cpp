@@ -14,6 +14,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -85,9 +87,17 @@ oblivion::Key HeldKey() {
 }  // namespace
 
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
-    std::string assetDir = "../../extracted";  // from oblivion/port/build/
-    std::string fontDir = "../assets/fonts";    // Nokia ROM fonts, user-provided (see .gitignore)
-    std::string level, then, dump, keys;
+    // Defaults: a packaged copy keeps `extracted/` and `fonts/` next to the exe; a
+    // dev build finds them from oblivion/port/build/. Both are user-provided
+    // (the game's data and the Nokia ROM fonts are not redistributed).
+    auto firstExisting = [](std::initializer_list<const char*> dirs, const char* probe) {
+        for (const char* d : dirs)
+            if (std::filesystem::exists(std::filesystem::path(d) / probe)) return std::string(d);
+        return std::string(*dirs.begin());
+    };
+    std::string assetDir = firstExisting({"extracted", "../../extracted"}, "startup.scr");
+    std::string fontDir = firstExisting({"fonts", "../assets/fonts"}, ".");
+    std::string level, then, dump, keys, savePath;
     int runMs = 6000, runScript = -1;
     for (int i = 1; i < __argc; i++) {
         auto narrow = [](const wchar_t* w) {
@@ -100,6 +110,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         if (a == "--assets") assetDir = next();
         else if (a == "--fonts") fontDir = next();
         else if (a == "--level") level = next();
+        else if (a == "--save") savePath = next();  // save record file (default: %APPDATA%/OblivionPort/oblivion.eso)
         else if (a == "--then") then = next();  // after --level has played, load this level too
         else if (a == "--script") runScript = std::atoi(next().c_str());  // with --then: run this script id too
         else if (a == "--dump") dump = next();
@@ -113,6 +124,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         oblivion::ImageCache images(assets);
         oblivion::GameApp app(assets, images);
         oblivion::Backbuffer bb;
+        // Headless runs (--dump) only touch a save when told to.
+        if (savePath.empty() && dump.empty()) {
+            const char* appdata = std::getenv("APPDATA");
+            savePath = std::string(appdata ? appdata : ".") + "/OblivionPort/oblivion.eso";
+        }
+        app.SetSavePath(savePath);
 
         if (!level.empty()) app.StartLevel(level);
         else if (!keys.empty()) app.StartMenu();

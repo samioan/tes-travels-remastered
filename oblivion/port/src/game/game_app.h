@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,15 @@ public:
     // Boots and fast-forwards the splash screens to the main menu (for tests / --keys).
     void StartMenu();
 
+    // Where the save record lives (the original's RecordStore "ESO", record 1).
+    // Empty (the default) disables persistence, which keeps tests off real saves.
+    void SetSavePath(std::string path) { savePath_ = std::move(path); }
+    bool HasSavedGame() const;
+    // Game.saveGame / loadGame: key bindings, sound flag, current level and the
+    // player. loadGame(false) (start-up) restores settings and player only.
+    void SaveGame();
+    void LoadGame(bool enterLevel);
+
     void OnKeyDown(Key key, int code = 0);
     // The key currently held (movement, text scrolling); Key::None if none.
     void SetHeldKey(Key key, int code = 0) {
@@ -72,6 +82,7 @@ private:
     void ActivateMenuItem();
     void BuildMenus();
     void StartNewGame();
+    std::vector<uint8_t> ReadSave() const;
     void ResetMenu();
     void SetTextScreen(const std::string& text);
     std::string S(int id) const { return world_.strings().Get(id); }
@@ -101,6 +112,7 @@ private:
     bool stateFlagF_ = false;  // true once the player has left the playing state
     std::shared_ptr<Image> titleImage_;
     bool newGameLocked_ = false;
+    std::string savePath_;
 
     // text screens
     std::vector<std::vector<std::string>> textLines_;

@@ -100,6 +100,10 @@ public:
         for (auto& a : actors_) a.reset();
     }
     Actor* player() { return player_.get(); }
+    // ActorSystem.serialize / fromRecord: the player as stored in the save record
+    // (gold included). Restore returns false on a truncated record.
+    void SerializePlayer(std::vector<uint8_t>& out) const;
+    bool RestorePlayer(const std::vector<uint8_t>& data, size_t offset);
     const std::string& currentLevel() const { return currentLevel_; }
     const std::map<std::string, int>& unimplemented() const { return unimplemented_; }
     const LevelView& view() const { return view_; }

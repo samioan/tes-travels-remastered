@@ -1,5 +1,9 @@
 #include "game/game_app.h"
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+
 #include <algorithm>
 #include <cctype>
 
@@ -63,10 +67,13 @@ GameApp::GameApp(const AssetRoot& assets, ImageCache& images)
     textScrollY_ = kH - (FontH(Face::SmallBold) << 3);
 }
 
-void GameApp::Start() { world_.Boot(); }
+void GameApp::Start() {
+    world_.Boot();
+    LoadGame(false);  // Game's constructor: restore the settings and the saved player
+}
 
 void GameApp::StartMenu() {
-    world_.Boot();
+    Start();
     // Fast-forward the splash screens the way a player mashing keys would.
     for (int ms = 0; world_.state() != 3 && ms < 60000; ms += 16) {
         if (ms % 1100 < 16) world_.KeyPressed(7);
@@ -168,9 +175,13 @@ void GameApp::BuildMenus() {
                  "/l09_9_cr.scr", "/l10_10_cr.scr", "/l11_11_cr.scr", "/l12_12.scr"};
     menus_[4] = {S(18), S(19), S(20)};
     menus_[6] = {S(457), S(458), S(573), S(522), S(459), S(460), S(461), S(462)};
-    // No save file support yet (M8): hasSavedGame() is always false.
-    menus_[0] = {S(2), S(456), S(6), S(22)};
-    menus_[5] = {S(21), S(2), S(456), S(6), S(22)};
+    const bool saved = HasSavedGame();
+    menus_[0] = {S(2)};
+    if (saved) menus_[0].push_back(S(3));
+    for (int id : {456, 6, 22}) menus_[0].push_back(S(id));
+    menus_[5] = {S(21), S(2)};
+    if (saved) menus_[5].push_back(S(3));
+    for (int id : {456, 6, 22}) menus_[5].push_back(S(id));
     optionLabels_ = {S(292), S(293), S(463), S(294)};
     const ScrTables& t = world_.script().tables();
     for (int i = 0; i < 9; i++)
@@ -180,6 +191,61 @@ void GameApp::BuildMenus() {
 void GameApp::ResetMenu() {
     for (int& s : menuSelection_) s = 0;
     menuId_ = stateFlagF_ ? 5 : 0;
+}
+
+// ---- save record -----------------------------------------------------------
+// Layout (Game.saveGame): 3 key bindings, sound flag, has-player flag, then for
+// a player: level path length + path, ActorSystem.serialize.
+
+std::vector<uint8_t> GameApp::ReadSave() const {
+    std::vector<uint8_t> data;
+    if (savePath_.empty()) return data;
+    std::ifstream f(savePath_, std::ios::binary);
+    if (f) data.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    return data;
+}
+
+bool GameApp::HasSavedGame() const {
+    const std::vector<uint8_t> d = ReadSave();
+    return d.size() > 4 && d[4] == 1;
+}
+
+void GameApp::SaveGame() {
+    if (savePath_.empty()) return;
+    std::vector<uint8_t> out;
+    for (int k : keyBindings_) out.push_back(static_cast<uint8_t>(k));
+    out.push_back(1);  // sound flag (the port has no audio)
+    if (!world_.player()) {
+        out.push_back(0);
+    } else {
+        out.push_back(1);
+        const std::string& level = world_.currentLevel();
+        out.push_back(static_cast<uint8_t>(level.size()));
+        out.insert(out.end(), level.begin(), level.end());
+        world_.SerializePlayer(out);
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(savePath_).parent_path(), ec);
+    std::ofstream f(savePath_, std::ios::binary | std::ios::trunc);
+    if (f) f.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size()));
+}
+
+// loadGame(false) at start-up restores settings and the player only; loadGame(true)
+// (the Load Game prompt) also re-enters the saved level.
+void GameApp::LoadGame(bool enterLevel) {
+    const std::vector<uint8_t> d = ReadSave();
+    if (d.size() < 5) return;
+    for (int i = 0; i < 3; i++) keyBindings_[i] = d[static_cast<size_t>(i)];  // d[3] is the sound flag
+    if (d[4] != 1 || d.size() < 6) return;
+    const size_t len = d[5];
+    if (d.size() < 6 + len) return;
+    const std::string level(d.begin() + 6, d.begin() + 6 + static_cast<std::ptrdiff_t>(len));
+    if (enterLevel) {
+        loadProgress_ = 0;
+        world_.SetState(6);
+        world_.LoadLevel(level);
+    }
+    world_.RestorePlayer(d, 6 + len);
 }
 
 void GameApp::StartNewGame() {
@@ -199,21 +265,17 @@ void GameApp::ActivateMenuItem() {
         world_.SetState(6);
         world_.ForgetPlayer();
         world_.LoadLevel(menus_[3][menuSelection_[2]]);
-    } else if (item == S(19)) {  // Save Game (M8)
-        world_.Unimplemented("save game (M8)");
+    } else if (item == S(19)) {  // Save Game
+        SaveGame();
         menuSelection_[menuId_] = 2;
         world_.SetState(13);
-    } else if (item == S(3)) {  // Load Game (M8)
+    } else if (item == S(3)) {  // Load Game
         world_.SetState(14);
     } else if (item == S(21)) {  // Continue
         world_.SetState(0);
     } else if (item == S(2)) {  // New Game
-        world_.SetState(16);
-        if (world_.state() == 16) {
-            // No saved game exists, so the overwrite prompt is skipped.
-            world_.SetState(3);
-            menuId_ = 1;
-        }
+        if (HasSavedGame()) world_.SetState(16);  // "overwrite the saved game?"
+        else menuId_ = 1;
     } else if (item == S(6)) {  // About
         world_.SetState(4);
     } else if (item == S(456)) {  // Help
@@ -353,6 +415,15 @@ void GameApp::HandleKey(Key key, int code) {
             break;
         case 13:
             world_.SetState(3);
+            break;
+        case 14:
+            if (key == Key::SoftRight) {
+                LoadGame(true);
+            } else if (key == Key::SoftLeft) {
+                ResetMenu();
+                world_.SetState(3);
+                menuSelection_[0] = 1;
+            }
             break;
         case 16:
             if (key == Key::SoftRight) {
@@ -690,7 +761,7 @@ void GameApp::HandleControlsKey(Key key, int code) {
             for (int i = 0; i < 3; i++) keyBindings_[i] = keyBindingsEdit_[i];
             editingKey_ = false;
             world_.SetState(3);
-            world_.Unimplemented("save settings (M8)");
+            SaveGame();
         } else {
             editingKey_ = true;
         }

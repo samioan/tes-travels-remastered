@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(oblivion_port CXX C)
+# Static CRT: the packaged exe runs without the VC++ redistributable.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,6 +47,7 @@ add_library(oblivion_world STATIC
   src/world/combat.cpp
   src/world/projectiles.cpp
   src/world/dungeon.cpp
+  src/world/player_record.cpp
   src/world/level_view.cpp
 )
 target_link_libraries(oblivion_world PUBLIC oblivion_assets)
@@ -77,3 +80,13 @@ add_test(NAME combat_smoke COMMAND combat_smoke ${CMAKE_SOURCE_DIR}/../extracted
 add_executable(dungeon_smoke src/tests/dungeon_smoke.cpp)
 target_link_libraries(dungeon_smoke PRIVATE oblivion_world)
 add_test(NAME dungeon_smoke COMMAND dungeon_smoke ${CMAKE_SOURCE_DIR}/../extracted)
+
+add_executable(save_smoke src/tests/save_smoke.cpp)
+target_link_libraries(save_smoke PRIVATE oblivion_world)
+add_test(NAME save_smoke COMMAND save_smoke ${CMAKE_SOURCE_DIR}/../extracted)
+
+# `cmake --install build-release --prefix dist` (see package.bat): just the exe
+# and the README. The game data (extracted/) and the Nokia fonts (fonts/) are
+# the user's own and are not redistributed.
+install(TARGETS oblivion_port RUNTIME DESTINATION .)
+install(FILES README.txt DESTINATION .)

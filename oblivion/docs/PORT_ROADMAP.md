@@ -136,10 +136,25 @@ Canvas for its size, so this is a port decision).
   8 seeds each and checks stairs are connected, then runs one in the world.
   Debug flags: `--then LEVEL [--script N]`, `--keys foe,hold`.
 
-## Next
+## Status
 
-- **M8 -- save/load, fonts, audio, packaging** (the original stores one
-  RecordStore, "ESO"; see `Game.saveGame`). Audio: none found in the jar so far.
+- **M8 -- save/load and packaging** (`GameApp::SaveGame/LoadGame`,
+  `world/player_record`, `port/package.bat`): the original's RecordStore "ESO"
+  record 1 is a file, byte-compatible in layout: 3 key bindings, sound flag,
+  has-player flag, level path, then `ActorSystem.serialize` (big-endian stats,
+  cml path, inventory with an equipped bit). Start-up restores settings and
+  the player (`loadGame(false)`); the main/pause menus grow a "Load Game" item
+  when a save exists, New Game asks before overwriting (state 16), the load
+  prompt (state 14) re-enters the saved level, "Save Game" and the controls
+  screen's Save write the record. Default file `%APPDATA%\OblivionPort\oblivion.eso`
+  (`--save FILE`; headless `--dump` runs never touch it). `save_smoke` round-trips
+  a levelled player. Packaging: `package.bat` builds Release with a static CRT
+  and stages the exe + README in `dist/`; game data and Nokia fonts are the
+  user's own (`extracted/`, `fonts/` next to the exe, or `--assets`/`--fonts`).
+  No audio exists in the jar (the sound flag is stored, unused).
+
+**The port is feature-complete** against the original's engine. Remaining work
+is verification and polish, not milestones.
 
 Open questions carried over from the reverse-engineering docs: `table6`,
 `pairTable`, a few opcode operands and `Game` state 4/9 meanings -- rendering

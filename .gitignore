@@ -30,6 +30,8 @@ __pycache__/
 /dawnstar/port/build-dist/
 /dawnstar/port/dist/
 /oblivion/port/build/
+/oblivion/port/build-release/
+/oblivion/port/dist/
 /stormhold/port/build/
 /stormhold/port/build-dist/
 /stormhold/port/dist/
