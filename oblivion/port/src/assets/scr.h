@@ -70,6 +70,11 @@ struct ScrTables {
     int spawnIds[10] = {};
     int spawnIdCount = 0;
     std::vector<std::string> strings;
+    // has[tag][row]: the file defined this row. The engine merges rows over the
+    // previous level's tables instead of replacing them (parseXxxRecord only
+    // overwrites the rows it reads), so the interpreter needs to know.
+    bool has[11][100] = {};
+    bool hasPairs = false;
 };
 
 struct Scr {

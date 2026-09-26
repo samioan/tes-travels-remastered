@@ -96,6 +96,8 @@ void Window::Present(const Backbuffer& bb) {
     ReleaseDC(impl_->hwnd, dc);
 }
 
+void Window::SetTitle(const std::wstring& title) { SetWindowTextW(impl_->hwnd, title.c_str()); }
+
 void Window::RequestClose() { PostMessageW(impl_->hwnd, WM_CLOSE, 0, 0); }
 
 }  // namespace oblivion

@@ -51,12 +51,34 @@ Canvas for its size, so this is a port decision).
   a player into walls on all 12 levels and checks it is never blocked. Health
   bar, floating text and status icons wait for M7.
 
+- **M5 -- script interpreter** (`script/interpreter`, `world/game_world`,
+  `assets/lang`): `ScriptInterpreter` mirrors `ScriptInterpreter.step` on the
+  decoded instructions -- call-stack of PCs, one instruction per tick, `WAIT`,
+  `WAIT_ACTORS_STOP`, walk cutscenes, `WAIT_KEY`, key hooks, dialogue/shop
+  blocking, monster scaling/restore. It talks to the game through `ScriptHost`;
+  `World` (the playing field of `Game`) implements it: level load/reset,
+  actor slots + spawn from monster-type rows, trigger/zone layers and the
+  player's enter/leave/zone scripts, camera (`updateCamera` dead zone),
+  dialogue, messages, text-screen placeholders, lang packs (`Strings`).
+  Facts learned while running real levels:
+  - `startup.scr` carries the big item/monster/class tables; level `.scr`
+    files only define a few rows and are **merged** over the previous tables
+    (`Scr::tables.has`), and the interpreter's `strings[]` persists across
+    loads (overwritten from index 0). The boot is `startup.scr` (splash
+    `END_LEVEL` images) -> `startup2.scr` (`LOAD_LANG 0`, `OPEN_MENU`); "New
+    Game" is `loadLevel("/l01_1.scr")`.
+  - `OPEN_SHOP_MENU` parks the game in state 3; the script resumes after the
+    shop closes, so the `*_cr` between-level scripts need M6.
+  - Text screens (states 9/10/4) end by scrolling off; a timer stands in.
+  `script_smoke` boots and runs all 30 level scripts headless: 22 reach the
+  playing state, 5 park on a menu/shop screen, 3 are patch scripts (`*r`).
+  `oblivion_port.exe` now boots, loads `--level`, and plays it (dialogue and
+  messages show in the window title until fonts land); `--dump --run-ms N`
+  renders after N simulated ms. Ops still skipped (recorded, not crashing):
+  `GIVE_ITEM`, `PLACE_ITEM`, `GENERATE_DUNGEON`, `SPAWN_*PROJECTILE`, menus.
+
 ## Next
 
-- **M5 -- script interpreter:** port `ScriptInterpreter.step` (call stack of PCs,
-  waits, key hooks, walk cutscenes) on top of the decoder in `assets/scr`, plus
-  the trigger layers (`SET_TRIGGER`) and level loading (`LOAD_LEVEL`,
-  `END_LEVEL`).
 - **M6 -- game loop and states:** `Game.run`/`setState`, input (softkeys,
   keypad mapping `mapKey`), the menu/help/loading screens, message line,
   dialogue box and `DialogueScreen` menus (inventory, shop).

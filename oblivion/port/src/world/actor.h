@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "assets/cml.h"
 #include "assets/image.h"
@@ -42,6 +43,15 @@ struct Actor {
 
     // Trigger tiles under the actor (checkTriggerTiles).
     int8_t enterScript = -1, leaveScript = -1;
+    int8_t zoneId = -1;
+
+    // Script-visible state (Actor.java). Derived stats and combat arrive with M7.
+    int8_t classId = -1, level = 0, aiType = -1, aiActive = 1, dropsLoot = 1, invulnerable = 0;
+    int8_t statusIcon = -1, deathScript = -1, ranged = 0, weapon = 0;
+    int strength = 0, intelligence = 0, willpower = 0, agility = 0, endurance = 0, personality = 0;
+    int sightRange = 0, attackRange = 0, attackInterval = 1000;
+    int hp = 1, maxHp = 100, mp = 1, maxMp = 100, bonusMaxHp = 0, bonusMaxMp = 0, buffStrength = 0;
+    std::string name;
 
     std::string cmlPath;
     SpriteSet sprite;
@@ -51,6 +61,10 @@ namespace ActorSystem {
 
 // animStateOffset[state] + facing = sprite group id.
 int GroupOf(const Actor& a, int state);
+
+// spriteHeight / spriteWidth of the current animation frame (0 when dead).
+int SpriteHeight(const Actor& a);
+int SpriteWidth(const Actor& a);
 
 // createFromCml: loads the sprite set and measures the footprint width from group 1.
 void Init(Actor& a, const std::string& cmlPath, int8_t slot, const SpriteSet& sprite);
@@ -69,6 +83,19 @@ bool IsBlocked(const Actor& a, const Grid& grid);
 void MoveDir(Actor& a, const Grid& grid, int dir, int dtMs);
 
 void SetMoveTarget(Actor& a, int x, int y);
+
+// setStat for the plain numeric stats (ids 2..9, 13, 14, 15, 18, 20 -- see
+// SCR_OPCODES SET_STAT) plus the max hp/mp recompute; specials (19), weapon
+// power and recalcDerivedStats come with M7.
+void SetStat(Actor& a, int stat, int value);
+// setStatusIcon: 0 none, 1..3 icons, 4 = "-2" (blank frame).
+void SetStatusIcon(Actor& a, int icon);
+
+// checkTriggerTiles: looks the actor's three footprint cells up in the enter
+// layer (0 / -1 = none) and stores the enter/leave scripts it finds. Returns
+// the enter script or -1. Layers are indexed [x * gridHeight + y].
+int8_t CheckTriggerTiles(Actor& a, const std::vector<int8_t>& enter, const std::vector<int8_t>& leave,
+                         int gridHeight);
 void SetAnimState(Actor& a, int8_t state);
 
 // The per-frame part of ActorSystem.update that concerns animation and

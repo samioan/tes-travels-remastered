@@ -26,7 +26,7 @@ void LevelView::LoadMap(const std::string& jtmPath, const std::string& cmlPath) 
     cmlPath_ = cmlPath;
     map_ = ParseJtm(assets_.Read(jtmPath));
     tiles_ = ParseCml(assets_.Read(cmlPath), images_);
-    CenterOnCell(map_.width / 2, map_.height / 2);
+    CenterOnCell(map_.width / 2, map_.height / 2);  // viewer default; World overrides
 }
 
 void LevelView::CellScreenPos(int cx, int cy, int* sx, int* sy) const {
@@ -42,6 +42,26 @@ void LevelView::CenterOnCell(int cx, int cy) {
     CellScreenPos(cx, cy, &sx, &sy);
     camX_ = Backbuffer::kWidth / 2 - sx;
     camY_ = Backbuffer::kHeight / 2 - sy;
+}
+
+void LevelView::SetTile(int x, int y, int layer, int tile) {
+    const size_t li = static_cast<size_t>(layer) + 1;
+    if (li >= map_.layers.size() || x < 0 || y < 0 || x >= map_.width || y >= map_.height) return;
+    map_.layers[li][static_cast<size_t>(x * map_.height + y)] = static_cast<uint8_t>(tile);
+}
+
+void LevelView::SetCollision(int x, int y, bool solid) {
+    if (map_.layers.empty() || x < 0 || y < 0 || x >= map_.width || y >= map_.height) return;
+    map_.layers[0][static_cast<size_t>(x * map_.height + y)] = solid ? 1 : 0;
+}
+
+void LevelView::ClearVisualLayers() {
+    if (map_.layers.size() > 1) map_.layers.resize(1);
+}
+
+void LevelView::Unload() {
+    map_ = JtmMap{};
+    tiles_ = SpriteSet{};
 }
 
 Grid LevelView::grid() const {

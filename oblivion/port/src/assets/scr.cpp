@@ -133,12 +133,14 @@ Scr ParseScr(const std::vector<uint8_t>& data) {
                 t.pairTable[i++] = c.S8();
             }
             t.pairTable[i] = -1;
+            t.hasPairs = true;
             c.p++;
             continue;
         }
         if (tag > 10 || tag == 3) throw std::runtime_error("scr: unknown table tag");
         int row[21] = {0}, list2[15] = {0}, list3[15] = {0};
         int idx = ParseRecord(c, tag, t, row, list2, list3);
+        if (idx >= 0 && idx < 100) t.has[tag][idx] = true;
         switch (tag) {
             case 0: PutRow(t.monsterTypes, idx, row); break;
             case 1: PutRow(t.armors, idx, row); break;

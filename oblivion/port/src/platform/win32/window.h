@@ -29,6 +29,7 @@ public:
 
     void Present(const Backbuffer& backbuffer);
     void RequestClose();
+    void SetTitle(const std::wstring& title);
 
     struct Impl;
 

@@ -24,6 +24,7 @@ add_library(oblivion_assets STATIC
   src/assets/cml.cpp
   src/assets/image.cpp
   src/assets/jtm.cpp
+  src/assets/lang.cpp
   src/assets/scr.cpp
 )
 target_include_directories(oblivion_assets PUBLIC src)
@@ -32,7 +33,9 @@ target_link_libraries(oblivion_assets PUBLIC stb_image)
 # Rendering + the static level view.
 add_library(oblivion_world STATIC
   src/render/sprite_renderer.cpp
+  src/script/interpreter.cpp
   src/world/actor.cpp
+  src/world/game_world.cpp
   src/world/level_view.cpp
 )
 target_link_libraries(oblivion_world PUBLIC oblivion_assets)
@@ -53,3 +56,7 @@ add_test(NAME asset_smoke COMMAND asset_smoke ${CMAKE_SOURCE_DIR}/../extracted)
 add_executable(actor_smoke src/tests/actor_smoke.cpp)
 target_link_libraries(actor_smoke PRIVATE oblivion_world)
 add_test(NAME actor_smoke COMMAND actor_smoke ${CMAKE_SOURCE_DIR}/../extracted)
+
+add_executable(script_smoke src/tests/script_smoke.cpp)
+target_link_libraries(script_smoke PRIVATE oblivion_world)
+add_test(NAME script_smoke COMMAND script_smoke ${CMAKE_SOURCE_DIR}/../extracted)

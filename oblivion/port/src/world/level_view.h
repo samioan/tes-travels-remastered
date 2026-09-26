@@ -43,6 +43,16 @@ public:
     int camY() const { return camY_; }
     void Pan(int dx, int dy) { camX_ += dx; camY_ += dy; }
 
+    // Script edits (Game.setTile / setCollision / clearLayers). `layer` is the
+    // engine's layer index: visual layers only, so map layer + 1.
+    void SetTile(int x, int y, int layer, int tile);
+    void SetCollision(int x, int y, bool solid);
+    void ClearVisualLayers();
+    // Drops the loaded map (Game.loadLevel sets collision = null).
+    void Unload();
+    bool loaded() const { return !map_.layers.empty(); }
+    void SetCamera(int x, int y) { camX_ = x; camY_ = y; }
+
     // Collision data for ActorSystem::IsBlocked (jtm layer 0).
     Grid grid() const;
 

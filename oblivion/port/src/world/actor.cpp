@@ -78,6 +78,9 @@ bool FootBlocked(const Grid& grid, const int8_t cell[2], const int p[2]) {
 
 int GroupOf(const Actor& a, int state) { return a.facing + kAnimStateOffset[state]; }
 
+int SpriteHeight(const Actor& a) { return a.animState == 6 ? 0 : a.sprite.Height(GroupOf(a, a.animState)); }
+int SpriteWidth(const Actor& a) { return a.animState == 6 ? 0 : a.sprite.Width(GroupOf(a, a.animState)); }
+
 void Init(Actor& a, const std::string& cmlPath, int8_t slot, const SpriteSet& sprite) {
     a.cmlPath = cmlPath;
     a.slot = slot;
@@ -144,6 +147,65 @@ void SetMoveTarget(Actor& a, int x, int y) {
     a.moveTarget[0] = x;
     a.moveTarget[1] = y;
     a.animState = 1;
+}
+
+void SetStat(Actor& a, int stat, int value) {
+    switch (stat) {
+        case 2: a.level = static_cast<int8_t>(value); break;
+        case 3: a.strength = value; break;
+        case 4: a.intelligence = value; break;
+        case 5: a.willpower = value; break;
+        case 6: a.agility = value; break;
+        case 7: a.speed = value; break;
+        case 8: a.endurance = value; break;
+        case 9: a.personality = value; break;
+        case 10: a.weapon = static_cast<int8_t>(value); break;
+        case 13: a.team = static_cast<int8_t>(value); break;
+        case 14: a.sightRange = value; break;
+        case 15: a.attackRange = value; break;
+        case 18:
+            a.aiType = static_cast<int8_t>(value);
+            a.ranged = a.aiType == 4 ? 1 : 0;
+            break;
+        case 20: a.attackInterval = value * 1000; break;
+        default: break;
+    }
+    a.maxHp = a.level * 4 + (a.strength + a.buffStrength) * 2 + a.endurance * 2 + a.bonusMaxHp;
+    a.hp = std::min(a.hp, a.maxHp);
+    a.maxMp = a.level * 4 + a.intelligence * 2 + a.bonusMaxMp;
+    a.mp = std::min(a.mp, a.maxMp);
+    if (a.sightRange == 0) a.sightRange = 300;  // defaultSightRange
+    if (a.attackRange == 0) a.attackRange = 200;  // defaultAttackRange
+}
+
+void SetStatusIcon(Actor& a, int icon) {
+    switch (icon) {
+        case 0: a.statusIcon = -1; break;
+        case 1: a.statusIcon = -53; break;
+        case 2: a.statusIcon = -52; break;
+        case 3: a.statusIcon = -51; break;
+        case 4: a.statusIcon = -2; break;
+        default: break;
+    }
+}
+
+int8_t CheckTriggerTiles(Actor& a, const std::vector<int8_t>& enter, const std::vector<int8_t>& leave,
+                         int gridHeight) {
+    a.enterScript = -1;
+    a.leaveScript = -1;
+    if (enter.empty() || leave.empty()) return -1;
+    const int idx[3] = {a.cell[0] * gridHeight + a.cell[1], a.footBCell[0] * gridHeight + a.footBCell[1],
+                        a.footCCell[0] * gridHeight + a.footCCell[1]};
+    for (int i : idx) {
+        if (i < 0 || i >= static_cast<int>(enter.size())) return -1;
+        int8_t e = enter[static_cast<size_t>(i)];
+        if (e != 0 && e != -1) {
+            a.enterScript = e;
+            a.leaveScript = leave[static_cast<size_t>(i)];
+            return e;
+        }
+    }
+    return -1;
 }
 
 void SetAnimState(Actor& a, int8_t state) {
