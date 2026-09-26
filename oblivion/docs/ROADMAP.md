@@ -53,9 +53,12 @@ dungeon/area) is *entirely* encoded in them. All three formats' field
 layouts are now confirmed (by reading `b`/`e`/`g`'s own parsers as part
 of the phase-1 survey) and written up in `ASSET_FORMATS.md`. The ~78 `.scr`
 bytecode opcodes are named ([`SCR_OPCODES.md`](SCR_OPCODES.md)) and
-`tools/parse_scr.py` disassembles all 32 `.scr` files cleanly. What's left:
-standalone `tools/parse_cml.py`/`parse_jtm.py` parsers instead of only having
-that logic inside the game engine's own loaders.
+`tools/parse_scr.py` disassembles all 32 `.scr` files; `tools/parse_jtm.py`
+(17 files) and `tools/parse_cml.py` (21 files) parse theirs completely. Each
+has a `--check` mode that verifies every extracted file parses exactly to EOF.
+**Phase 2's parsing goal is met**; remaining Phase 2 work is semantic: what the
+unidentified tables (`table6`, `pairTable`), a few opcode operands and the
+tile-id/`.cml` group-id meanings are, best found by rendering a level.
 
 **Phase 3 (not started): PC port.** Scaffold is in `port/` (CMake + Ninja
 + MSVC, matching the shadowkey-decomp port's toolchain). Because content
