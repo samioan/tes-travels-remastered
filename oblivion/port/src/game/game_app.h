@@ -6,6 +6,7 @@
 #include "assets/asset_root.h"
 #include "assets/image.h"
 #include "graphics/backbuffer.h"
+#include "game/analog_input.h"
 #include "game/dialogue_screen.h"
 #include "game/help_pages.h"
 #include "world/game_world.h"
@@ -59,6 +60,18 @@ public:
         held_ = key;
         heldCode_ = code;
     }
+    // Modern controls: this frame's walking / aiming / attack (see AnalogInput).
+    // Only acts while playing; menus and dialogue use OnKeyDown events instead.
+    void SetAnalogInput(const AnalogInput& in) {
+        // `interact` is an edge: keep it until a Tick has consumed it.
+        const bool pending = analog_.interact;
+        analog_ = in;
+        analog_.interact = in.interact || pending;
+    }
+    // Quick-use actions from any device: 0 health potion, 1 magicka potion, 2 toggle weapon/spell.
+    void OnQuick(int action);
+    // True when the player walks freely (playing, no dialogue, input enabled).
+    bool AnalogMode() const { return world_.state() == 0 && !world_.dialogue.open && world_.inputEnabled(); }
     void Tick(int dtMs);
     void Draw(Backbuffer& bb);
 
@@ -101,6 +114,7 @@ private:
     const AssetRoot& assets_;
     ImageCache& images_;
     World world_;
+    AnalogInput analog_;
     Key held_ = Key::None;
     int heldCode_ = 0;
 

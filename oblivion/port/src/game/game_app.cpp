@@ -338,6 +338,17 @@ void GameApp::OnKeyDown(Key key, int code) {
     world_.KeyPressed(action >= 3 ? action : -1);
 }
 
+void GameApp::OnQuick(int act) {
+    Actor* p = world_.player();
+    if (!p || world_.state() != 0 || world_.dialogue.open || !world_.inputEnabled() || p->dead != 0) return;
+    if (act == 0) Items::QuaffPotion(*p, true, world_.script());
+    else if (act == 1) Items::QuaffPotion(*p, false, world_.script());
+    else if (act == 2) {  // handleAction(2): toggle the alternative special
+        p->special = (p->special == nullptr && p->altSpecial != nullptr) ? p->altSpecial : nullptr;
+        Items::UpdateSpecialIcon(*p);
+    }
+}
+
 void GameApp::HandleKey(Key key, int code) {
     const int state = world_.state();
     switch (state) {
@@ -352,16 +363,8 @@ void GameApp::HandleKey(Key key, int code) {
                 menuId_ = 5;
                 for (int& s : menuSelection_) s = 0;
                 world_.SetState(3);
-            } else if (Actor* p = world_.player()) {
-                const int act = MapKey(key, code);
-                if (!world_.dialogue.open && world_.inputEnabled() && p->dead == 0) {
-                    if (act == 0) Items::QuaffPotion(*p, true, world_.script());
-                    else if (act == 1) Items::QuaffPotion(*p, false, world_.script());
-                    else if (act == 2) {  // handleAction(2): toggle the alternative special
-                        p->special = (p->special == nullptr && p->altSpecial != nullptr) ? p->altSpecial : nullptr;
-                        Items::UpdateSpecialIcon(*p);
-                    }
-                }
+            } else {
+                OnQuick(MapKey(key, code));
             }
             break;
         case 1:
@@ -779,6 +782,19 @@ void GameApp::Tick(int dt) {
     if (action < 3) action = 0;  // quick-use keys are edge events (M7)
     if (state == 0) world_.HeldAction(action, dt);
     if (action) world_.KeyPressed(action);
+
+    // Modern controls: free walking, aimed attacks, the interact button.
+    if (state == 0) {
+        if (AnalogMode()) {
+            world_.SetAim(analog_.aim, analog_.aimX, analog_.aimY);
+            world_.MoveAnalog(analog_.moveX, analog_.moveY, dt);
+            if (analog_.attack) world_.Attack();
+            if (analog_.interact) world_.Interact();
+        } else if (analog_.attack && world_.dialogue.open) {
+            world_.KeyPressed(7);  // holding attack keeps dismissing dialogue, like a held fire key
+        }
+    }
+    analog_.interact = false;
 
     world_.scriptPaused = dialogue_->open;
     if (dialogue_->open) dialogue_->Tick(dt);

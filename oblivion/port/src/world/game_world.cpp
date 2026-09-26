@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 
 #include "graphics/text.h"
@@ -201,12 +202,11 @@ std::vector<std::string> World::WrapText(std::string text, int width) {
         size_t p = text.find(key);
         if (p != std::string::npos) text = text.substr(0, p) + value + text.substr(p + std::strlen(key));
     };
-    // Key-name placeholders are filled from the key labels (Game.keyLabels);
-    // the desktop port shows fixed labels for now.
-    replace("ACTION_KEY", "5");
-    replace("TOGGLE_WEAPON_KEY", "3");
-    replace("QUICK_HEALTH_KEY", "7");
-    replace("QUICK_MAGIKA_KEY", "9");
+    // Key-name placeholders (Game.keyLabels): the desktop port's controls.
+    replace("ACTION_KEY", "Space");
+    replace("TOGGLE_WEAPON_KEY", "Tab");
+    replace("QUICK_HEALTH_KEY", "1");
+    replace("QUICK_MAGIKA_KEY", "2");
     if (hasSpeaker_) {
         text = speaker_ + ": " + text;
     } else if (text.find(':') != std::string::npos) {
@@ -425,6 +425,85 @@ void World::HeldAction(int action, int dtMs) {
     if (oldZone != p.zoneId && p.zoneId != 0 && p.zoneId != -1 && p.zoneId != -2)
         script_.RunScript(static_cast<uint8_t>(p.zoneId));
     if (action == 7 && p.killTimer > 1000) TryPickup(p);
+}
+
+// ---- modern controls -------------------------------------------------------
+
+namespace {
+// Screen space (x right, y down) to the ground plane of the isometric view:
+// +x world is down-right on screen, +y world is down-left.
+void ScreenToWorld(float sx, float sy, float* wx, float* wy) {
+    const float k = 0.70710678f;
+    *wx = (sx + sy) * k;
+    *wy = (sy - sx) * k;
+}
+}  // namespace
+
+bool World::PlayerCanAct() const {
+    return state_ == 0 && !dialogue.open && inputEnabled_ && player_ && player_->dead == 0;
+}
+
+void World::MoveAnalog(float sx, float sy, int dtMs) {
+    if (!PlayerCanAct()) return;
+    float mag = std::sqrt(sx * sx + sy * sy);
+    if (mag < 0.01f) return;
+    if (mag > 1.0f) {
+        sx /= mag;
+        sy /= mag;
+        mag = 1.0f;
+    }
+    Actor& p = *player_;
+    float wx, wy;
+    ScreenToWorld(sx, sy, &wx, &wy);
+    const float step = static_cast<float>(p.speed) * static_cast<float>(dtMs) / 1000.0f;
+    ActorSystem::SetAnimState(p, 1);
+    ActorSystem::MoveAnalog(p, view_.grid(), wx * step, wy * step);
+    if (p.hasAim) ActorSystem::FaceWorldDir(p, p.aimX, p.aimY);
+    else ActorSystem::FaceWorldDir(p, wx, wy);
+    p.idleTimer = 120;  // back to the idle pose soon after the stick is released
+}
+
+void World::SetAim(bool valid, float sx, float sy) {
+    if (!player_) return;
+    float wx, wy;
+    ScreenToWorld(sx, sy, &wx, &wy);
+    const float len = std::sqrt(wx * wx + wy * wy);
+    player_->hasAim = valid && len > 1e-3f;
+    if (player_->hasAim) {
+        player_->aimX = wx / len;
+        player_->aimY = wy / len;
+    }
+}
+
+void World::RunZoneScript(int oldZone) {
+    Actor& p = *player_;
+    if (oldZone != p.zoneId && p.zoneId != 0 && p.zoneId != -1 && p.zoneId != -2)
+        script_.RunScript(static_cast<uint8_t>(p.zoneId));
+}
+
+void World::Attack() {
+    if (!PlayerCanAct()) return;
+    Actor& p = *player_;
+    const int oldZone = p.zoneId;
+    Combat::CheckZoneTiles(p, zoneLayer_, view_.map().height, *this, true);
+    RunZoneScript(oldZone);
+}
+
+void World::Interact() {
+    if (!PlayerCanAct()) return;
+    Actor& p = *player_;
+    const int oldZone = p.zoneId;
+    Combat::CheckZoneTiles(p, zoneLayer_, view_.map().height, *this, false);
+    RunZoneScript(oldZone);
+    if (p.killTimer > 1000) TryPickup(p);
+}
+
+bool World::PlayerScreenPos(int* x, int* y) const {
+    if (!player_) return false;
+    const Actor& p = *player_;
+    *x = p.screenPos[0] + view_.camX() + (ActorSystem::SpriteWidth(p) >> 1);
+    *y = p.screenPos[1] + view_.camY() - (ActorSystem::SpriteHeight(p) >> 1);
+    return true;
 }
 
 void World::KeyPressed(int action) {

@@ -22,6 +22,7 @@
 #include "assets/asset_root.h"
 #include "assets/image.h"
 #include "graphics/backbuffer.h"
+#include "platform/win32/input_device.h"
 #include "platform/win32/window.h"
 #include "game/game_app.h"
 #include "graphics/text.h"
@@ -77,12 +78,6 @@ oblivion::Key KeyForVk(unsigned vk) {
     }
 }
 
-oblivion::Key HeldKey() {
-    static const unsigned keys[] = {VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_SPACE};
-    for (unsigned k : keys)
-        if (GetAsyncKeyState(static_cast<int>(k)) & 0x8000) return KeyForVk(k);
-    return oblivion::Key::None;
-}
 
 }  // namespace
 
@@ -243,11 +238,18 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                     }
                     break;
                 }
-                case VK_ESCAPE: window.RequestClose(); return;
-                default: app.OnKeyDown(KeyForVk(vk), KeypadCode(vk)); return;
+                // Arrows / WASD / Space / Enter / Esc / the mouse and the gamepad go through
+                // the input mapper; what is left is the phone keypad (digits for the
+                // rebindable quick keys, * and #) and the soft-key letters.
+                default:
+                    if (KeypadCode(vk) || vk == 'Z' || vk == 'X' || vk == VK_F1 || vk == VK_F2)
+                        app.OnKeyDown(KeyForVk(vk), KeypadCode(vk));
+                    return;
             }
         });
 
+        oblivion::InputDevice device;
+        oblivion::InputMapper mapper;
         ULONGLONG last = GetTickCount64();
         window.RunMessageLoop([&]() {
             ULONGLONG now = GetTickCount64();
@@ -255,7 +257,17 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             if (dt < 16) return;
             last = now;
             if (dt > 200) dt = 200;  // a stall (window drag) must not fast-forward the game
-            app.SetHeldKey(HeldKey());
+            oblivion::MapperContext ctx;
+            ctx.state = app.world().state();
+            ctx.analogMode = app.AnalogMode();
+            ctx.playerOnScreen = app.world().PlayerScreenPos(&ctx.playerX, &ctx.playerY);
+            const oblivion::MappedInput mapped = mapper.Update(device.Poll(window, dt), ctx, dt);
+            for (const oblivion::InputEvent& ev : mapped.events) {
+                if (ev.type == oblivion::InputEvent::Type::Quick) app.OnQuick(ev.quick);
+                else app.OnKeyDown(ev.key);
+            }
+            app.SetHeldKey(mapped.held);
+            app.SetAnalogInput(mapped.analog);
             app.Tick(dt);
             app.Draw(bb);
             window.Present(bb);

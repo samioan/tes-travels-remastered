@@ -86,6 +86,12 @@ struct Actor : std::enable_shared_from_this<Actor> {
     int floatTextTimer = 0, floatTextY = 0, floatTextStartY = 0;
     int floatTextColor = 0xFF0000, floatTextShadow = 0;
 
+    // Free (analogue) movement: sub-unit remainder, and the aim direction the
+    // player is attacking towards (a unit vector in world units; hasAim = none).
+    float moveFracX = 0, moveFracY = 0;
+    bool hasAim = false;
+    float aimX = 0, aimY = 0;
+
     std::string cmlPath;
     SpriteSet sprite;
 };
@@ -117,6 +123,14 @@ bool IsBlocked(const Actor& a, const Grid& grid);
 void MoveDir(Actor& a, const Grid& grid, int dir, int dtMs);
 
 void SetMoveTarget(Actor& a, int x, int y);
+
+// Free movement by a world-space displacement (units this frame), one axis at a
+// time so the actor slides along walls; whole units are applied, the remainder
+// carries over. True if it moved at all. Facing is left for FaceWorldDir.
+bool MoveAnalog(Actor& a, const Grid& grid, float dx, float dy);
+// Face the nearest of the four sprite directions to a world-space vector
+// (1 +y, 2 -y, 3 +x, 4 -x).
+void FaceWorldDir(Actor& a, float wx, float wy);
 
 // setStat for the plain numeric stats (ids 2..9, 13, 14, 15, 18, 20 -- see
 // SCR_OPCODES SET_STAT) plus the max hp/mp recompute; specials (19), weapon

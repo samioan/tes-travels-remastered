@@ -31,6 +31,12 @@ public:
     void RequestClose();
     void SetTitle(const std::wstring& title);
 
+    // The native handle (void* so this header stays free of windows.h).
+    void* Handle() const;
+    bool HasFocus() const;
+    // The mouse cursor in virtual (Backbuffer) coordinates; false when it is outside the client area.
+    bool CursorPos(int* x, int* y) const;
+
     struct Impl;
 
 private:

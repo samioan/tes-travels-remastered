@@ -43,6 +43,19 @@ public:
     // A movement / fire action held this frame (3 up, 4 down, 5 left, 6 right, 7 fire),
     // Game.handleInput case 0. 0 = none.
     void HeldAction(int action, int dtMs);
+    // ---- modern controls (screen-relative free movement) ----
+    // Move the player by a screen-space stick vector (+x right, +y down, length
+    // 0..1): straight up the screen is the world diagonal, so all eight
+    // directions walk at the same speed, sliding along walls.
+    void MoveAnalog(float screenX, float screenY, int dtMs);
+    // The direction (screen space) the player is aiming; `valid` false clears it.
+    void SetAim(bool valid, float screenX, float screenY);
+    // The attack button: zone scripts under the player, else melee / special / arrow.
+    void Attack();
+    // The interact button: zone scripts and picking items up, never an attack.
+    void Interact();
+    // The player's body on the screen (for mouse aiming); false without a player.
+    bool PlayerScreenPos(int* x, int* y) const;
     // A key press (script key hooks, WAIT_KEY, dialogue dismissal).
     void KeyPressed(int action);
 
@@ -189,6 +202,8 @@ private:
     void ReviveActor(Actor& a);
     void UpdatePickupPrompt();
     void TryPickup(Actor& p);
+    bool PlayerCanAct() const;
+    void RunZoneScript(int oldZone);
 
     const AssetRoot& assets_;
     ImageCache& images_;

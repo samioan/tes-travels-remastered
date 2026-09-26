@@ -98,6 +98,21 @@ void Window::Present(const Backbuffer& bb) {
 
 void Window::SetTitle(const std::wstring& title) { SetWindowTextW(impl_->hwnd, title.c_str()); }
 
+void* Window::Handle() const { return impl_->hwnd; }
+
+bool Window::HasFocus() const { return GetForegroundWindow() == impl_->hwnd; }
+
+bool Window::CursorPos(int* x, int* y) const {
+    POINT pt;
+    if (!GetCursorPos(&pt) || !ScreenToClient(impl_->hwnd, &pt)) return false;
+    RECT rc;
+    GetClientRect(impl_->hwnd, &rc);
+    if (pt.x < 0 || pt.y < 0 || pt.x >= rc.right || pt.y >= rc.bottom || rc.right <= 0 || rc.bottom <= 0) return false;
+    *x = pt.x * Backbuffer::kWidth / rc.right;
+    *y = pt.y * Backbuffer::kHeight / rc.bottom;
+    return true;
+}
+
 void Window::RequestClose() { PostMessageW(impl_->hwnd, WM_CLOSE, 0, 0); }
 
 }  // namespace oblivion

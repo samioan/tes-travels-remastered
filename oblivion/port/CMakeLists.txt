@@ -48,6 +48,7 @@ add_library(oblivion_world STATIC
   src/world/projectiles.cpp
   src/world/dungeon.cpp
   src/world/player_record.cpp
+  src/game/input_mapper.cpp
   src/world/level_view.cpp
 )
 target_link_libraries(oblivion_world PUBLIC oblivion_assets)
@@ -56,6 +57,7 @@ target_link_libraries(oblivion_world PUBLIC oblivion_assets)
 add_executable(oblivion_port WIN32
   src/main.cpp
   src/platform/win32/window.cpp
+  src/platform/win32/input_device.cpp
 )
 target_link_libraries(oblivion_port PRIVATE oblivion_world)
 
@@ -90,3 +92,7 @@ add_test(NAME save_smoke COMMAND save_smoke ${CMAKE_SOURCE_DIR}/../extracted)
 # the user's own and are not redistributed.
 install(TARGETS oblivion_port RUNTIME DESTINATION .)
 install(FILES README.txt DESTINATION .)
+
+add_executable(input_smoke src/tests/input_smoke.cpp)
+target_link_libraries(input_smoke PRIVATE oblivion_world)
+add_test(NAME input_smoke COMMAND input_smoke ${CMAKE_SOURCE_DIR}/../extracted)

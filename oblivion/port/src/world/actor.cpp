@@ -1,6 +1,7 @@
 #include "world/actor.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "graphics/text.h"
 #include "render/sprite_renderer.h"
@@ -142,6 +143,38 @@ void MoveDir(Actor& a, const Grid& grid, int dir, int dtMs) {
     }
     if (IsBlocked(a, grid)) UndoMove(a);
     a.moveTimer = 0;
+}
+
+bool MoveAnalog(Actor& a, const Grid& grid, float dx, float dy) {
+    a.moveFracX += dx;
+    a.moveFracY += dy;
+    int ix = static_cast<int>(a.moveFracX), iy = static_cast<int>(a.moveFracY);
+    a.moveFracX -= static_cast<float>(ix);
+    a.moveFracY -= static_cast<float>(iy);
+    bool moved = false;
+    // Small steps: a long frame must not jump through a wall.
+    while (ix != 0 || iy != 0) {
+        const int sx = std::max(-4, std::min(4, ix)), sy = std::max(-4, std::min(4, iy));
+        ix -= sx;
+        iy -= sy;
+        if (sx != 0) {
+            MoveBy(a, sx, 0);
+            if (IsBlocked(a, grid)) UndoMove(a);
+            else moved = true;
+        }
+        if (sy != 0) {
+            MoveBy(a, 0, sy);
+            if (IsBlocked(a, grid)) UndoMove(a);
+            else moved = true;
+        }
+    }
+    return moved;
+}
+
+void FaceWorldDir(Actor& a, float wx, float wy) {
+    if (std::abs(wx) < 1e-4f && std::abs(wy) < 1e-4f) return;
+    if (std::abs(wx) >= std::abs(wy)) a.facing = wx > 0 ? 3 : 4;
+    else a.facing = wy > 0 ? 1 : 2;
 }
 
 void SetMoveTarget(Actor& a, int x, int y) {

@@ -46,7 +46,8 @@ bool Attack(Actor& a, Actor& victim, bool melee, CombatHost& host);
 
 // checkZoneTiles, the fire key: a zone id if the player stands on one,
 // otherwise -1 after the melee / special attack fall-through.
-int CheckZoneTiles(Actor& a, const std::vector<int8_t>& zones, int gridHeight, CombatHost& host);
+// `melee` false is the interact button: the zone lookup only, no attack.
+int CheckZoneTiles(Actor& a, const std::vector<int8_t>& zones, int gridHeight, CombatHost& host, bool melee = true);
 
 // levelUpTo / applyLevelUpBonus (the LEVEL_UP_TO op).
 void LevelUpTo(Actor& a, int level, ScriptInterpreter& sc);

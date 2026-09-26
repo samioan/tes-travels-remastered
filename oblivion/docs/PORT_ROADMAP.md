@@ -153,6 +153,17 @@ Canvas for its size, so this is a port decision).
   user's own (`extracted/`, `fonts/` next to the exe, or `--assets`/`--fonts`).
   No audio exists in the jar (the sound flag is stored, unused).
 
+- **Modern controls** (`game/input_mapper`, `platform/win32/input_device`,
+  `World::MoveAnalog/Attack/Interact`): free 8-direction walking relative to the
+  screen (stick vector -> ground plane, `x = (sx+sy)/sqrt2, y = (sy-sx)/sqrt2`, so
+  every direction walks at the same speed and slides along walls; the sprites
+  still face the nearest of their four world directions), aimed attacks (mouse
+  cursor or right stick choose the facing and the target, weighted by distance),
+  separate attack and interact buttons, potion / toggle / inventory / menu
+  buttons, XInput gamepad (dynamic load, hot-plug), menu navigation with
+  auto-repeat from d-pad / stick / keys. `input_smoke` checks the mapper and the
+  movement in a real level. The original keypad path is unchanged underneath.
+
 **The port is feature-complete** against the original's engine. Remaining work
 is verification and polish, not milestones.
 

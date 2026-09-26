@@ -1,6 +1,7 @@
 #include "world/combat.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 
 #include "world/items.h"
@@ -76,6 +77,26 @@ Actor* Locked(const std::weak_ptr<Actor>& w, std::shared_ptr<Actor>& hold) {
 Actor* FindNearestEnemy(Actor& a, CombatHost& host) {
     Actor* best = nullptr;
     int bestDist = 16777215;
+    if (a.slot == 1 && a.hasAim) {
+        // Aiming: of the enemies in reach, the one nearest the aim direction
+        // (distance counts, so a close enemy off to the side can still win).
+        float bestScore = 1e30f;
+        for (int i = 0; i < host.SlotCount(); i++) {
+            Actor* o = host.ActorSlot(i);
+            if (!o || o->dead == 1 || o->team == a.team || o->slot == a.slot) continue;
+            const int d = Distance(a.pos, o->pos);
+            if (d >= a.attackRange) continue;
+            const float fx = static_cast<float>(o->pos[0] - a.pos[0]), fy = static_cast<float>(o->pos[1] - a.pos[1]);
+            const float len = std::sqrt(fx * fx + fy * fy);
+            const float dot = len < 1e-3f ? 1.0f : (fx * a.aimX + fy * a.aimY) / len;
+            const float score = static_cast<float>(d) * (1.6f - dot);
+            if (score < bestScore) {
+                bestScore = score;
+                best = o;
+            }
+        }
+        if (best) return best;
+    }
     for (int i = 0; i < host.SlotCount(); i++) {
         Actor* o = host.ActorSlot(i);
         if (!o || o->dead == 1 || o->team == a.team || o->slot == a.slot) continue;
@@ -430,7 +451,7 @@ void ApplyMagicHit(Actor& source, Actor& victim, int damage, CombatHost& host) {
     ApplyDamage(damage, victim, &source, false, false, host);
 }
 
-int CheckZoneTiles(Actor& a, const std::vector<int8_t>& zones, int gridHeight, CombatHost& host) {
+int CheckZoneTiles(Actor& a, const std::vector<int8_t>& zones, int gridHeight, CombatHost& host, bool melee) {
     a.zoneId = -1;
     if (zones.empty()) return a.zoneId;
     const int idx[3] = {a.cell[0] * gridHeight + a.cell[1], a.footBCell[0] * gridHeight + a.footBCell[1],
@@ -442,6 +463,8 @@ int CheckZoneTiles(Actor& a, const std::vector<int8_t>& zones, int gridHeight, C
             return a.zoneId;
         }
     }
+    if (!melee) return -1;
+    if (a.slot == 1 && a.hasAim) ActorSystem::FaceWorldDir(a, a.aimX, a.aimY);  // bolts and arrows fly where you aim
     if (a.ranged == 0 && !a.special) {
         a.idleTimer = 500;
         a.animState = 4;

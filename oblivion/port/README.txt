@@ -13,11 +13,25 @@ Setup
    Nokia 3650 in a folder called "fonts" next to the exe (--fonts DIR). Without
    them a system font is used.
 
-Keys
-----
-Arrows or 2/4/6/8 move, Enter or 5 attacks/acts, Z / F1 = left soft key (menu),
-X / F2 = right soft key (inventory), 7 / 9 quick health / magicka potion,
-3 toggles weapon/spell (rebindable under Help > Controls). Esc quits.
+Controls
+--------
+Keyboard + mouse
+  WASD / arrows   walk (screen-relative: W is up the screen; 8 directions)
+  Space / J       attack (hold to keep attacking)
+  Left click      attack towards the cursor (aims the swing, bolt or arrow)
+  E / Enter       interact (talk, open, pick up)   Right click: same
+  1 / 2           health / magicka potion
+  Tab / R         toggle weapon <-> spell
+  I               inventory        Esc: menu / back     Backspace: back
+Gamepad (XInput, any Xbox-style pad)
+  Left stick / d-pad   walk (stick pushes are analogue)
+  Right stick          aim (the swing / spell / arrow goes where you aim)
+  A or right trigger   attack      X: interact       Y: toggle weapon/spell
+  LB / RB              health / magicka potion
+  Back: inventory      Start: menu     B: back
+  In menus: d-pad / stick to move, A to choose, B to go back, LB / RB switch tabs.
+The old phone keypad keys still work (digits, Z / X soft keys) and can be
+rebound under Help > Controls.
 
 Saves
 -----
