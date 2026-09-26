@@ -99,6 +99,11 @@ public:
         player_.reset();
         for (auto& a : actors_) a.reset();
     }
+    // Drops every actor from the table but keeps the player object (end of the epilogue text).
+    void ClearActors() {
+        for (auto& a : actors_) a.reset();
+        maxActorSlot_ = 0;
+    }
     Actor* player() { return player_.get(); }
     // ActorSystem.serialize / fromRecord: the player as stored in the save record
     // (gold included). Restore returns false on a truncated record.

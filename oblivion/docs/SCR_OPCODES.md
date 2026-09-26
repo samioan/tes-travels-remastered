@@ -18,7 +18,7 @@ the code each opcode runs; operands marked `?` are read but not yet understood.
 | 7 | `SET_PLAYER_COLLIDES` | b flag |
 | 8 | `LOAD_MAP` | b len,str .jtm path; b len,str tile sprite (.cml) path |
 | 9 | `SKIP_STRING` | b len,str (ignored) |
-| 10 | `END_LEVEL` | b kind, i arg |
+| 10 | `END_LEVEL` | b kind (splash/cutscene image; 4 = credits), i arg (24-bit background rgb) |
 | 11 | `WAIT` | s ms |
 | 12 | `SET_STATE_PLAYING` | - |
 | 13 | `NOP_B4` | b |
@@ -53,7 +53,7 @@ the code each opcode runs; operands marked `?` are read but not yet understood.
 | 44 | `OPEN_MENU` | - |
 | 45 | `OPEN_SHOP_MENU` | - |
 | 46 | `SET_STATUS_ICON` | b slot, b icon |
-| 47 | `GENERATE_DUNGEON` | b spawnGroup, b, b |
+| 47 | `GENERATE_DUNGEON` | b spawnGroup, b entry-stairs zone id, b exit-stairs script id |
 | 48 | `CLEAR_LAYERS` | - |
 | 49 | `PLACE_ITEM` | b item, b x, b y |
 | 50 | `SET_TRIGGER_RECT` | b x1, b y1, b x2, b y2, b enter, b leave, b zone |
@@ -67,7 +67,7 @@ the code each opcode runs; operands marked `?` are read but not yet understood.
 | 58 | `SCALE_MONSTER` | b monsterType, b level |
 | 59 | `SET_DROPS_LOOT` | b slot, b flag |
 | 60 | `WAIT_KEY` | - |
-| 61 | `SET_STATE_9` | - |
+| 61 | `SET_STATE_9` | - (epilogue text, then About text) |
 | 62 | `NOP62` | - |
 | 63 | `NOP63` | - |
 | 64 | `SET_BACKGROUND_COLOR` | i rgb |
@@ -83,5 +83,5 @@ the code each opcode runs; operands marked `?` are read but not yet understood.
 | 74 | `END_FADE` | - |
 | 75 | `TOGGLE_INVULNERABLE` | b slot |
 | 76 | `SET_HUD_VISIBLE` | b flag |
-| 77 | `SET_STATE_4` | - |
+| 77 | `SET_STATE_4` | - (About text, stateFlagF cleared) |
 | 78 | `SET_AI_ACTIVE` | b slot, b flag |

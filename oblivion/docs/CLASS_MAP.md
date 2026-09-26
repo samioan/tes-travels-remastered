@@ -143,8 +143,11 @@ Renamed with the descriptor-aware renamer (`docs/rename.map`). Two halves:
    armor, 13 team, 14/15 sight/attack range, 17 growth archetype, 18 AI type,
    19 special, 20 attack interval), `1` `armors[42][10]`, `2` `consumables[11][14]`,
    `4` `weapons[37][8]`, `5` `classBase[9][15]` (+ `classItemTypes`, `classLists`
-   from its list fields 2 and 3), `6` `table6[25][7]` (unidentified), `7`
-   `pairTable` (-1 terminated pairs), `8` `specials[10][15]` (special attacks),
+   from its list fields 2 and 3), `6` `table6[25][7]` (**pickup definitions**: field 2 = gold amount,
+   3 = weapon id, 4 = armour id, 5 = consumable id -- the first non-zero one wins; the
+   ids in `pickups[]`/`PLACE_ITEM`/`lootTable[..][1]` index it), `7`
+   `pairTable` (**shop stock**: -1 terminated `(category, id)` pairs, category 0 weapon,
+   1 armour, 2 consumable; read by `openShop`), `8` `specials[10][15]` (special attacks),
    `9` `spawnGroups[10][21]` (random-dungeon groups; field 20 appends to
    `spawnIds`), `10` `lootTable[30][4]` (`rollLoot`: weighted, limited uses).
    `getRow(table, index)` exposes them by number: 0 monsters, 1 armor, 2
@@ -158,9 +161,17 @@ Renamed with the descriptor-aware renamer (`docs/rename.map`). Two halves:
    constants; operand layouts are in [`SCR_OPCODES.md`](SCR_OPCODES.md).
    `keyPressed(key)` fires the per-key hooks set by `SET_KEY_HOOK`.
 
-**Open**: what `table6`, `pairTable`, and a few operands (`END_LEVEL`,
-`SET_POINT`, `GENERATE_DUNGEON`'s two extra bytes) mean; several `Game` state
-ids (`SET_STATE_4/9`).
+**Resolved (M7/M8 port work)**: `table6` and `pairTable` (above); `END_LEVEL kind,
+rgb` shows splash/cutscene image `kind` (state 8; kind 4 = credits scroll, state
+21) on background colour `rgb`; `GENERATE_DUNGEON group, zone, exitScript` puts
+zone `zone` on the entry stairs and script `exitScript` on the exit stairs;
+`SET_POINT` is `SET_RESPAWN_POINT x, y`. `lootTable[i]` = `{_, pickup id (table6),
+odds divisor, remaining stock}`: `rollLoot` takes the first row whose divisor
+divides a random int and that still has stock. State 9 is the epilogue text
+(string 547, in `lang_12`): when it scrolls off, actors are dropped and state 4
+(the About/credits text) follows, then the main menu -- the `LOAD_LEVEL
+"/end_15.scr"` after `SET_STATE_9` in `l12_12` never runs. `SET_STATE_4` (in
+`end_15`) shows the About text directly, with `stateFlagF` cleared.
 
 ## `a` -> renamed `Strings.java` (localization / text-resource loader)
 

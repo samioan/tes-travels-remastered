@@ -156,6 +156,9 @@ Canvas for its size, so this is a port decision).
 **The port is feature-complete** against the original's engine. Remaining work
 is verification and polish, not milestones.
 
-Open questions carried over from the reverse-engineering docs: `table6`,
-`pairTable`, a few opcode operands and `Game` state 4/9 meanings -- rendering
-and running real levels should settle them.
+Open questions from the reverse-engineering docs are settled (see
+`CLASS_MAP.md`): `table6` = pickup definitions, `pairTable` = shop stock, the
+`END_LEVEL` / `GENERATE_DUNGEON` operands, and the meaning of states 4 and 9.
+The level-1 black vertical bars are the prison-cell bars (thin dark poles with
+light glints, standing round the prisoners). Left: a hands-on play-through of
+all 12 levels.

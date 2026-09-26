@@ -821,6 +821,7 @@ void GameApp::Tick(int dt) {
                 textScrollTimer_ = 0;
                 for (int& s : menuSelection_) s = 0;
                 menuId_ = stateFlagF_ ? 5 : 0;
+                world_.ClearActors();
                 world_.SetState(4);
             } else if (st == 10) {
                 world_.SetState(0);

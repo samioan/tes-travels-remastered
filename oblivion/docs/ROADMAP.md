@@ -50,9 +50,9 @@ bytecode opcodes are named ([`SCR_OPCODES.md`](SCR_OPCODES.md)) and
 `tools/parse_scr.py` disassembles all 32 `.scr` files; `tools/parse_jtm.py`
 (17 files) and `tools/parse_cml.py` (21 files) parse theirs completely. Each
 has a `--check` mode that verifies every extracted file parses exactly to EOF.
-**Phase 2's parsing goal is met**; remaining Phase 2 work is semantic: what the
-unidentified tables (`table6`, `pairTable`), a few opcode operands and the
-tile-id/`.cml` group-id meanings are, best found by rendering a level.
+**Phase 2's parsing goal is met**, and the semantic questions it left (`table6`,
+`pairTable`, the odd opcode operands, states 4/9) were answered by the port; see
+`CLASS_MAP.md`. Tile-id / `.cml` group ids are named by use in the port code.
 
 **Phase 3 (in progress): PC port.** See [`PORT_ROADMAP.md`](PORT_ROADMAP.md). The
 port in `port/` (CMake + Ninja + MSVC, software-rendered Win32) is an engine
