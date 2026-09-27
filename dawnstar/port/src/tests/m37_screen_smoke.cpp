@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
             const std::string& body = helpText.bodies[0];
             s.SetupMessage(helpText.titles[0], body);
 
-            std::vector<std::string> expectedWrap = MessagePopup::WordWrap(body, Screen::width() - 5 - 5);
+            std::vector<std::string> expectedWrap = MessagePopup::WordWrap(body, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
             Check(s.Items() == expectedWrap,
                   "SetupMessage's own word-wrap should match MessagePopup::WordWrap at the 5px-margin width");
             Check(s.ItemCount() == static_cast<int>(expectedWrap.size()), "itemCount should equal the wrapped line count");
@@ -224,7 +224,7 @@ int main(int argc, char** argv) {
             Screen s(ScreenMode::PromptList);
             s.SetupPromptList("New Game", "Select a Class:", charData.classNames);
 
-            std::vector<std::string> expectedPrompt = MessagePopup::WordWrap("Select a Class:", Screen::width() - 10 - 10);
+            std::vector<std::string> expectedPrompt = MessagePopup::WordWrap("Select a Class:", Screen::width() - 10 - 10, BitmapFont::Face::SmallBold);
             Check(s.ItemGroupStart().size() == charData.classNames.size(),
                   "no real class name should be long enough to force a split -- one group entry per class");
             for (size_t i = 0; i < charData.classNames.size(); i++) {
@@ -304,7 +304,7 @@ int main(int argc, char** argv) {
             Screen s(ScreenMode::PromptList);
             s.SetupPromptList("Test", "Prompt", raw);
 
-            std::vector<std::string> expectedWrapped = MessagePopup::WordWrap(longItem, Screen::width() - 10 - 10);
+            std::vector<std::string> expectedWrapped = MessagePopup::WordWrap(longItem, Screen::width() - 10 - 10, BitmapFont::Face::SmallBold);
             Check(expectedWrapped.size() > 1, "the synthetic long item should actually need multiple wrapped lines");
 
             int n = static_cast<int>(expectedWrapped.size());
@@ -413,7 +413,7 @@ int main(int argc, char** argv) {
             prompt.SetSelectedIndex(50);
             Check(prompt.SelectedIndex() == 1, "SetSelectedIndex should clamp to the last real item, not overshoot");
 
-            Check(prompt.FirstLine() == MessagePopup::WordWrap("P", Screen::width() - 10 - 10)[0],
+            Check(prompt.FirstLine() == MessagePopup::WordWrap("P", Screen::width() - 10 - 10, BitmapFont::Face::SmallBold)[0],
                   "FirstLine on a prompt-list mode should return its own first prompt line");
             Screen highlighted(ScreenMode::HighlightedList);
             highlighted.SetupList("T", {"x"}, false);

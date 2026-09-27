@@ -145,7 +145,8 @@ void Window::Present(const Backbuffer& backbuffer) {
     GetClientRect(impl_->hwnd, &client);
     const int cw = client.right - client.left;
     const int ch = client.bottom - client.top;
-    const int sw = Backbuffer::kWidth, sh = Backbuffer::kHeight;
+    const int sw = backbuffer.RealWidth(), sh = Backbuffer::kHeight;
+    impl_->bmi.header.biWidth = sw;
 
     int w = cw, h = ch;
     if (cw > 0 && ch > 0) {
@@ -197,6 +198,13 @@ void Window::SetFullscreen(bool on) {
 }
 
 bool Window::IsFullscreen() const { return impl_->fullscreen; }
+
+void Window::ClientSize(int* w, int* h) const {
+    RECT client = {};
+    GetClientRect(impl_->hwnd, &client);
+    if (w) *w = client.right - client.left;
+    if (h) *h = client.bottom - client.top;
+}
 
 void Window::SetClientSize(int width, int height) {
     if (impl_->fullscreen) return;

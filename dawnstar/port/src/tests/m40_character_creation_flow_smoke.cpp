@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
         dawnstar::JavaRandom testRng(999);
         PlayerState testPreview = dawnstar::PlayerCreation::CreateCharacter(0, "", charData, items, testRng);
         std::vector<std::string> expectedSummaryLines =
-            MessagePopup::WordWrap(ExpectedCreationSummary(testPreview, charData), Screen::width() - 5 - 5);
+            MessagePopup::WordWrap(ExpectedCreationSummary(testPreview, charData), Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expectedSummaryLines[0], kItemTextColor),
               "the creation-summary screen should match the real, independently-recomputed buildCreationSummary");
         Check(flow.OnSelect() == CharacterCreationAction::None, "Ok on the creation summary is not a main.cpp-level action");
@@ -223,14 +223,14 @@ int main(int argc, char** argv) {
         flow2.Render(bb);
         Check(TitleShownIs(bb, "Introduction"), "Ok on Welcome should show the real first Introduction screen");
         std::vector<std::string> expectedIntro1 =
-            MessagePopup::WordWrap(shopDialogue.groups[9][3], Screen::width() - 5 - 5);
+            MessagePopup::WordWrap(shopDialogue.groups[9][3], Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expectedIntro1[0], kItemTextColor),
               "the first Introduction screen should match the real npcstrings.dat dialogue[9][3]");
         Check(flow2.OnSelect() == CharacterCreationAction::None, "Ok on the first Introduction screen is not a main.cpp-level action");
         bb.Fill(0);
         flow2.Render(bb);
         std::string expectedIntro2Text = shopDialogue.groups[9][4] + shopDialogue.groups[9][5];
-        std::vector<std::string> expectedIntro2 = MessagePopup::WordWrap(expectedIntro2Text, Screen::width() - 5 - 5);
+        std::vector<std::string> expectedIntro2 = MessagePopup::WordWrap(expectedIntro2Text, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expectedIntro2[0], kItemTextColor),
               "the second Introduction screen should match dialogue[9][4]+dialogue[9][5]");
         Check(flow2.OnSelect() == CharacterCreationAction::StartGame,

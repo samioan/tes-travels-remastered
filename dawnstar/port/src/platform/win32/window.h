@@ -45,6 +45,7 @@ public:
     // Resizes the windowed client area (ignored while fullscreen -- it applies
     // on leaving fullscreen).
     void SetClientSize(int width, int height);
+    void ClientSize(int* w, int* h) const;  // the current client area
 
     // Requests the window close itself (posts WM_CLOSE, the same real
     // message the OS sends for the title bar's own close button).

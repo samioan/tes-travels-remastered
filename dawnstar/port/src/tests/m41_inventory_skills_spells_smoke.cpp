@@ -109,7 +109,7 @@ bool TitleShownIs(const Backbuffer& bb, const std::string& title) {
 int FirstItemY(int promptLineCount) { return 20 + promptLineCount * 12 + 5; }
 
 int WrappedLineCount(const std::string& text) {
-    return static_cast<int>(MessagePopup::WordWrap(text, Screen::width() - 10 - 10).size());
+    return static_cast<int>(MessagePopup::WordWrap(text, Screen::width() - 10 - 10, BitmapFont::Face::SmallBold).size());
 }
 
 // --- Independent re-derivations of Player.java's own methods (NOT
@@ -305,7 +305,7 @@ int main(int argc, char** argv) {
         menu.Render(bb);
         Check(TitleShownIs(bb, "Item"), "selecting an inventory item should show the real Item screen");
         std::string expectedTooltip0 = ExpectedItemTooltip(player, charData, items, spells, 0);
-        std::vector<std::string> tooltip0Lines = MessagePopup::WordWrap(expectedTooltip0, Screen::width() - 10 - 10);
+        std::vector<std::string> tooltip0Lines = MessagePopup::WordWrap(expectedTooltip0, Screen::width() - 10 - 10, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 10, 20, tooltip0Lines[0], kItemTextColor),
               "the Item screen's own tooltip should match the real, independently-derived itemTooltip() text");
         Check(TextRenderedAt(bb, 10, FirstItemY(static_cast<int>(tooltip0Lines.size())), "Drop", kItemTextColor),
@@ -512,7 +512,7 @@ int main(int argc, char** argv) {
         menu.Render(bb);
         Check(TitleShownIs(bb, "Skill Info"), "selecting a skill should show the real Skill Info screen");
         std::string expectedSkillTooltip = ExpectedSkillTooltip(player, charData, firstSkillIndex);
-        std::vector<std::string> skillTooltipLines = MessagePopup::WordWrap(expectedSkillTooltip, Screen::width() - 5 - 5);
+        std::vector<std::string> skillTooltipLines = MessagePopup::WordWrap(expectedSkillTooltip, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, skillTooltipLines[0], kItemTextColor),
               "the Skill Info screen should match the real, independently-derived skillTooltip() text");
         Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None,
@@ -544,7 +544,7 @@ int main(int argc, char** argv) {
         menu.Render(bb);
         Check(TitleShownIs(bb, "Spell Info"), "selecting a spell should show the real Spell Info screen");
         std::string expectedSpellTooltip0 = ExpectedSpellTooltip(charData, spells, firstSpellIndex0);
-        std::vector<std::string> spellTooltipLines = MessagePopup::WordWrap(expectedSpellTooltip0, Screen::width() - 10 - 10);
+        std::vector<std::string> spellTooltipLines = MessagePopup::WordWrap(expectedSpellTooltip0, Screen::width() - 10 - 10, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 10, 20, spellTooltipLines[0], kItemTextColor),
               "the Spell Info screen should match the real, independently-derived spellTooltip() text");
         Check(TextRenderedAt(bb, 10, FirstItemY(static_cast<int>(spellTooltipLines.size())), "Ready Spell", kItemTextColor),

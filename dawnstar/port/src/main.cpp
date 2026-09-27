@@ -77,6 +77,7 @@ extern wchar_t** __wargv;
 #include "player/player_state.h"
 #include "player/visible_objects.h"
 #include "render/frame_renderer.h"
+#include "render/wide_corridor.h"
 #include "render/hotbar_renderer.h"
 #include "render/hud_renderer.h"
 #include "render/message_popup.h"
@@ -483,6 +484,8 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::ShopDialogue shopDialogue = dawnstar::ShopDialogue::Load(root + "/npcstrings.dat");
         dawnstar::ImgArchive imageArchive(root + "/imgfiles.lmp");
         dawnstar::FrameTextures textures = dawnstar::FrameTextures::Load(imageArchive);
+        // PC-only widescreen: the 3D wall textures, recovered from the same wall art.
+        const dawnstar::WideTextures wideTextures = dawnstar::WideTextures::Build(textures);
         dawnstar::MonsterImageNames monsterImageNames = dawnstar::MonsterImageNames::Load(archive);
         dawnstar::VisibleObjectTextures visibleObjectTextures =
             dawnstar::VisibleObjectTextures::Load(imageArchive, monsterImageNames);
@@ -581,6 +584,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::BootSplash bootSplash = dawnstar::BootSplash::Load(root, imageArchive);
 
         window.RunMessageLoop([&] {
+            // Widescreen: the canvas follows the Settings choice / window shape. Everything is laid
+            // out for the native 176 columns, so it all draws into a centred 176-wide view; only the
+            // 3D corridor (below) uses the whole width.
+            if (const int canvasWidth = display.LogicalWidth(); backbuffer.RealWidth() != canvasWidth)
+                backbuffer.Resize(canvasWidth);
+            backbuffer.CenterView(dawnstar::Backbuffer::kWidth);
+            // Whether this frame is the widescreen 3D corridor (it fills the whole width). Every other
+            // screen is drawn centred, and its flat colours are continued into the space at the sides.
+            bool wideScene = false;
+            auto present = [&]() {
+                if (!wideScene && backbuffer.RealWidth() > dawnstar::Backbuffer::kWidth) backbuffer.ExtendViewEdges();
+                window.Present(backbuffer);
+            };
             if (toggleFullscreenRequested) {  // F11 / Alt+Enter
                 toggleFullscreenRequested = false;
                 display.ToggleFullscreen();
@@ -631,7 +647,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                         bootSplash.SetPercent(percent);
                     }
                     bootSplash.Render(backbuffer, splashElapsed);
-                    window.Present(backbuffer);
+                    present();
                     return;
                 }
             }
@@ -695,13 +711,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             // already-live `*playerSlot`.
                             dawnstar::LoadingScreen loadGameUI(dawnstar::LoadingScreenMode::LoadingGame);
                             loadGameUI.Render(backbuffer);
-                            window.Present(backbuffer);
+                            present();
                             dawnstar::PlayerState loaded;
                             bool loadedOk = dawnstar::GameSave::LoadGameState(
                                 saveDir, loaded, world, otherState, [&](int percent) {
                                     loadGameUI.SetPercent(percent);
                                     loadGameUI.Render(backbuffer);
-                                    window.Present(backbuffer);
+                                    present();
                                 });
                             if (loadedOk) {
                                 playerSlot.emplace(std::move(loaded));
@@ -714,11 +730,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                 dawnstar::GameSave::ResumeGame(*playerSlot, levels, world, [&](int percent) {
                                     loadGameUI.SetPercent(percent);
                                     loadGameUI.Render(backbuffer);
-                                    window.Present(backbuffer);
+                                    present();
                                 });
                                 loadGameUI.SetPercent(100);
                                 loadGameUI.Render(backbuffer);
-                                window.Present(backbuffer);
+                                present();
                                 inMenu = false;
                             } else {
                                 // run()'s own else-branch: noSavedGameUI,
@@ -739,7 +755,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 menuSelectKeyWasDown = selectDown;
 
                 menuFlow.Render(backbuffer);
-                window.Present(backbuffer);
+                present();
                 return;
             }
 
@@ -821,7 +837,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 ccBackspaceKeyWasDown = backspaceDown;
 
                 characterCreationFlow.Render(backbuffer);
-                window.Present(backbuffer);
+                present();
                 return;
             }
 
@@ -867,7 +883,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 } else {
                     gameOverScreen.Paint(backbuffer);
                 }
-                window.Present(backbuffer);
+                present();
                 return;
             }
 
@@ -903,7 +919,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 npcMenuSelectKeyWasDown = selectDown;
 
                 npcMenu.Render(backbuffer);
-                window.Present(backbuffer);
+                present();
                 return;
             }
 
@@ -926,7 +942,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 levelUpSelectKeyWasDown = selectDown;
 
                 levelUpMenu.Render(backbuffer);
-                window.Present(backbuffer);
+                present();
                 return;
             }
 
@@ -1016,13 +1032,13 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             // assignment the original never repaints for.
                             dawnstar::LoadingScreen saveGameUI(dawnstar::LoadingScreenMode::SavingGame);
                             saveGameUI.Render(backbuffer);
-                            window.Present(backbuffer);
+                            present();
                             syncOtherStateFromLive();
                             bool saved = dawnstar::GameSave::SaveGameState(
                                 saveDir, optionsPlayer, world, otherState, globalRng, [&](int percent) {
                                     saveGameUI.SetPercent(percent);
                                     saveGameUI.Render(backbuffer);
-                                    window.Present(backbuffer);  // repaint() + serviceRepaints()
+                                    present();  // repaint() + serviceRepaints()
                                 });
                             if (saved) {
                                 // `this.setCurrentDisplay(this.gameCanvas)`
@@ -1042,12 +1058,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                             // helperThreadState==6 branch.
                             dawnstar::LoadingScreen loadGameUI(dawnstar::LoadingScreenMode::LoadingGame);
                             loadGameUI.Render(backbuffer);
-                            window.Present(backbuffer);
+                            present();
                             bool loaded = dawnstar::GameSave::LoadGameState(saveDir, optionsPlayer, world, otherState,
                                                                             [&](int percent) {
                                                                                 loadGameUI.SetPercent(percent);
                                                                                 loadGameUI.Render(backbuffer);
-                                                                                window.Present(backbuffer);
+                                                                                present();
                                                                             });
                             if (loaded) {
                                 syncLiveFromOtherState();
@@ -1061,11 +1077,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                 dawnstar::GameSave::ResumeGame(optionsPlayer, levels, world, [&](int percent) {
                                     loadGameUI.SetPercent(percent);
                                     loadGameUI.Render(backbuffer);
-                                    window.Present(backbuffer);
+                                    present();
                                 });
                                 loadGameUI.SetPercent(100);
                                 loadGameUI.Render(backbuffer);
-                                window.Present(backbuffer);
+                                present();
                                 inOptionsMenu = false;
                             } else {
                                 // run()'s own else-branch: noSavedGameUI,
@@ -1081,7 +1097,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 optionsMenuSelectKeyWasDown = selectDown;
 
                 optionsMenu.Render(backbuffer);
-                window.Present(backbuffer);
+                present();
                 return;
             }
 
@@ -1621,7 +1637,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 int textY = dawnstar::Backbuffer::kHeight / 2 - dawnstar::BitmapFont::LineHeight(kFace);
                 dawnstar::BitmapFont::DrawString(backbuffer, textX, textY, deathText,
                                                   dawnstar::PackRGB565(255, 255, 255), kFace);
-                window.Present(backbuffer);
+                present();
                 return;
             }
 
@@ -1639,13 +1655,40 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 int textY = dawnstar::Backbuffer::kHeight / 2 - dawnstar::BitmapFont::LineHeight(kFace);
                 dawnstar::BitmapFont::DrawString(backbuffer, textX, textY, campingText,
                                                   dawnstar::PackRGB565(255, 255, 255), kFace);
-                window.Present(backbuffer);
+                present();
                 return;
             }
 
             dawnstar::DungeonView view(levels, player.currentLevel - 1);
-            dawnstar::FrameRenderer::Render(backbuffer, textures, view, player.tileX, player.tileY, player.facing,
-                                             levels[static_cast<size_t>(player.currentLevel - 1)].number, player);
+            const int dungeonNumber = levels[static_cast<size_t>(player.currentLevel - 1)].number;
+            const bool wideCanvas = backbuffer.RealWidth() > dawnstar::Backbuffer::kWidth;
+            if (wideCanvas && wideTextures.valid()) {
+                // Widescreen: a real 3D view of the map across the whole width instead of the
+                // hand-drawn 176-wide art. Sprites, HUD and popups stay native-size in the centre.
+                wideScene = true;
+                const int centreX = backbuffer.ViewX() + 90;
+                backbuffer.Fill(0);
+                backbuffer.ResetView();
+                dawnstar::WideCorridor::Render(
+                    backbuffer, centreX, textures, wideTextures,
+                    dawnstar::WideCorridor::MakeTileQuery(view, player.tileX, player.tileY, player.facing),
+                    dungeonNumber, dawnstar::PlayerCombatStats::HasAilment(player, 3),
+                    dawnstar::PlayerCombatStats::HasAilment(player, 4));
+                backbuffer.CenterView(dawnstar::Backbuffer::kWidth);
+            } else {
+                dawnstar::FrameRenderer::Render(backbuffer, textures, view, player.tileX, player.tileY, player.facing,
+                                                 dungeonNumber, player);
+            }
+            // Widescreen: the status bars and the minimap belong to the screen's left edge, not to the
+            // middle of the wider picture, and messages to the right edge; everything else stays centred.
+            auto anchorLeft = [&]() {
+                if (wideScene) backbuffer.SetView(0, dawnstar::Backbuffer::kWidth);
+            };
+            auto anchorRight = [&]() {
+                if (wideScene)
+                    backbuffer.SetView(backbuffer.RealWidth() - dawnstar::Backbuffer::kWidth, dawnstar::Backbuffer::kWidth);
+            };
+            auto anchorCentre = [&]() { backbuffer.CenterView(dawnstar::Backbuffer::kWidth); };
             dawnstar::VisibleObjectRenderer::Render(backbuffer, visibleObjectTextures, player.visibleObjects);
             // GameCanvas.paintVisibleObjects()'s own `monsterAttacking`
             // recomputation -- M36. Only ever updated here (skipped
@@ -1660,14 +1703,19 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                 dawnstar::VisibleObjectRenderer::PaintNpcPortrait(backbuffer, visibleObjectTextures,
                                                                     player.npcInSight);
             }
+            anchorLeft();
             dawnstar::HudRenderer::PaintStatusBars(backbuffer, player, charData);
+            anchorCentre();
             // paintGameView()'s own paintHotbar() call -- M31; real
             // `monsterTargeted` since M32.
             int renderHotbarContext = dawnstar::HotbarRenderer::ComputeHotbarContext(
                 player.monsterTargeted, player.chestInSight, player.npcInSight);
             dawnstar::HotbarRenderer::Paint(backbuffer, hotbarTextures, renderHotbarContext);
+            // (The hotbar panel is an ornate picture: it stays native-size in the centre of a black strip.)
             // paintGameView()'s own paintMessagePopup() call -- M30.
+            anchorRight();
             dawnstar::MessagePopup::Paint(backbuffer, messagePopup);
+            anchorCentre();
             // paintGameView()'s own paintActionFlashes() call -- all 3
             // cases now wired (monsterHitFlash since M32; spellHitFlash/
             // selfSpellFlash since M33), same icon/offset table as the
@@ -1694,8 +1742,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // its own try block, after paintMessagePopup/
             // paintActionFlashes/paintErrorOverlay -- paintErrorOverlay
             // alone still isn't ported) -- M29.
+            anchorLeft();
             dawnstar::MinimapRenderer::Composite(backbuffer, minimap, player);
-            window.Present(backbuffer);
+            anchorCentre();
+            present();
         });
     } catch (const std::exception& e) {
         // No fallback rendering is possible without the extracted

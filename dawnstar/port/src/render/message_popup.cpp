@@ -34,7 +34,8 @@ void MessagePopup::Tick(MessagePopupState& state, int64_t nowMs) {
     }
 }
 
-std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int maxWidthPxIn) {
+std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int maxWidthPxIn,
+                                                 BitmapFont::Face face) {
     std::string text = textIn;
     int maxWidthPx = maxWidthPxIn;
 
@@ -45,16 +46,16 @@ std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int m
             if (newlineAt == 0) {
                 firstLines = {" "};
             } else {
-                firstLines = WordWrap(text.substr(0, newlineAt), maxWidthPx);
+                firstLines = WordWrap(text.substr(0, newlineAt), maxWidthPx, face);
             }
-            std::vector<std::string> restLines = WordWrap(text.substr(newlineAt + 1), maxWidthPx);
+            std::vector<std::string> restLines = WordWrap(text.substr(newlineAt + 1), maxWidthPx, face);
             firstLines.insert(firstLines.end(), restLines.begin(), restLines.end());
             return firstLines;
         }
         text = text.substr(0, text.size() - 1);
     }
 
-    if (BitmapFont::StringWidth(text, kPopupFace) < maxWidthPx) {
+    if (BitmapFont::StringWidth(text, face) < maxWidthPx) {
         return {text};
     }
 
@@ -65,7 +66,7 @@ std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int m
 
     size_t spaceAt;
     while ((spaceAt = text.find(' ', static_cast<size_t>(lineStart) + 1)) != std::string::npos) {
-        if (BitmapFont::StringWidth(text.substr(0, spaceAt), kPopupFace) < maxWidthPx) {
+        if (BitmapFont::StringWidth(text.substr(0, spaceAt), face) < maxWidthPx) {
             lineStart = static_cast<int>(spaceAt);
         } else {
             if (lineStart == 0) {
@@ -79,7 +80,7 @@ std::vector<std::string> MessagePopup::WordWrap(const std::string& textIn, int m
                 // approximating this one spot with a flat advance when
                 // the real per-character width is available.
                 while (w < maxWidthPx && lineStart < static_cast<int>(text.size())) {
-                    w += BitmapFont::CharWidth(text[static_cast<size_t>(lineStart)], kPopupFace);
+                    w += BitmapFont::CharWidth(text[static_cast<size_t>(lineStart)], face);
                     lineStart++;
                 }
                 lines.push_back(text.substr(0, static_cast<size_t>(lineStart)));

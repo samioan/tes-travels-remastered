@@ -29,13 +29,15 @@ void Check(bool ok, const std::string& what) {
 }
 
 struct FakeDisplay : DisplayControl {
-    int scale = 3, cycles = 0, toggles = 0, scalings = 0;
+    int scale = 3, cycles = 0, toggles = 0, scalings = 0, wides = 0;
     bool fullscreen = false;
     std::string ResolutionName() const override { return std::to_string(scale) + "x"; }
     void CycleResolution(int dir) override {
         scale += dir;
         cycles++;
     }
+    std::string WidescreenName() const override { return "Auto"; }
+    void CycleWidescreen(int) override { wides++; }
     bool Fullscreen() const override { return fullscreen; }
     void ToggleFullscreen() override {
         fullscreen = !fullscreen;
@@ -76,6 +78,9 @@ int main() {
         Check(Painted(m2), "the Settings screen paints");
         m2.OnSelect();  // row 0: Resolution
         Check(fake.cycles == 1 && fake.scale == 4, "Resolution row cycles the window size");
+        m2.OnDown();
+        m2.OnSelect();
+        Check(fake.wides == 1, "Widescreen row cycles the canvas shape");
         m2.OnDown();
         m2.OnSelect();
         Check(fake.toggles == 1 && fake.fullscreen, "Display row toggles fullscreen");
@@ -121,11 +126,33 @@ int main() {
         Check(fake.cycles == 1, "Options > Settings > Resolution works in game");
         menu.OnDown();
         menu.OnSelect(player, charData, items, spells, levels, world, nextId);
+        Check(fake.wides == 1, "Options > Settings > Widescreen works in game");
+        menu.OnDown();
+        menu.OnSelect(player, charData, items, spells, levels, world, nextId);
         Check(fake.toggles == 1, "Options > Settings > Display toggles fullscreen in game");
         menu.OnCancel();
         Backbuffer bb;
         menu.Render(bb);  // back on the Options list without crashing
         Check(menu.OnCancel() == OptionsMenuAction::ReturnToGame, "Cancel from Settings returns to Options; Cancel again returns to the game");
+    }
+
+    std::printf("widescreen canvas\n");
+    Check(Display::WidthFor(Aspect::Off, 1920, 1080) == 176, "Off keeps the native 176 columns");
+    Check(Display::WidthFor(Aspect::R16_9, 0, 0) == 370, "16:9 is 370 columns");
+    Check(Display::WidthFor(Aspect::R4_3, 0, 0) == 278, "4:3 is 278 columns (277 rounded to even)");
+    Check(Display::WidthFor(Aspect::R21_9, 0, 0) == 486, "21:9 is 486 columns (485 rounded to even)");
+    Check(Display::WidthFor(Aspect::Auto, 1920, 1080) == 370, "Auto follows the window shape");
+    Check(Display::WidthFor(Aspect::Auto, 300, 600) == 176, "... but never narrower than native");
+    Check(Display::WidthFor(Aspect::Auto, 5000, 1000) == Backbuffer::kMaxWidth, "... nor wider than the buffer allows");
+    for (int cw = 700; cw < 720; cw++)
+        if (Display::WidthFor(Aspect::Auto, cw, 500) % 2 != 0) Check(false, "every canvas width is even");
+    {
+        Display d("");
+        Check(d.WidescreenName() == "Off", "widescreen defaults to Off (the authentic view)");
+        d.CycleWidescreen(1);
+        Check(d.WidescreenName() == "Auto", "cycles to Auto");
+        for (int i = 0; i < 5; i++) d.CycleWidescreen(1);
+        Check(d.WidescreenName() == "Off", "and wraps around");
     }
 
     std::printf("window sizes\n");

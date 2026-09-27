@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, helpText.titles[1]), "the info screen should show the SELECTED topic's own real title");
-        std::vector<std::string> expectedBody = MessagePopup::WordWrap(helpText.bodies[1], Screen::width() - 5 - 5);
+        std::vector<std::string> expectedBody = MessagePopup::WordWrap(helpText.bodies[1], Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expectedBody[0], kItemTextColor),
               "the info screen should show the selected topic's own real (word-wrapped) body");
 

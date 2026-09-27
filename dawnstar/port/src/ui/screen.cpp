@@ -173,7 +173,10 @@ void Screen::SetupPromptList(const std::string& title, const std::string& prompt
 }
 
 std::vector<std::string> Screen::WrapText(const std::string& text) const {
-    return MessagePopup::WordWrap(text, width() - marginX_ - marginRight_);
+    // Screen.wrapText(text): `this.canvas.wordWrap(text, maxWidth, this.textFont)` --
+    // textFont is DEFAULT_TEXT_FONT (SmallBold), the same face every Render*
+    // method below actually draws with, not MessagePopup's own SMALL_FONT.
+    return MessagePopup::WordWrap(text, width() - marginX_ - marginRight_, BitmapFont::Face::SmallBold);
 }
 
 void Screen::RenderTitleBar(Backbuffer& bb) const {

@@ -203,7 +203,7 @@ int main(int argc, char** argv) {
         menu.Render(bb);
         Check(TitleShownIs(bb, "Stats"), "selecting Stats should show the real character-sheet info screen");
         std::string expectedSheet = ExpectedCharacterSheet(player, charData);
-        std::vector<std::string> expectedSheetLines = MessagePopup::WordWrap(expectedSheet, Screen::width() - 5 - 5);
+        std::vector<std::string> expectedSheetLines = MessagePopup::WordWrap(expectedSheet, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expectedSheetLines[0], kItemTextColor),
               "the Stats screen should show the real character sheet's own first (word-wrapped) line");
         Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::None, "Ok on Stats is not a main.cpp-level action");
@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, "Reveal Traitor"), "the Reveal Traitor intro should be titled \"Reveal Traitor\"");
-        std::vector<std::string> expectedIntroLines = MessagePopup::WordWrap(shopDialogue.groups[9][66], Screen::width() - 5 - 5);
+        std::vector<std::string> expectedIntroLines = MessagePopup::WordWrap(shopDialogue.groups[9][66], Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expectedIntroLines[0], kItemTextColor),
               "the intro should show the real dialogue[9][66]'s first (word-wrapped) line");
         Check(menu.OnCancel() == OptionsMenuAction::None, "Cancel on the mode-4 intro screen should be a real no-op");
@@ -283,7 +283,7 @@ int main(int argc, char** argv) {
         menu.Render(bb);
         Check(TitleShownIs(bb, "Alhavara"), "selecting Alhavara should show an info screen titled \"Alhavara\"");
         std::string expected1 = shopDialogue.groups[9][24] + "\n";
-        std::vector<std::string> expected1Lines = MessagePopup::WordWrap(expected1, Screen::width() - 5 - 5);
+        std::vector<std::string> expected1Lines = MessagePopup::WordWrap(expected1, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expected1Lines[0], kItemTextColor),
               "Alhavara's own clue entry should match the real, independently-recomputed UNCONFIRMED_A lookup");
 
@@ -306,7 +306,7 @@ int main(int argc, char** argv) {
         menu.Render(bb);
         Check(TitleShownIs(bb, "Rumors"), "selecting Rumors should show an info screen titled \"Rumors\"");
         std::string expected2 = shopDialogue.groups[9][5 + kRumorStringOffset[1][0]] + "\n";
-        std::vector<std::string> expected2Lines = MessagePopup::WordWrap(expected2, Screen::width() - 5 - 5);
+        std::vector<std::string> expected2Lines = MessagePopup::WordWrap(expected2, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expected2Lines[0], kItemTextColor),
               "Rumors should match the real, independently-recomputed RUMOR_STRING_OFFSET lookup");
 
@@ -342,7 +342,7 @@ int main(int argc, char** argv) {
         // UNCONFIRMED_B[1] = 43 -> dialogue[9][5+43] = dialogue[9][48],
         // NOT the UNCONFIRMED_A[1]=19 -> dialogue[9][24] scenario 1 used.
         std::string expected3 = shopDialogue.groups[9][48] + "\n";
-        std::vector<std::string> expected3Lines = MessagePopup::WordWrap(expected3, Screen::width() - 5 - 5);
+        std::vector<std::string> expected3Lines = MessagePopup::WordWrap(expected3, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, expected3Lines[0], kItemTextColor),
               "the traitor's own suspect entry should use the UNCONFIRMED_B table, not UNCONFIRMED_A");
 

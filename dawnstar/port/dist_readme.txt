@@ -46,12 +46,19 @@ DISPLAY SETTINGS
 Pick a window size (2x-4x) or Fullscreen (borderless) in the launcher. In the
 game, Settings is in the main menu and in the in-game Options menu:
   Resolution   window size, 2x..6x the native 176x208 picture
+  Widescreen   Off / Auto / 4:3 / 16:10 / 16:9 / 21:9 (see below)
   Display      Fullscreen (borderless) or Windowed  (F11 / Alt+Enter too)
   Scaling      Fit (any size) or Integer (whole multiples: crisp pixels)
-The game is a fixed 176x208 picture, so a widescreen monitor shows it centred
-with black bars rather than stretched. The window can be resized freely. The
-launcher's choice applies at every start; changes made in the game last for
-that session (the scaling mode is remembered).
+With Widescreen Off (the default) the game is the original 176x208 picture and
+a wide monitor shows it centred with black bars. Widescreen widens the canvas
+instead of stretching it: the dungeon is drawn as a real 3D view across the
+whole width (the original hand-drawn wall art only exists for 176 columns, so
+the walls, ice walls and gates are projected and textured with the original
+art), while the HUD, menus, monsters and items keep their native pixel size.
+Auto follows the shape of the window. The window can be resized freely. The
+launcher's choice of size and Fullscreen applies at every start; changes made
+in the game last for that session (the scaling mode and widescreen setting are
+remembered).
 
 
 CONTROLS

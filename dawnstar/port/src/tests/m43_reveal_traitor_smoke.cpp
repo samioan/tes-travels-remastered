@@ -197,7 +197,7 @@ int main(int argc, char** argv) {
         bb.Fill(0);
         menu.Render(bb);
         Check(TitleShownIs(bb, "Reveal Traitor"), "the intro screen should be titled \"Reveal Traitor\"");
-        std::vector<std::string> introLines = MessagePopup::WordWrap(shopDialogue.groups[9][66], Screen::width() - 5 - 5);
+        std::vector<std::string> introLines = MessagePopup::WordWrap(shopDialogue.groups[9][66], Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, introLines[0], kItemTextColor),
               "the intro should show the real dialogue[9][66]'s first (word-wrapped) line");
         Check(menu.OnCancel() == OptionsMenuAction::None,
@@ -212,7 +212,7 @@ int main(int argc, char** argv) {
         // 176-10-10), then the items start 5px below at x=10, one row per
         // 13px (kLineHeight + RenderItemRows' own trailing cursorY++).
         int confirmPromptLines =
-            static_cast<int>(MessagePopup::WordWrap(shopDialogue.groups[9][67], Screen::width() - 10 - 10).size());
+            static_cast<int>(MessagePopup::WordWrap(shopDialogue.groups[9][67], Screen::width() - 10 - 10, BitmapFont::Face::SmallBold).size());
         int confirmItemY = 20 + 12 * confirmPromptLines + 5;
         Check(TextRenderedAt(bb, 10, confirmItemY, "Yes", kItemTextColor),
               "the confirm's own first item should be \"Yes\"");
@@ -266,7 +266,7 @@ int main(int argc, char** argv) {
         Check(TitleShownIs(bb, "Reveal Traitor"), "the result screen should be titled \"Reveal Traitor\"");
         std::string expectedWrong = shopDialogue.groups[9][68] + "\n" + shopDialogue.groups[9][69] + "\n" +
                                     QuizReplaceTag(shopDialogue.groups[9][72], "<TAG>", kQuizNames[correctIdx]);
-        std::vector<std::string> wrongLines = MessagePopup::WordWrap(expectedWrong, Screen::width() - 5 - 5);
+        std::vector<std::string> wrongLines = MessagePopup::WordWrap(expectedWrong, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, wrongLines[0], kItemTextColor),
               "the wrong-guess result should open with the real dialogue[9][68]'s first (word-wrapped) line");
         Check(!player.newGamePlus, "a wrong guess must NOT set newGamePlus");
@@ -330,7 +330,7 @@ int main(int argc, char** argv) {
         Check(TitleShownIs(bb, "Reveal Traitor"), "the correct-guess result screen should be titled \"Reveal Traitor\"");
         std::string expectedRight =
             shopDialogue.groups[9][68] + "\n" + shopDialogue.groups[9][69] + "\n" + shopDialogue.groups[9][70];
-        std::vector<std::string> rightLines = MessagePopup::WordWrap(expectedRight, Screen::width() - 5 - 5);
+        std::vector<std::string> rightLines = MessagePopup::WordWrap(expectedRight, Screen::width() - 5 - 5, BitmapFont::Face::SmallBold);
         Check(TextRenderedAt(bb, 5, 20, rightLines[0], kItemTextColor),
               "the correct-guess result should open with the same dialogue[9][68]'s first (word-wrapped) line");
         Check(menu.OnSelect(player, charData, items, spells, levels, world, nextItemSpawnId) == OptionsMenuAction::ReturnToGame,

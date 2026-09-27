@@ -8,15 +8,18 @@ namespace dawnstar {
 // (platform/win32/display.h) implements it; the menus only see this
 // interface, so smoke tests can drive them with a fake.
 //
-// The game is a fixed 176x208 picture (a first-person view drawn from
-// pre-rendered sprites), so "resolution" here is the size of the game window
-// -- a whole multiple of the native picture -- and widescreen displays get
-// black bars rather than a stretched image. Fullscreen is borderless.
+// "Resolution" is the size of the game window -- a whole multiple of the native
+// 176x208 picture. "Widescreen" widens the canvas instead of stretching it:
+// the corridor is drawn as a real 3D view across the extra width while the HUD,
+// menus and sprites keep their native pixel size. Off keeps the original
+// hand-drawn 176-wide view (black bars on a wide screen). Fullscreen is borderless.
 class DisplayControl {
 public:
     virtual ~DisplayControl() = default;
     virtual std::string ResolutionName() const = 0;  // "3x"
     virtual void CycleResolution(int dir) = 0;
+    virtual std::string WidescreenName() const = 0;  // Off / Auto / 4:3 / 16:10 / 16:9 / 21:9
+    virtual void CycleWidescreen(int dir) = 0;
     virtual bool Fullscreen() const = 0;
     virtual void ToggleFullscreen() = 0;
     virtual std::string ScalingName() const = 0;  // Fit / Integer
@@ -29,6 +32,7 @@ inline std::vector<std::string> SettingsRows(const DisplayControl* d) {
     std::vector<std::string> rows;
     if (d) {
         rows.push_back("Resolution: " + d->ResolutionName());
+        rows.push_back("Widescreen: " + d->WidescreenName());
         rows.push_back(std::string("Display: ") + (d->Fullscreen() ? "Fullscreen" : "Windowed"));
         rows.push_back("Scaling: " + d->ScalingName());
     }
@@ -40,8 +44,9 @@ inline std::vector<std::string> SettingsRows(const DisplayControl* d) {
 inline bool ApplySettingsRow(DisplayControl* d, int row) {
     if (!d) return true;
     if (row == 0) d->CycleResolution(1);
-    else if (row == 1) d->ToggleFullscreen();
-    else if (row == 2) d->CycleScaling();
+    else if (row == 1) d->CycleWidescreen(1);
+    else if (row == 2) d->ToggleFullscreen();
+    else if (row == 3) d->CycleScaling();
     else return true;
     return false;
 }

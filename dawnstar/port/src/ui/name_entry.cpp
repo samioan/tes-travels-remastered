@@ -52,8 +52,8 @@ void NameEntry::Render(Backbuffer& bb) const {
     BitmapFont::DrawString(bb, titleX, 0, "Enter name", kTitleTextColor, BitmapFont::Face::MediumBold);
 
     int cursorY = 20;
-    for (const std::string& line :
-         MessagePopup::WordWrap("Enter a name for your character", Backbuffer::kWidth - 10 - 10)) {
+    for (const std::string& line : MessagePopup::WordWrap("Enter a name for your character",
+                                                            Backbuffer::kWidth - 10 - 10, BitmapFont::Face::SmallBold)) {
         BitmapFont::DrawString(bb, 10, cursorY, line, kPromptTextColor);
         cursorY += kLineHeight;
     }

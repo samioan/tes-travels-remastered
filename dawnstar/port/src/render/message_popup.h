@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "graphics/backbuffer.h"
+#include "graphics/bitmap_font.h"
 
 namespace dawnstar {
 
@@ -71,7 +72,18 @@ public:
     // (M58) in place of the original's own real (but device-dependent)
     // SMALL_FONT ones -- see graphics/bitmap_font.h's own doc comment. `\n` is
     // honored as a hard break exactly like the original's own recursive
-    // structure.
+    // structure. `font` carries over as the `face` parameter, defaulting
+    // to SmallPlain (this class's own SMALL_FONT calls, both here and in
+    // ui/screen.h's reuse of this method before this parameter existed)
+    // -- Screen.wrapText(text) passes its own `this.textFont`
+    // (DEFAULT_TEXT_FONT = SmallBold), not SMALL_FONT, so ui/screen.cpp
+    // passes Face::SmallBold explicitly; measuring a Screen's wrap width
+    // in a narrower font than it actually draws with let wrapped lines
+    // run past their budget by exactly a device-font's bold-over-plain
+    // width difference -- invisible while the extra pixels landed past
+    // the native 176th column and were simply clipped, but visible once
+    // widescreen's ExtendViewEdges started sampling that same edge
+    // column as the "background" to extend outward.
     // SIMPLIFIED: the hard-break inner loop additionally bounds-checks
     // against the string's own length (the original has no equivalent
     // guard and would throw if it were ever exercised) -- same
@@ -81,7 +93,8 @@ public:
     // substring already known to reach `maxWidth` before this loop even
     // starts) still holds here too, so this guard is defensive, not a
     // behavior change.
-    static std::vector<std::string> WordWrap(const std::string& text, int maxWidthPx);
+    static std::vector<std::string> WordWrap(const std::string& text, int maxWidthPx,
+                                              BitmapFont::Face face = BitmapFont::Face::SmallPlain);
 
     // GameCanvas.wrapToTwoLines(text): WordWrap at a fixed popup width
     // (see this method's own .cpp comment for the exact value and why),

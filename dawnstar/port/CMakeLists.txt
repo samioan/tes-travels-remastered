@@ -112,6 +112,7 @@ add_library(dawnstar_render STATIC
   src/graphics/bitmap_font.cpp
   src/render/corridor_render_plan.cpp
   src/render/frame_renderer.cpp
+  src/render/wide_corridor.cpp
   src/render/hotbar_renderer.cpp
   src/render/message_popup.cpp
   src/render/minimap_renderer.cpp
@@ -609,6 +610,10 @@ target_link_libraries(shop_interaction_smoke PRIVATE dawnstar_npc dawnstar_inter
 # M46 milestone smoke test -- see src/tests/m46_npc_menu_smoke.cpp.
 add_executable(npc_menu_smoke src/tests/m46_npc_menu_smoke.cpp)
 target_link_libraries(npc_menu_smoke PRIVATE dawnstar_render dawnstar_npc)
+
+# Widescreen 3D corridor (see src/tests/wide_corridor_smoke.cpp).
+add_executable(wide_corridor_smoke src/tests/wide_corridor_smoke.cpp)
+target_link_libraries(wide_corridor_smoke PRIVATE dawnstar_render)
 
 # Display settings: the Settings screen in the main / in-game menus, driven through
 # a fake DisplayControl (see src/tests/display_smoke.cpp).
