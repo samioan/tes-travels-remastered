@@ -106,14 +106,14 @@ jobs:
       # that need no game data (asset/combat/save/... tests need the user's own
       # extracted jar, so only the launcher's own one runs here).
       - name: Build Oblivion (Debug, all targets)
-        run: .\oblivion\portuild.bat
+        run: .\oblivion\port\build.bat
 
       - name: Oblivion launcher smoke test
         working-directory: oblivion/port/build
         run: .\launcher_smoke.exe
 
       - name: Build Oblivion (shipping configuration)
-        run: .\oblivion\portuild_dist.bat ci-${{ github.run_number }}
+        run: .\oblivion\port\build_dist.bat ci-${{ github.run_number }}
 
       - name: Check the Oblivion package
         run: .\oblivion\port\check_dist.ps1
