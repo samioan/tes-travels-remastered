@@ -111,16 +111,22 @@ Actor* FindNearestEnemy(Actor& a, CombatHost& host) {
 
 // The original calls this stepAwayFrom, but it walks *towards* the enemy: 20
 // units along the dominant axis.
-void StepToward(Actor& a, const Actor& t) {
+//
+// The original never checks whether that step lands somewhere legal (only
+// the player's own moveDir does) -- so a monster chasing across a gap or
+// off a cliff edge the collision layer marks impassable would otherwise walk
+// straight over it and hover past the far side. This is the one moveTarget
+// producer worth gating: unlike a scripted walk-in (which starts off-grid on
+// purpose), an AI chase step's destination is always meant to be standable.
+// Refusing it here (rather than in ActorSystem::Update, which every
+// moveTarget walk shares) leaves scripted walks untouched.
+void StepToward(Actor& a, const Actor& t, const Grid& grid) {
     const int dx = a.pos[0] - t.pos[0], dy = a.pos[1] - t.pos[1];
-    if (std::abs(dx) > std::abs(dy)) {
-        if (dx > 0) ActorSystem::SetMoveTarget(a, a.pos[0] - 20, a.pos[1]);
-        else ActorSystem::SetMoveTarget(a, a.pos[0] + 20, a.pos[1]);
-    } else if (dy > 0) {
-        ActorSystem::SetMoveTarget(a, a.pos[0], a.pos[1] - 20);
-    } else {
-        ActorSystem::SetMoveTarget(a, a.pos[0], a.pos[1] + 20);
-    }
+    int nx = a.pos[0], ny = a.pos[1];
+    if (std::abs(dx) > std::abs(dy)) nx = dx > 0 ? a.pos[0] - 20 : a.pos[0] + 20;
+    else ny = dy > 0 ? a.pos[1] - 20 : a.pos[1] + 20;
+    if (ActorSystem::WouldBeBlocked(a, nx, ny, grid)) return;  // stand at the edge, don't hover past it
+    ActorSystem::SetMoveTarget(a, nx, ny);
 }
 
 void FaceTowards(Actor& a, const Actor& t) {
@@ -138,7 +144,7 @@ bool AiThink(Actor& a, CombatHost& host) {
         if (d <= a.sightRange) {
             if (d >= a.attackRange) {
                 if (a.slot != 1) {
-                    StepToward(a, *enemy);
+                    StepToward(a, *enemy, host.CurrentGrid());
                     return false;
                 }
             } else {

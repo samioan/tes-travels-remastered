@@ -812,6 +812,10 @@ void GameApp::Tick(int dt) {
 
     // Modern controls: free walking, aimed attacks, the interact button.
     if (state == 0) {
+        // Both control schemes' idea of "fire/attack is down" combined into
+        // one signal World can watch for the release edge, unconditional
+        // (not just while held) -- see World::SetAttackHeld's own comment.
+        world_.SetAttackHeld(action == 7 || analog_.attack);
         if (AnalogMode()) {
             world_.SetAim(analog_.aim, analog_.aimX, analog_.aimY);
             world_.MoveAnalog(analog_.moveX, analog_.moveY, dt);
@@ -838,7 +842,17 @@ void GameApp::Tick(int dt) {
     const int st = world_.state();
     if (st == 9 || st == 10 || st == 4 || st == 21) {
         if (textScrollTimer_ > 100) {
-            textScrollY_--;
+            // Game.paint also does an unconditional textScrollY-- for state 21 on
+            // every repaint, on top of this tick-gated one -- on the original
+            // device, paint ran no faster than this same tick, so the two
+            // combined into a roughly-doubled, still real-time-paced scroll
+            // speed for the credits versus the other (single-rate) text
+            // screens. This port's paint runs far more often than its tick (up
+            // to display refresh rate), so reproducing that extra decrement in
+            // DrawTextScreen instead made the crawl run at render-frame-rate --
+            // dozens of pixels a second instead of a couple. Doubling it here
+            // keeps it tied to real elapsed time like every other scroll speed.
+            textScrollY_ -= (st == 21) ? 2 : 1;
             textScrollTimer_ = 0;
         }
         textScrollTimer_ += dt;
@@ -1144,7 +1158,9 @@ void GameApp::DrawTextScreen(Backbuffer& bb) {
     bb.Fill(dark ? 0 : kPaper);
     if ((state == 23 || state == 17) && textScrollY_ > 20) textScrollY_ = 20;
     bool firstLine = state == 21;  // state 21 does not advance before its first line
-    if (state == 21) textScrollY_--;
+    // The original's matching per-paint textScrollY-- is folded into Tick's
+    // dt-gated decrement above instead (see its own comment) -- this is a
+    // draw function and must not itself move game state by render-frame count.
     int y = 3 + textScrollY_;
     for (const auto& para : textLines_) {
         for (const std::string& lineIn : para) {

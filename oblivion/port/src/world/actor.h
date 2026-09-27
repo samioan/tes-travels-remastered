@@ -148,7 +148,18 @@ void SetAnimState(Actor& a, int8_t state);
 
 // The per-frame part of ActorSystem.update that concerns animation and
 // auto-walking to moveTarget (regen, dot, AI, floating text come with M7).
+//
+// Faithfully un-collision-checked, like the original: a scripted walk-in
+// (cutscene actors entering from off-screen) starts outside the grid on
+// purpose, so this path must not reject it. A monster's own chase step is
+// instead gated where it picks its destination -- see Combat::StepToward.
 void Update(Actor& a, int dtMs);
+
+// isBlocked, as if `a` stood at (x, y) instead of its current position --
+// `a` is left exactly as it was found. Lets a caller ask "would moving here
+// be legal" before committing to a moveTarget, without duplicating isBlocked's
+// own per-footprint / sub-tile-edge collision math.
+bool WouldBeBlocked(Actor& a, int x, int y, const Grid& grid);
 
 // ActorSystem.draw: shadow, sprite, and (dead) corpse group. `cam` is the
 // camera offset. Health bar, floating text and status icon come with M7.

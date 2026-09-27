@@ -43,6 +43,10 @@ public:
     // A movement / fire action held this frame (3 up, 4 down, 5 left, 6 right, 7 fire),
     // Game.handleInput case 0. 0 = none.
     void HeldAction(int action, int dtMs);
+    // Whether attack/fire (either control scheme) is down this frame -- called
+    // every frame regardless of value, so World can see the release edge, not
+    // just the held one (see zoneResetPending_'s own comment).
+    void SetAttackHeld(bool held);
     // The screen width (>= 176) the camera centres on; widescreen shows more of the world.
     void SetScreenWidth(int w) {
         if (w == screenW_) return;
@@ -212,6 +216,7 @@ private:
     void TryPickup(Actor& p);
     bool PlayerCanAct() const;
     void RunZoneScript(int oldZone);
+    void ReleaseFire();
 
     const AssetRoot& assets_;
     ImageCache& images_;
@@ -230,6 +235,12 @@ private:
     int playerClass_ = 1;  // menuSelection[1] + 1 in the original
 
     std::vector<int8_t> enterLayer_, leaveLayer_, zoneLayer_;
+    // Game.handleDialogueKey's zoneId = 0 (see there): deferred until the
+    // attack/fire button that dismissed the dialogue is actually released,
+    // rather than applied immediately, so a continued hold isn't read as a
+    // fresh press of the same zone tile and doesn't reopen the dialogue it
+    // just closed. ReleaseFire applies it.
+    bool zoneResetPending_ = false;
 
     int state_ = 6;
     bool stateChangesEnabled_ = true;

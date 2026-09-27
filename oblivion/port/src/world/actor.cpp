@@ -129,6 +129,30 @@ bool IsBlocked(const Actor& a, const Grid& grid) {
            FootBlocked(grid, a.footCCell, a.footC);
 }
 
+bool WouldBeBlocked(Actor& a, int x, int y, const Grid& grid) {
+    const int savedPos[2] = {a.pos[0], a.pos[1]};
+    const int savedFootB[2] = {a.footB[0], a.footB[1]};
+    const int savedFootC[2] = {a.footC[0], a.footC[1]};
+    const int savedScreenPos[2] = {a.screenPos[0], a.screenPos[1]};
+    const int8_t savedCell[2] = {a.cell[0], a.cell[1]};
+    const int8_t savedFootBCell[2] = {a.footBCell[0], a.footBCell[1]};
+    const int8_t savedFootCCell[2] = {a.footCCell[0], a.footCCell[1]};
+    const int8_t savedSortCell[2] = {a.sortCell[0], a.sortCell[1]};
+
+    SetPosition(a, x, y);
+    const bool blocked = IsBlocked(a, grid);
+
+    a.pos[0] = savedPos[0]; a.pos[1] = savedPos[1];
+    a.footB[0] = savedFootB[0]; a.footB[1] = savedFootB[1];
+    a.footC[0] = savedFootC[0]; a.footC[1] = savedFootC[1];
+    a.screenPos[0] = savedScreenPos[0]; a.screenPos[1] = savedScreenPos[1];
+    a.cell[0] = savedCell[0]; a.cell[1] = savedCell[1];
+    a.footBCell[0] = savedFootBCell[0]; a.footBCell[1] = savedFootBCell[1];
+    a.footCCell[0] = savedFootCCell[0]; a.footCCell[1] = savedFootCCell[1];
+    a.sortCell[0] = savedSortCell[0]; a.sortCell[1] = savedSortCell[1];
+    return blocked;
+}
+
 void MoveDir(Actor& a, const Grid& grid, int dir, int dtMs) {
     a.moveTimer += dtMs;
     if (a.moveTimer <= 50) return;

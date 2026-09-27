@@ -519,8 +519,28 @@ void World::HandleDialogueKey(int action) {
         dialogue.scroll += 4;
     } else if (action == 7 && dialogue.ageMs >= 1000) {
         dialogue.open = false;
-        if (player_) player_->zoneId = 0;
+        // Not an immediate reset (see zoneResetPending_'s own comment): if
+        // this dismiss came from the attack/fire button still being held
+        // (its 1-second auto-dismiss, not a fresh press), zeroing zoneId
+        // right now would make next tick's still-held HeldAction/Attack see
+        // "just entered zone N" again and reopen this same dialogue --
+        // dismiss, reopen, dismiss, forever, for as long as the button stays
+        // down. Deferring the reset to the actual release (ReleaseFire)
+        // means a continued hold just keeps re-reading the same, unchanged
+        // zoneId (no re-trigger), while a genuine release-then-press still
+        // gets a fresh one.
+        zoneResetPending_ = true;
     }
+}
+
+void World::ReleaseFire() {
+    if (!zoneResetPending_) return;
+    zoneResetPending_ = false;
+    if (player_) player_->zoneId = 0;
+}
+
+void World::SetAttackHeld(bool held) {
+    if (!held) ReleaseFire();
 }
 
 // Game.updateMessage.
