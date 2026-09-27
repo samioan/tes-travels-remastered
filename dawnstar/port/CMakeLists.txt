@@ -296,6 +296,7 @@ add_executable(dawnstar_port WIN32
   src/platform/win32/exe_dir.cpp
   src/platform/win32/window.cpp
   src/platform/win32/display.cpp
+  src/platform/win32/gamepad.cpp
 )
 target_include_directories(dawnstar_port PRIVATE src)
 target_link_libraries(dawnstar_port PRIVATE dawnstar_player dawnstar_render dawnstar_combat dawnstar_interact dawnstar_camp dawnstar_death dawnstar_passive dawnstar_save dawnstar_npc)

@@ -70,6 +70,7 @@ extern wchar_t** __wargv;
 #include "passive/passive_tick.h"
 #include "platform/win32/exe_dir.h"
 #include "platform/win32/display.h"
+#include "platform/win32/gamepad.h"
 #include "platform/win32/window.h"
 #include "player/player_combat_stats.h"
 #include "player/player_creation.h"
@@ -126,7 +127,57 @@ std::vector<dawnstar::GeneratedLevel> BuildWorld(const dawnstar::DungeonGeometry
     return levels;
 }
 
-bool KeyPressed(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+// Gamepad support: the last frame's polled pad state, and whether text is
+// currently being typed (character-creation name entry). Both are namespace-
+// scope so KeyPressed below -- a free function called from many places
+// through main.cpp, with no access to wWinMain's own locals -- can see them;
+// set once per frame near the top of window.RunMessageLoop's own callback,
+// before any of this file's own KeyPressed calls run that frame.
+dawnstar::GamepadButtons g_pad;
+bool g_textEntryActive = false;
+
+// The gamepad button each logical key doubles as, when one is connected.
+// D-pad/left stick moves (same four directions as Up/Down/Left/Right); LB/RB
+// strafe (same as A/D); A attacks/confirms (Space/Enter); B cancels (Escape);
+// X interacts (R); Y casts (F); Back cycles spells (C); Start opens the
+// options menu (Tab); L3 camps/rests (Z); R3 toggles the minimap zoom (M).
+// There's no pad equivalent for typing a character's name (letters/digits/
+// apostrophe/hyphen/backspace) -- same as every console RPG's own on-screen
+// keyboard being out of scope here.
+bool KeyPressed(int vk) {
+    if ((GetAsyncKeyState(vk) & 0x8000) != 0) return true;
+    if (!g_pad.connected) return false;
+    switch (vk) {
+        case VK_UP: return g_pad.up;
+        case VK_DOWN: return g_pad.down;
+        case VK_LEFT: return g_pad.left;
+        case VK_RIGHT: return g_pad.right;
+        case VK_RETURN: return g_pad.a;
+        case VK_ESCAPE: return g_pad.b;
+        case VK_SPACE: return g_pad.a;
+        case VK_TAB: return g_pad.start;
+        default: break;
+    }
+    // W/A/S/D/Q/E/R/F/C/Z/M double as name-entry characters (the letter loop
+    // below calls KeyPressed('A') through KeyPressed('Z') generically), so
+    // these only read the pad outside text entry -- holding a shoulder
+    // button while typing a name mustn't also spell a letter.
+    if (g_textEntryActive) return false;
+    switch (vk) {
+        case 'W': return g_pad.up;
+        case 'S': return g_pad.down;
+        case 'Q': return g_pad.left;
+        case 'E': return g_pad.right;
+        case 'A': return g_pad.lb;
+        case 'D': return g_pad.rb;
+        case 'R': return g_pad.x;
+        case 'F': return g_pad.y;
+        case 'C': return g_pad.back;
+        case 'Z': return g_pad.l3;
+        case 'M': return g_pad.r3;
+        default: return false;
+    }
+}
 
 std::string NarrowArg(const wchar_t* text) {
     if (!text) return std::string();
@@ -230,6 +281,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     window.SetKeyCallback([&](unsigned vk) {
         if (vk == VK_F11) toggleFullscreenRequested = true;
     });
+    // Gamepad support: polled once per frame below (before any KeyPressed
+    // call this frame runs) into the namespace-scope g_pad KeyPressed itself
+    // reads -- see KeyPressed's own doc comment for the full button map.
+    dawnstar::Gamepad gamepad;
     dawnstar::Backbuffer backbuffer;
     dawnstar::MinimapSurface minimap;
     dawnstar::MessagePopupState messagePopup;
@@ -584,6 +639,16 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
         dawnstar::BootSplash bootSplash = dawnstar::BootSplash::Load(root, imageArchive);
 
         window.RunMessageLoop([&] {
+            // Gamepad support: refreshed before anything else touches
+            // KeyPressed this frame (see g_pad's own doc comment). Text
+            // entry is only ever the character-creation flow's own
+            // NameEntry sub-state, but OnChar/OnBackspace are themselves
+            // no-ops outside it (see inCharacterCreation's own comment
+            // below) -- gating on the whole flow being open, rather than
+            // that one sub-state specifically, is exactly as safe and
+            // needs no extra state threaded out of it.
+            g_pad = gamepad.Poll();
+            g_textEntryActive = inCharacterCreation;
             // Widescreen: the canvas follows the Settings choice / window shape. Everything is laid
             // out for the native 176 columns, so it all draws into a centred 176-wide view; only the
             // 3D corridor (below) uses the whole width.
