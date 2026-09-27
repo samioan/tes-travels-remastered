@@ -200,6 +200,7 @@ add_executable(stormhold_port WIN32
   src/platform/win32/exe_dir.cpp
   src/platform/win32/window.cpp
   src/platform/win32/display.cpp
+  src/platform/win32/gamepad.cpp
 )
 target_include_directories(stormhold_port PRIVATE src)
 target_compile_definitions(stormhold_port PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)

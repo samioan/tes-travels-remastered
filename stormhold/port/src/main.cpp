@@ -225,6 +225,7 @@
 #include "platform/win32/exe_dir.h"
 #include "monster/monster_runtime.h"
 #include "platform/win32/display.h"
+#include "platform/win32/gamepad.h"
 #include "platform/win32/window.h"
 #include "player/camp_state.h"
 #include "player/death_sequence.h"
@@ -350,6 +351,61 @@ void OpenLogFile(const std::string& userDir) {
     freopen_s(&unused, path.c_str(), "a", stderr);
     std::printf("--- stormhold_port starting ---\n");
     std::fflush(stdout);
+}
+
+// Gamepad support: the last frame's polled pad state, and whether text is
+// currently being typed (the main menu's own EnterName screen). Both are
+// namespace-scope so KeyPressed below -- called from many places through
+// this file's own KeyEdge and the movement/attack/zoom reads, with no
+// access to wWinMain's own locals -- can see them; set once per frame near
+// the top of window.RunMessageLoop's own callback, before any KeyPressed
+// call that frame runs.
+stormhold::GamepadButtons g_pad;
+bool g_textEntryActive = false;
+
+// The single choke point every keyboard read in this file goes through
+// (KeyEdge included, see its own doc comment) -- same shape as dawnstar's
+// own main.cpp KeyPressed, which this mirrors button-for-button: d-pad/left
+// stick moves (same four directions as Up/Down/Left/Right); LB/RB strafe
+// (same as A/D); A attacks/confirms (Space/Enter); B cancels (Escape); X
+// interacts (R); Y casts (F); Back cycles spells (C); Start opens the pause
+// menu (Tab); L3 camps/rests (Z); R3 toggles the minimap zoom (M). No pad
+// equivalent for the EnterName screen's own letters/digits/Backspace, or for
+// the 'I' inventory shortcut -- the pause menu (Start) reaches the same
+// inventory screen.
+bool KeyPressed(int vk) {
+    if ((GetAsyncKeyState(vk) & 0x8000) != 0) return true;
+    if (!g_pad.connected) return false;
+    switch (vk) {
+        case VK_UP: return g_pad.up;
+        case VK_DOWN: return g_pad.down;
+        case VK_LEFT: return g_pad.left;
+        case VK_RIGHT: return g_pad.right;
+        case VK_RETURN: return g_pad.a;
+        case VK_ESCAPE: return g_pad.b;
+        case VK_SPACE: return g_pad.a;
+        case VK_TAB: return g_pad.start;
+        default: break;
+    }
+    // W/A/S/D/Q/E/R/F/C/Z/M double as EnterName characters (its own letter/
+    // digit loop calls KeyPressed('A') through KeyPressed('Z') generically),
+    // so these only read the pad outside text entry -- holding a shoulder
+    // button while typing a name mustn't also spell a letter.
+    if (g_textEntryActive) return false;
+    switch (vk) {
+        case 'W': return g_pad.up;
+        case 'S': return g_pad.down;
+        case 'Q': return g_pad.left;
+        case 'E': return g_pad.right;
+        case 'A': return g_pad.lb;
+        case 'D': return g_pad.rb;
+        case 'R': return g_pad.x;
+        case 'F': return g_pad.y;
+        case 'C': return g_pad.back;
+        case 'Z': return g_pad.l3;
+        case 'M': return g_pad.r3;
+        default: return false;
+    }
 }
 
 // Builds all 37 levels (M6's DungeonGenerator: BuildHubLevel for the hub,
@@ -530,6 +586,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     window.SetKeyCallback([&](unsigned vk) {
         if (vk == VK_F11) toggleFullscreenRequested = true;
     });
+    // Gamepad support: polled once per frame below (before any KeyPressed
+    // call this frame runs) into the namespace-scope g_pad KeyPressed itself
+    // reads -- see KeyPressed's own doc comment for the full button map.
+    stormhold::Gamepad gamepad;
     menuState.display = &display;
     stormhold::GameClock clock;
     stormhold::Backbuffer backbuffer;
@@ -623,7 +683,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // Ok/Cancel, and every letter/digit EnterName accepts).
     std::array<bool, 256> keyDownLast{};
     auto KeyEdge = [&](int vk) {
-        bool down = (GetAsyncKeyState(vk) & 0x8000) != 0;
+        bool down = KeyPressed(vk);
         bool edge = down && !keyDownLast[static_cast<size_t>(vk)];
         keyDownLast[static_cast<size_t>(vk)] = down;
         return edge;
@@ -669,6 +729,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     // game only repaints on ticks and re-presents the same picture in between, so this outlives a frame.
     bool wideScene = false;
     window.RunMessageLoop([&]() {
+        // Gamepad support: refreshed before anything else touches
+        // KeyPressed this frame (see g_pad's own doc comment).
+        g_pad = gamepad.Poll();
+        g_textEntryActive = menuState.screen == stormhold::MenuScreen::EnterName;
         if (toggleFullscreenRequested) {  // F11 / Alt+Enter
             toggleFullscreenRequested = false;
             display.ToggleFullscreen();
@@ -838,10 +902,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // original behavior (step forward/backward, turn in place);
             // W/S/Q/E are ADDED alongside them, not a replacement, same
             // "add, don't remove" precedent dawnstar's own M60/M62 set.
-            bool up = (GetAsyncKeyState(VK_UP) & 0x8000) != 0 || (GetAsyncKeyState('W') & 0x8000) != 0;
-            bool down = (GetAsyncKeyState(VK_DOWN) & 0x8000) != 0 || (GetAsyncKeyState('S') & 0x8000) != 0;
-            bool left = (GetAsyncKeyState(VK_LEFT) & 0x8000) != 0 || (GetAsyncKeyState('Q') & 0x8000) != 0;
-            bool right = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0 || (GetAsyncKeyState('E') & 0x8000) != 0;
+            bool up = KeyPressed(VK_UP) || KeyPressed('W');
+            bool down = KeyPressed(VK_DOWN) || KeyPressed('S');
+            bool left = KeyPressed(VK_LEFT) || KeyPressed('Q');
+            bool right = KeyPressed(VK_RIGHT) || KeyPressed('E');
             // A genuinely NEW capability, not just a remap: strafing was
             // never actually reachable in this port before this milestone.
             // PlayerMovement::Move's own `strafe` parameter (dir 3/4
@@ -859,9 +923,9 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // `facing + 1` (N -> E, clockwise). An earlier version of this
             // dispatch had both pairs swapped (A strafed right, Left/Q
             // turned right).
-            bool strafeLeft = (GetAsyncKeyState('A') & 0x8000) != 0;
-            bool strafeRight = (GetAsyncKeyState('D') & 0x8000) != 0;
-            bool mDown = (GetAsyncKeyState('M') & 0x8000) != 0;
+            bool strafeLeft = KeyPressed('A');
+            bool strafeRight = KeyPressed('D');
+            bool mDown = KeyPressed('M');
             // M75: remapped from 'C' to 'Z' -- "Z to rest" is a common
             // modern RPG convention, and frees 'C' for spell-cycle below
             // (dawnstar's own M60/M62 arrived at the identical Z=camp/
@@ -896,7 +960,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
             // dispatch below for why this is checked there rather than
             // immediately here.
             bool pauseKeyEdge = KeyEdge(VK_TAB);
-            if (GetAsyncKeyState(VK_SPACE) & 0x8000) attackRequested = true;
+            if (KeyPressed(VK_SPACE)) attackRequested = true;
             // M75: remapped off the real key codes ('3'/'5') onto 'F'/'C'
             // -- dawnstar's own M60 made the identical cast/cycle choice
             // (a common "use ability" key in modern action/RPG layouts,
